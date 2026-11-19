@@ -8,6 +8,15 @@ const exec = promisify(execFile);
 const REGIONS = ["eu-west-1", "eu-central-1", "us-west-1"] as const;
 type Region = (typeof REGIONS)[number];
 
+const PROXY_BINDING_KEYS = [
+  "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
+  "SCAN_PROXY_SERVER",
+  "CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID",
+  "CERTSCORE_V2_DAG_LAMBDA_EGRESS_PROVIDER",
+  "CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH",
+  "SCAN_PROXY_ENABLED",
+] as const;
+
 const EXPECTED_CONTEXT: Record<Region, {
   acceptLanguage: string;
   locale: string;
@@ -116,14 +125,19 @@ async function normalizedProxyUserData(region: Region, instanceId: string): Prom
 async function checkRegion(region: Region) {
   const started = performance.now();
   const errors: string[] = [];
-  const fn = await awsJson<LambdaFunction>(region, [
-    "lambda",
-    "get-function",
-    "--function-name",
-    functionName,
-  ]);
+  const [fn, inventory] = await Promise.all(
+    [functionName, `${functionName}-inventory`].map(name =>
+      awsJson<LambdaFunction>(region, ["lambda", "get-function", "--function-name", name]),
+    ),
+  );
   const config = fn.Configuration ?? {};
   const env = config.Environment?.Variables ?? {};
+  const inventoryEnv = inventory.Configuration?.Environment?.Variables ?? {};
+  for (const key of PROXY_BINDING_KEYS) {
+    if (inventoryEnv[key] !== env[key]) {
+      errors.push(`${region}: inventory Lambda proxy binding differs for ${key}.`);
+    }
+  }
   const resolvedDigest = fn.Code?.ResolvedImageUri?.split("@")[1];
   if (!resolvedDigest || env.SCANNER_IMAGE_DIGEST !== resolvedDigest) errors.push(`${region}: retained image digest does not match the deployed immutable image.`);
   const cmpActionRecipeDisabled = env.CERTSCORE_CMP_ACTION_RECIPE_DISABLED ?? "";
@@ -193,6 +207,11 @@ async function checkRegion(region: Region) {
   const address = addresses.Addresses?.[0];
   if (!address?.InstanceId) {
     throw new Error(`${region}: proxy Elastic IP is not associated with an instance.`);
+  }
+  const expectedProxyServer = `http://${address.PrivateIpAddress}:3128`;
+  const configuredProxyServer = env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER || env.SCAN_PROXY_SERVER;
+  if (!address.PrivateIpAddress || configuredProxyServer !== expectedProxyServer) {
+    errors.push(`${region}: scanner proxy endpoint differs from the instance associated with its Elastic IP.`);
   }
   const reservations = await awsJson<{ Reservations?: Array<{ Instances?: Instance[] }> }>(region, [
     "ec2",

@@ -36,7 +36,7 @@ export function isSealedMetric(id:string):boolean {
 }
 export function namespaceSealed(row: ProgressRow): ProgressRow {
   const source=sealedSource(row), states:Record<string,string>={}, sources:Record<string,string>={}, measurements:Record<string,number>={};
-  for(const [id,value] of Object.entries(row.states)){if(id.startsWith('sealed.opt_out.')||id.startsWith('sealed.choice_finding.')||id.startsWith('sealed.operations.')){states[id]=value;sources[id]=row.metricSources?.[id]??source;continue;}if(!isSealedMetric(id))continue;states[`sealed.${id}`]=value;sources[`sealed.${id}`]=source+(row.metricSources?.[id]?`/${row.metricSources[id]}`:'');}
+  for(const [id,value] of Object.entries(row.states)){if(/^detail\.(reject|gpc)\.stage[123]$/.test(id)||id.startsWith('sealed.opt_out.')||id.startsWith('sealed.choice_finding.')||id.startsWith('sealed.operations.')){states[id]=value;sources[id]=row.metricSources?.[id]??source;continue;}if(!isSealedMetric(id))continue;states[`sealed.${id}`]=value;sources[`sealed.${id}`]=source+(row.metricSources?.[id]?`/${row.metricSources[id]}`:'');}
   for(const [id,value] of Object.entries(row.measurements??{})){
     // Public measurements read from the identical export need no second copy.
     if(!/^(site|technology|graph|form)\./.test(id)) continue;
@@ -86,6 +86,11 @@ export function metricContract(m:any,kind='state') {
   if(key.startsWith('execution.')){field='postAccept/RefusalObservation.execution';mapping='Validate choice_path_execution.v1; retain status; missing = unavailable; invalid = unsupported_schema';}
   if(key.startsWith('click.'))field='Validated execution.clickCompleted; sealed original packet fallback is a separately named source';
   if(key.startsWith('registration.')){field='postAccept/RefusalObservation.registrationStatus or legacy status';mapping='confirmed_clean / confirmed_observation -> confirmed; unconfirmed and aborted retained; missing unavailable; never execution consentConfirmed';}
+  if(/^detail\.(reject|gpc)\.stage[123]$/.test(id)){
+    source='California visit evidence · california.visit-stages.v1';
+    field='Bound GPC observation or post-Reject evidence packet and California recipient assessment';
+    mapping='Each scan counts once when any recipient meets or exceeds this stage on this visit. Missing evidence remains separately identified in the reportable denominator.';
+  }
   const rejectAllActivity=id==='detail.reject.activity_all';
   const allClickActivity=/^detail\.(accept|reject)\.activity_all$/.test(id);
   if(allClickActivity){

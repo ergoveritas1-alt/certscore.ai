@@ -10,7 +10,7 @@ const receipt = z.tuple([
   z.literal(1),
   z.enum(['california-post-reject.v1', 'california-post-reject.v2-qualified-disclosure',
     'california-post-reject.v3-property-bound', 'california-post-reject.v4-retained-scope',
-    'california-post-reject.v5-index-auction', 'california-post-reject.v6-auctions']),
+    'california-post-reject.v5-index-auction', 'california-post-reject.v6-auctions','california-post-reject.v7-per-visit']),
   z.enum(['qualified_collection', 'no_eligible_collection', 'insufficient_evidence']),
   z.enum(['cookie_tracking_rejection', 'unknown']),
   z.boolean(),

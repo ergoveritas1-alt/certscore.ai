@@ -1,3 +1,4 @@
+import { formatRetainedReportTiming } from "../../lib/scans/report-time";
 import { buildPrivacyChoiceExperience, type PrivacyChoiceExperienceInput } from "../../lib/scans/privacy-choice-experience";
 import { DeveloperRetestPackage } from "./developer-retest-package";
 import { EvidenceJumpLink } from "./evidence-jump-link";
@@ -11,15 +12,15 @@ export function PrivacyChoiceOverview({ report }: { report: PrivacyChoiceExperie
       {result.facts.map(fact => <div key={fact.label} className="min-w-0">
         <dt className="text-xs font-medium text-zinc-500">{fact.label}</dt>
         <dd className="mt-1 text-sm font-semibold text-zinc-900">{fact.value}</dd>
-        <dd className="mt-1 text-xs leading-5 text-zinc-600">{fact.detail}</dd>
+        <dd className="mt-1 text-xs leading-5 text-zinc-600">{formatRetainedReportTiming(fact.detail)}</dd>
       </div>)}
     </dl>
     <div className="mt-4 border-t border-zinc-200 pt-4 text-sm text-zinc-800">
       <p className="font-medium">{result.activity}</p>
-      <p className="mt-1 text-xs leading-5 text-zinc-600">{result.coverage} Collection alone does not establish sale/sharing purpose or a legal violation.</p>
+      <p className="mt-1 text-xs leading-5 text-zinc-600">{formatRetainedReportTiming(result.coverage)} Collection alone does not establish sale/sharing purpose or a legal violation.</p>
       {result.recipients.length ? <p className="mt-2 text-xs text-zinc-600">Recipients in retained request references: {[...new Set(result.recipients.map(row => row.label))].join(", ")}.</p> : null}
       <EvidenceJumpLink targetId="gpc-evidence" className="mt-2 inline-block text-xs font-medium underline underline-offset-2">Inspect GPC evidence and comparison</EvidenceJumpLink>
     </div>
-    <DeveloperRetestPackage text={result.packageText} />
+    <DeveloperRetestPackage text={formatRetainedReportTiming(result.packageText)} />
   </section>;
 }

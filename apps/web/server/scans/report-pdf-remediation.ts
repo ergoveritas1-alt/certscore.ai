@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import { accessibilityAuditObservationSchema, accessibilitySelectorHint, californiaPrivacyReviewSchema } from "@certscore/contracts";
 import { accessibilityCorrectionGuidance, accessibilityRemediationVerification } from "../../lib/scans/accessibility-correction-guidance";
 import { webmasterRemediation, type WebmasterRemediation } from "../../lib/scans/webmaster-remediation";
@@ -29,13 +30,13 @@ export function pdfGroupRemediation(report: CanonicalReportExport, group: PdfRev
   }
   if (kind === "refusal") {
     const retained = object(report.projection.checklist?.find(row => row.id === "post_reject_tracking_reduction")?.criticalEvidence?.retainedEvidence);
-    if (typeof retained.observationWindowMs === "number" && retained.observationWindowMs > 0) locations.push(`Configured observation target: ${retained.observationWindowMs / 1000} s. This is a re-test target, not a claim that the early-stop scan measured the whole interval; measured results remain in Appendix A.`);
+    if (typeof retained.observationWindowMs === "number" && retained.observationWindowMs > 0) locations.push(`Configured observation target: ${formatReportSeconds(retained.observationWindowMs)}. This is a re-test target, not a claim that the early-stop scan measured the whole interval; measured results remain in Appendix A.`);
     const records = Array.isArray(retained.postRejectNonEssentialRequests) ? retained.postRejectNonEssentialRequests.map(object) : [];
     for (const record of records) {
-      if (record.activityType === "network_request" && typeof record.url === "string") locations.push(`Post-refusal request: ${record.url}${typeof record.msAfterReject === "number" ? ` (+${record.msAfterReject} ms from confirmation)` : ""}.`);
+      if (record.activityType === "network_request" && typeof record.url === "string") locations.push(`Post-refusal request: ${record.url}${typeof record.msAfterReject === "number" ? ` (+${formatReportSeconds(record.msAfterReject)} from confirmation)` : ""}.`);
       if (record.activityType === "storage_write" && typeof record.cookieName === "string") locations.push(`Post-refusal cookie write: ${record.cookieName}; host ${typeof record.hostname === "string" ? record.hostname : "not retained"}. Verify domain/path in DevTools before targeted cleanup; do not guess them.`);
     }
-    if (!records.length) locations.push(...(report.appendix.evidenceDossier?.rejectTiming?.networkRequests ?? []).map(item => `Post-refusal request: ${item.url}; +${item.millisecondsAfterConfirmation} ms from confirmation.`));
+    if (!records.length) locations.push(...(report.appendix.evidenceDossier?.rejectTiming?.networkRequests ?? []).map(item => `Post-refusal request: ${item.url}; +${formatReportSeconds(item.millisecondsAfterConfirmation)} from confirmation.`));
   }
   if (kind === "device-identification") locations.push("Use the browser API names in the finding above as source-search terms. If an initiating file/line or transmission link is not retained, trace it before changing functionality; do not assume the APIs identify an offending vendor.");
   for (const finding of findings) {

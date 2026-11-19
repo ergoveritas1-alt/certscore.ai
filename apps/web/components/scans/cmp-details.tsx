@@ -1,3 +1,4 @@
+import { formatReportSeconds, formatRetainedReportTiming } from "../../lib/scans/report-time";
 import { cmpCorrectionSteps } from "../../lib/scans/cmp-correction-steps";
 import React, { type ReactNode } from "react";
 import { CMP_AUDIT_CRITERIA, cmpDetailsExperience, cmpDetailsRecap, type CmpAuditProjection, type CmpAuditRow, type CmpAuditStatus } from "../../lib/scans/cmp-audit-projection";
@@ -143,11 +144,11 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       copyRows={inventory.consentStorage.map(record => [record.visit, record.name, record.change === "updated" ? "Updated after choice" : "Stored after choice"])}
       rows={inventory.consentStorage.map(record => [record.visit, <CmpInventoryIdentity name={record.name} kind="cookie" />, record.change === "updated" ? "Updated after choice" : "Stored after choice"])} /> : null}
     {inventory?.choiceActivity?.map(activity => <React.Fragment key={activity.action}>
-      <p className="font-semibold text-zinc-900">After {activity.action === "accept" ? "Accept" : "Reject"} · {activity.windowMs / 1000} seconds · {activity.requestCount} {activity.requestCount === 1 ? "request" : "requests"} · {activity.nonEssentialRequestCount} classified as non-essential</p>
+      <p className="font-semibold text-zinc-900">After {activity.action === "accept" ? "Accept" : "Reject"} · {formatReportSeconds(activity.windowMs)} · {activity.requestCount} {activity.requestCount === 1 ? "request" : "requests"} · {activity.nonEssentialRequestCount} classified as non-essential</p>
       {activity.requests.length ? <CmpInventoryTable label={`Requests after ${activity.action === "accept" ? "Accept" : "Reject"} · ${activity.requests.length}`}
         columns={["Service", "Purpose", activity.clockOrigin === "action_click" ? "After click" : activity.clockOrigin === "consent_confirmation" ? "After confirmation" : "Session offset", "Request"]}
-        copyRows={activity.requests.map(request => [request.vendor, request.purpose.replaceAll("_", " "), `+${request.msAfterClick} ms`, `${request.hostname}${request.path}`])}
-        rows={activity.requests.map(request => [<CmpInventoryIdentity name={request.vendor} kind="service" />, request.purpose.replaceAll("_", " "), `+${request.msAfterClick} ms`, <span className="block max-w-[18rem] whitespace-normal break-all font-mono text-[11px] leading-4">{request.hostname}{request.path}</span>])} /> : null}
+        copyRows={activity.requests.map(request => [request.vendor, request.purpose.replaceAll("_", " "), `+${formatReportSeconds(request.msAfterClick)}`, `${request.hostname}${request.path}`])}
+        rows={activity.requests.map(request => [<CmpInventoryIdentity name={request.vendor} kind="service" />, request.purpose.replaceAll("_", " "), `+${formatReportSeconds(request.msAfterClick)}`, <span className="block max-w-[18rem] whitespace-normal break-all font-mono text-[11px] leading-4">{request.hostname}{request.path}</span>])} /> : null}
       {activity.requests.length < activity.requestCount ? <p>Showing {activity.requests.length} of {activity.requestCount} retained requests.</p> : null}
     </React.Fragment>)}
     {inventory?.choiceActivity?.length ? <p>Activity recorded within each capture window; request payloads were not assessed.</p> : null}
@@ -172,8 +173,8 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
     {inventory?.declarations?.length ? <>
       <CmpInventoryTable label={`Cookie details · ${inventory.declarations.length}`}
         columns={["Cookie name / pattern", "CMP-stated purpose", ...(inventory.declarations.some(cookie => cookie.inferredPurpose) ? ["Inferred purpose"] : []), "CMP-stated retention", ...(inventory.declarations.some(cookie => cookie.observedExpiry) ? ["Observed time remaining"] : [])]}
-        copyRows={inventory.declarations.map(cookie => [cookie.name, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), disclosureText(cookie.duration) || "Not captured", ...(inventory.declarations!.some(item => item.observedExpiry) ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])}
-        rows={inventory.declarations.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), disclosureText(cookie.duration) || "Not captured", ...(inventory.declarations!.some(item => item.observedExpiry) ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])} />
+        copyRows={inventory.declarations.map(cookie => [cookie.name, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), formatRetainedReportTiming(disclosureText(cookie.duration)) || "Not captured", ...(inventory.declarations!.some(item => item.observedExpiry) ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])}
+        rows={inventory.declarations.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), formatRetainedReportTiming(disclosureText(cookie.duration)) || "Not captured", ...(inventory.declarations!.some(item => item.observedExpiry) ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])} />
       {inventory.declarations.some(cookie => cookie.observedExpiry) ? <p>Time remaining was measured after the Accept click, separately from CMP-stated retention.</p> : null}
     </> : null}
     {inventory?.declarations?.some(cookie => cookie.inferredPurpose) ? <p>Inferred purposes use CertScore.ai’s cookie registry, separately from the CMP’s descriptions.</p> : null}
@@ -182,14 +183,14 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       <CmpInventoryTable label="Accept / Reject comparison" columns={["Control", "Size (px)", "Fill contrast"]}
         copyRows={(["accept", "reject"] as const).map(role => [role === "accept" ? "Accept" : "Reject / necessary only", `${comparison[role].bounds[2]} × ${comparison[role].bounds[3]}`, `${comparison[role].fillContrast.toFixed(3)}:1`])}
         rows={(["accept", "reject"] as const).map(role => [role === "accept" ? "Accept" : "Reject / necessary only", `${comparison[role].bounds[2]} × ${comparison[role].bounds[3]}`, `${comparison[role].fillContrast.toFixed(3)}:1`])} />
-      <p>Button sizes and screenshot were captured {comparison.captureSkewMs} ms apart on the starting page. Fill contrast compares button backgrounds, not text readability.</p>
+      <p>Button sizes and screenshot were captured {formatReportSeconds(comparison.captureSkewMs)} apart on the starting page. Fill contrast compares button backgrounds, not text readability.</p>
     </> : null}
     {evidence.requests?.length && !inventory?.choiceActivity?.some(activity => activity.action === "reject") ? <>
       <CmpInventoryTable label={`Requests after confirmed Reject · ${evidence.requests.length}`}
         columns={["Service", "Category", "After Reject", "Request"]}
         columnClasses={["w-[15%] sm:w-auto", "w-[15%] sm:w-auto", "w-[15%] sm:w-auto", "w-[55%] sm:w-auto"]}
-        copyRows={evidence.requests.map(request => [request.vendor, request.category, `+${request.msAfterReject} ms`, `${request.hostname}${request.path}`])}
-        rows={evidence.requests.map(request => [<CmpInventoryIdentity name={request.vendor} kind="service" />, request.category, <span className="whitespace-nowrap">+{request.msAfterReject} ms</span>,
+        copyRows={evidence.requests.map(request => [request.vendor, request.category, `+${formatReportSeconds(request.msAfterReject)}`, `${request.hostname}${request.path}`])}
+        rows={evidence.requests.map(request => [<CmpInventoryIdentity name={request.vendor} kind="service" />, request.category, <span className="whitespace-nowrap">+{formatReportSeconds(request.msAfterReject)}</span>,
           <span className="block max-w-[18rem] whitespace-normal break-all font-mono text-[11px] leading-4">
             <span className="block">{request.hostname}</span><span className="block text-zinc-500">{request.path}</span>
           </span>])} />

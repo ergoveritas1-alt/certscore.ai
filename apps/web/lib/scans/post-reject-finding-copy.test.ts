@@ -14,7 +14,7 @@ const evidence = {
 test("full canonical aggregate describes six HubSpot requests despite the five-row display sample", () => {
   assert.deepEqual(describePostRejectFinding(evidence), {
     title: "HubSpot activity after Reject",
-    summary: "6 non-essential HubSpot requests were observed 56–774 ms after confirmed Reject.",
+    summary: "6 non-essential HubSpot requests were observed 0.056–0.774 s after confirmed Reject.",
   });
 });
 
@@ -22,7 +22,7 @@ test("historical bounded samples cannot claim the full time range or attribute e
   const copy = describePostRejectFinding({ ...evidence, postRejectActivityDetails: undefined });
   assert.equal(copy?.title, "Non-essential activity after Reject");
   assert.match(copy!.summary, /6 non-essential activity observations.*including HubSpot/);
-  assert.match(copy!.summary, /One retained observation occurred 56 ms/);
+  assert.match(copy!.summary, /One retained observation occurred 0\.056 s/);
   assert.doesNotMatch(copy!.summary, /56–586|56–774/);
 });
 

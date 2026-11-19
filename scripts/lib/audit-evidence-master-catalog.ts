@@ -1,3 +1,4 @@
+import {STAGE_METRICS} from "./audit-stage-metrics";
 /** V2 logical master. This is not a producer/API payload schema or a value migration. */
 import {EVIDENCE_CATALOG} from './audit-evidence-catalog';
 import {NORMALIZATION_REVIEW,normalizationFor} from './audit-evidence-normalization';
@@ -48,11 +49,10 @@ export const MASTER_CATALOG={version:'certscore.evidence-master-catalog.v2',stat
  scope:'Versioned definitions and compatibility bindings for the reviewed 231 items. This does not migrate producer payloads, export schemas, retained values or audit metrics. Source schemas remain authoritative; explicit value adapters and output parity gates precede any consumer migration.',
  questionGroups:[
   {id:'gpc.delivery',title:'GPC signal delivered',primaryMetric:'gpc_delivery',recordTypes:['gpc.signal_delivery'],definition:'Usable scans with verified GPC header and navigator delivery. Delivery does not establish site processing or honoring.'},
-  {id:'gpc.observed_collection',title:'Activity under GPC (all)',primaryMetric:'detail.gpc.session_collection',recordTypes:['gpc.full_visit_activity','gpc.cross_window_comparison'],definition:'Usable scans where advertising or marketing data was successfully collected during a GPC-enabled visit, whether acknowledged or not. Includes collection whose sale/sharing role is unresolved. Script downloads alone do not count.'},
   {id:'gpc.acknowledgment',title:'GPC acknowledgment coverage',primaryMetric:'detail.gpc.cmp_receipt',recordTypes:['gpc.cmp_checkpoint','gpc.response_assessment','gpc.behavioral_pair','gpc.cmp_comparison'],definition:'Usable scans whose CMP gave a definite answer about GPC receipt. The observed acknowledgment share and explicit negative responses appear below.'},
-  {id:'gpc.california_collection_review',title:'California-qualified activity under GPC',primaryMetric:'detail.gpc.california_collection',recordTypes:['privacy.canonical_choice_result','gpc.full_visit_activity'],definition:'Usable scans with a recorded California review finding for collection under GPC. This narrower subset requires supported sale/sharing-related activity, such as identifier syncing or audience collection, plus the retained policy’s evidence and processing checks. Historical policy versions remain separate. Neutral records and acknowledgment-only contradictions do not count. Missing assessment remains unavailable.'},
+  ...STAGE_METRICS.filter(m=>m.group==='GPC').map(m=>({id:m.id,title:m.label,primaryMetric:m.id,recordTypes:['privacy.canonical_choice_result','gpc.full_visit_activity'],definition:m.denominator})),
  ],
- presentationRevision:'gpc_four_questions.v2-aligned',
+ presentationRevision:'gpc_visit_stages.v3',
  records:records.map(record=>({...record,fieldIds:fields.filter(f=>f.recordType===record.id).map(f=>f.id)})),fields,
  compatibility:{version:'certscore.evidence-master-compatibility.v1',from:EVIDENCE_CATALOG.version,allLegacyIdsPreserved:true,rewrittenHistoricalValues:0,
   entries:fields.map(f=>({legacyId:f.legacyId,masterFieldId:f.id,recordType:f.recordType,field:f.field,fixedDimensions:f.fixedDimensions}))},

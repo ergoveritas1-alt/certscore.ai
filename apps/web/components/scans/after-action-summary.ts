@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import { afterActionCaptureSchema } from "@certscore/contracts";
 export { earlyRegisteredObservation } from "../../lib/scans/choice-path-execution";
 
@@ -12,10 +13,10 @@ export function afterClickSummary(projection: Record<string, unknown>, action: "
   const parsed = afterActionCaptureSchema.safeParse(projection.afterActionCapture);
   if (!parsed.success || parsed.data.action !== action || parsed.data.activationStatus !== "completed") return "";
   const capture = parsed.data;
-  const seconds = Math.round((capture.captureEndedAtMs - capture.actionDispatchedAtMs) / 10) / 100;
+  const duration = formatReportSeconds(capture.captureEndedAtMs - capture.actionDispatchedAtMs);
   const writes = capture.storageWrites;
   const requestCount = capture.requestIds.length;
-  return ` During ${seconds}s of after-click observation, ${requestCount} request${requestCount === 1 ? " was" : "s were"} retained and ${writes.length} main-document storage write${writes.length === 1 ? " was" : "s were"} observed.` +
+  return ` During ${duration} of after-click observation, ${requestCount} request${requestCount === 1 ? " was" : "s were"} retained and ${writes.length} main-document storage write${writes.length === 1 ? " was" : "s were"} observed.` +
     (capture.storageSnapshotRetained ? " A post-click storage snapshot was retained." : " No post-click storage snapshot was retained.") +
     (capture.stopReason !== "window_elapsed" ? " Capture stopped early; coverage is partial." : "") +
     (capture.requestsDropped > 0 ? ` ${capture.requestsDropped} requests were dropped; retained counts are partial.` : "") +

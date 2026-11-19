@@ -2778,7 +2778,7 @@ export function deriveConcernPolicy(input: {
       negativeEvidenceFlags:[],promotionEligibility:eligible?"eligible":"blocked",regulatoryChecklistEligibility:"none",
       scoreEffects:eligible&&version&&points>0?[{appliesTo:"california_posture",framework:"california",deductionPoints:points,
         evidenceRefs:assessments.map(a=>`choice-source:sha256:${a.sourceSha256}`),observedActivity:ids,
-        policyKey:version,policyVersion:version,reasonCode:"observed_collection_purpose_unresolved"}]:[]};
+        policyKey:version,policyVersion:version,reasonCode:assessments.some(a=>a.rows.some(row=>row.presenceBasis && row.treatment==="potential_risk"))?"observed_activity_purpose_unresolved":"observed_collection_purpose_unresolved"}]:[]};
   }
   if(suggestedUnifiedFindingId==="california_post_reject_collection") {
     const a=retainedCaliforniaPostReject(input.rawEvidence),eligible=a?.status==="qualified_collection";

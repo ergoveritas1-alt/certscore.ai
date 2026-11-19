@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 import type { Page } from "playwright";
 import { consentReceiptCaptureSchema } from "@certscore/contracts";
-import { installConsentReceiptCapture, receiptCaptureToken, retainReceiptCookies } from "./consent-receipt-capture.js";
+import { installConsentReceiptCapture, receiptCaptureToken, retainReceiptCookies, retainTrustArcReceiptCookies, retainReceiptWrites, projectReceiptValue } from "./consent-receipt-capture.js";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 function fixture(action: "accept" | "reject" = "reject", signal?: AbortSignal) {
@@ -117,7 +117,7 @@ test("navigation, cancellation and closed captures still discard availability-on
 });
 
 test("availability-only retention still stops at the existing processing budget", t => {
-  const f = fixture();
+  const f = fixture("accept");
   const token = receiptCaptureToken(f.page)!;
   let clock = 0;
   t.mock.method(performance, "now", () => clock += 3);
@@ -154,4 +154,78 @@ test("availability-only rows never replace retained bounded values", t => {
   assert.equal(result.observations.length, 8);
   assert.ok(result.observations.every(row => row.valueSha256 === hash(value) && row.facts.length === 1));
   assert.equal(result.observationsTruncated, true);
+});
+
+test("a final Reject cookie read survives a full initial inventory and exhausted polling allowance", t => {
+  const f = fixture();
+  let clock = 0;
+  let cost = 0.375;
+  t.mock.method(performance, "now", () => clock += cost);
+  const token = receiptCaptureToken(f.page)!;
+  for (let sequence = 1; sequence <= 8; sequence++) {
+    f.capture.record(token, "notice_preferences", "0:", { source: "write", writeSequence: sequence });
+  }
+  assert.equal(receiptCaptureToken(f.page), undefined);
+  f.capture.phase("terminal");
+  const terminal = receiptCaptureToken(f.page)!;
+  cost = 1;
+  f.capture.record(terminal, "noise", "", { source: "write" });
+  retainReceiptCookies(terminal, [{ name: "notice_preferences", value: "0:", domain: "fixture.example",
+    path: "/", expires: -1, httpOnly: false, secure: true, sameSite: "Lax" }], "notice_preferences");
+  assert.equal(receiptCaptureToken(f.page), undefined);
+  const result = f.finish();
+  assert.equal(result.processingLimited, true);
+  assert.equal(result.observationsTruncated, true);
+  assert.equal(result.observations.length, 8);
+  const last = result.observations.at(-1)!;
+  assert.equal(last.phase, "terminal");
+  assert.equal(last.cookieMultiplicity, "unique");
+  assert.equal(last.valueSha256, hash("0:"));
+  assert.deepEqual(last.facts, [{ pathSha256: hash("trustarc.preference_code_zero_colon"), value: true }]);
+  assert.equal(last.decision, undefined);
+  assert.deepEqual(projectReceiptValue("unrelated", "0:").facts, []);
+});
+
+test("same-document cookie_preferences writes retain bounded facts without declaring a choice", () => {
+  const f = fixture();
+  const write = { name: "cookie_preferences", value: '{"analytics":false,"id":"private-value"}',
+    observedAtEpochMs: Date.now(), sequence: 1, documentUrl: f.page.url(), storageType: "cookie" as const };
+  retainReceiptWrites(receiptCaptureToken(f.page), [{ ...write, documentUrl: "https://other.example/" },
+    { ...write, storageType: "local_storage" }, write]);
+  const result = f.finish();
+  assert.equal(result.observations.length, 1);
+  assert.deepEqual(result.observations[0]!.facts, [{ pathSha256: hash('["analytics"]'), value: false }]);
+  assert.equal(result.observations[0]!.decision, undefined);
+  assert.ok(!JSON.stringify(result).includes("private-value"));
+});
+
+
+test("TrustArc keeps alternate values and absent cookies in the final bounded receipt", t => {
+  const f = fixture();
+  let clock = 0;
+  t.mock.method(performance, "now", () => clock += 0.01);
+  const initial = receiptCaptureToken(f.page)!;
+  for (let i = 0; i < 8; i++) {
+    f.capture.record(initial, `initial-${i}`, "0:", { source: "write", writeSequence: i });
+  }
+
+  f.capture.phase("terminal");
+  const cookie = { domain: "fixture.example", path: "/", expires: -1, httpOnly: false, secure: true, sameSite: "Lax" as const };
+  const alternate = "unrecognized-preference-encoding";
+  retainTrustArcReceiptCookies(receiptCaptureToken(f.page), [
+    { ...cookie, name: "notice_gdpr_prefs", value: alternate },
+    { ...cookie, name: "cmapi_cookie_privacy", value: "permit 1 required" },
+  ]);
+
+  const result = f.finish();
+  assert.equal(result.observations.length, 8);
+  const terminal = result.observations.filter(row => row.phase === "terminal");
+  assert.equal(terminal.length, 3);
+  assert.deepEqual(terminal.map(row => row.keySha256),
+    ["notice_preferences", "notice_gdpr_prefs", "cmapi_cookie_privacy"].map(hash));
+  assert.equal(terminal[0]!.cookieMultiplicity, "none");
+  assert.equal(terminal[1]!.valueSha256, hash(alternate));
+  assert.equal(terminal[1]!.format, "opaque");
+  assert.deepEqual(terminal[2]!.facts, [{ pathSha256: hash("trustarc.permit_1_required_literal"), value: true }]);
+  assert(terminal.every(row => row.decision === undefined));
 });

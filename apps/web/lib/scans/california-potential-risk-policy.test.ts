@@ -13,7 +13,7 @@ import {gpcProductionRuntimeFixture} from "../../../../packages/certscore-contra
 import {gpcRuntimeFixture} from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime";
 import {buildGpcProductionAssessment} from "../../../../packages/certscore-scan-core/src/gpc-production-observation";
 import {buildGpcResponseAssessment} from "../../../../packages/certscore-scan-core/src/gpc-response-assessment";
-import {deriveConsentControlAssessment} from "@certscore/contracts";
+import {deriveConsentControlAssessment,gpcObservationSessionSchema} from "@certscore/contracts";
 import {inspectMeasurementRequest,resolveCanonicalVendor} from "@certscore/vendor-resolver";
 import {assessGpcPotentialRisk,assessRejectPotentialRisk,retainedPotentialRisk,CA_POTENTIAL_RISK_FINDING} from "./california-potential-risk-policy";
 import {buildUnifiedFindingDisplayPackets} from "./unified-findings";
@@ -62,7 +62,7 @@ test("a transmitted measurement parameter requires a matching stored identifier"
 });
 const ads="https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=visitor-fixture";
 const linkedin="https://px.ads.linkedin.com/collect?pid=publisher&li_adsId=visitor-fixture";
-function gpc(urls=[ga],status=204, method="GET") {
+function gpc(urls=[ga],status=204, method="GET", captureReviewPosts=false, body='{"event":"page_view"}') {
  const g=gpcProductionRuntimeFixture(),b=gpcRuntimeFixture({enabled:false}),event=g.networkEvents[1]!;
  g.networkEvents=[g.networkEvents[0]!,...urls.map((url,i)=>({...event,method,eventId:`collection-${i}`,requestId:`collection-${i}`,url,requestUrl:url,collectionEndpointObserved:!url.includes('.js')}))];
  g.normalizedVendorObservations=g.networkEvents.slice(1).map(e=>resolveCanonicalVendor({type:"request",url:e.requestUrl,evidenceId:e.eventId,sourceScanner:"fixture",matchSource:"network_request"}).observation!);
@@ -70,6 +70,20 @@ function gpc(urls=[ga],status=204, method="GET") {
  g.networkResponseEvents=g.networkEvents.slice(1).map(e=>({...e,eventId:`response-${e.eventId}`,eventType:"network_response",responseUrl:e.requestUrl,status})) as never;
  g.gpcObservationSession!.requests=g.networkEvents.map(e=>({eventId:e.eventId,timestampMs:e.timestampMs,urlSha256:createHash('sha256').update(e.requestUrl).digest('hex'),secGpc:"1"}));
  g.gpcObservationSession!.requestsObserved=g.networkEvents.length;
+ if (captureReviewPosts) {
+  const rows = g.networkEvents.slice(1).map(e => {
+   const proof = captureCaliforniaRejectRequest({
+    url:e.requestUrl, method, requestId:e.requestId!, startedAtMs:e.timestampMs, httpStatus:status,
+    hasBody:true, body, headers:{"content-type":"application/json"},
+   });
+   assert.ok(proof);
+   return {eventId:e.eventId, documentToken:"fixture-loader", capturedAtMs:900,
+    proof:{...proof,contractVersion:"gpc_request_proof.v1" as const}};
+  });
+  g.gpcObservationSession!.requestProofCapture={contractVersion:"gpc_request_capture.v1",
+   inspected:rows.length, skipped:0, pending:0, failed:0, retentionDropped:0, rows, restrictions:[]};
+ }
+ if (captureReviewPosts) g.gpcObservationSession=gpcObservationSessionSchema.parse(g.gpcObservationSession);
  g.gpcPrototypeSessionBinding!.sessionSha256=createHash('sha256').update(JSON.stringify(g.gpcObservationSession)).digest('hex');
  const bytes=Buffer.from(JSON.stringify(g)),pointer={uri:"s3://fixture/gpc.json",sizeBytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
  return buildGpcProductionAssessment({scanId:g.scanId,comparison:buildGpcResponseAssessment({baseline:b,gpc:g,baselineArtifact:{...pointer,uri:"s3://fixture/base.json"},gpcArtifact:pointer}),source:{bytes,pointer}});
@@ -89,10 +103,10 @@ test('Hotjar successful collector qualifies for potential risk on both paths wit
  const result=canonical(runtime(a,p)),g=assessGpcPotentialRisk(a)!,r=assessRejectPotentialRisk(p)!;
  assert.equal(g.rows[0]?.entityId,'ent_1426519b043f');assert.equal(r.rows[0]?.entityId,'ent_1426519b043f');
  assert.equal(g.rows[0]?.treatment,'potential_risk');assert.equal(r.rows[0]?.treatment,'potential_risk');
- assert.equal(result.score.score,86);assert.equal(result.score.deductions.length,1);
+ assert.equal(result.score.score,89);assert.equal(result.score.deductions.length,1);
  for(const row of [...p.scoringEvidence!.requests,...p.afterActionRequests!]){delete row.httpStatus;row.californiaCollection!.httpStatus=null;}
- assert.equal(assessRejectPotentialRisk(p)?.rows.length,0);assert.equal(assessRejectPotentialRisk(p)?.responseUnverified,1);
- assert.equal(assessGpcPotentialRisk(gpc([url],403))?.rows.length,0);
+ assert.equal(assessRejectPotentialRisk(p)?.rows[0]?.presenceBasis,"service_request");assert.equal(assessRejectPotentialRisk(p)?.responseUnverified,1);
+ assert.equal(assessGpcPotentialRisk(gpc([url],403))?.rows.every(row=>row.presenceBasis==='service_request'),true);
 });
 function canonical(runtime:Record<string,unknown>) {
  const f=californiaCoverageFixture();f.bundle.scanId="gpc-fixture";f.policyEvidence.projection.scanId=f.bundle.scanId;
@@ -109,23 +123,23 @@ function runtime(a= gpc(),p=reject()) {
 }
 test('positive unresolved collection on both paths survives persistence and receives one capped California risk effect',()=>{
  const r=runtime(),result=canonical(r),f=result.findings.find(f=>f.unifiedFindingId===CA_POTENTIAL_RISK_FINDING)!;
- assert.ok(f);assert.equal(f.surfacingDecision?.reportable,true);assert.match(f.summary,/GPC visit start/);assert.match(f.summary,/after the Reject click/);
- assert.equal(result.score.score,86);assert.equal(result.score.policyVersion,'california-regulatory-posture.v24-per-visit');
+ assert.equal(f.title,"Non-essential activity after Reject click and under GPC");assert.equal(f.surfacingDecision?.reportable,true);assert.match(f.summary,/GPC visit start/);assert.match(f.summary,/after the Reject click/);
+ assert.equal(result.score.score,86);assert.equal(result.score.policyVersion,'california-regulatory-posture.v26-verified-event');
  assert.equal(f.scoreEffects?.length,1);assert.equal(f.scoreEffects?.[0]?.appliesTo,'california_posture');
  assert.ok(projectCaliforniaRegulatoryPriorities(result.findings).some(f=>f.id===CA_POTENTIAL_RISK_FINDING));
  assert.equal(r.afterRejectScoringAssessment?.deductionPoints,15,'EU Reject presence remains independent');
  assert.doesNotMatch(f.summary,/deduct|points|compliant|violation observed/i);
 });
 test('highest treatment wins per recipient within each visit; different recipient still adds capped review effect',()=>{
- const same=canonical(runtime(gpc([ads])));assert.equal(same.score.score,78);assert.ok(same.findings.some(f=>f.unifiedFindingId===CA_POTENTIAL_RISK_FINDING),'Reject finding remains visible');
+ const same=canonical(runtime(gpc([ads])));assert.equal(same.score.score,78);assert.equal(same.findings.find(f=>f.unifiedFindingId===CA_POTENTIAL_RISK_FINDING)?.title,"Non-essential activity after Reject click");
  const different=canonical(runtime(gpc([linkedin,ga])));assert.equal(different.score.score,71);assert.equal(different.score.deductions.filter(r=>r.findingId===CA_POTENTIAL_RISK_FINDING).length,1);
 });
-test('failed response, script download, missing response proof and changed source do not become positive review deductions',()=>{
- assert.equal(assessGpcPotentialRisk(gpc([ga],403))?.rows.length,0);
+test('service presence survives missing collection proof while changed source invalidates the assessment',()=>{
+ assert.equal(assessGpcPotentialRisk(gpc([ga],403))?.rows[0]?.presenceBasis,"service_request");
  assert.equal(assessGpcPotentialRisk(gpc(['https://www.googletagmanager.com/gtag/js?id=G-ABC']))?.rows.length,0);
  const p=reject();for(const r of [...p.scoringEvidence!.requests,...p.afterActionRequests!])delete r.httpStatus;
- assert.equal(assessRejectPotentialRisk(p)?.rows.length,0);assert.equal(assessRejectPotentialRisk(p)?.responseUnverified,1);
- assert.equal(assessRejectPotentialRisk(reject(403))?.rows.length,0);
+ assert.equal(assessRejectPotentialRisk(p)?.rows[0]?.presenceBasis,"service_request");assert.equal(assessRejectPotentialRisk(p)?.responseUnverified,1);
+ assert.equal(assessRejectPotentialRisk(reject(403))?.rows[0]?.presenceBasis,"service_request");
  const r=runtime();r.californiaGpcPotentialRiskAssessment!.sourceSha256='a'.repeat(64);r.californiaRejectPotentialRiskAssessment!.rows[0]!.msFromAnchor++;
  assert.equal(retainedPotentialRisk(r).length,0);assert.ok(!canonical(r).findings.some(f=>f.unifiedFindingId===CA_POTENTIAL_RISK_FINDING));
 });
@@ -139,13 +153,13 @@ test('historical GPC observations are not silently upgraded on read',()=>{
 
 test('new Reject scope feeds potential risk once while historical scale policies retain the narrower scope',()=>{
  const p=withRetainedRejectContext(reject(),'Decline'),risk=assessRejectPotentialRisk(p)!;
- assert.equal(risk.policyVersion,'california.collection-review.v6-per-visit');assert.equal(risk.rows.length,1);
+ assert.equal(risk.policyVersion,'california.collection-review.v8-verified-event');assert.equal(risk.rows.length,1);
  assert.equal(assessRejectPotentialRisk(p,'california.collection-review.v2'),null);
  assert.equal(assessRejectPotentialRisk(p,CA_POTENTIAL_RISK_LEGACY_POLICY),null);
  const result=canonical(runtime(gpc(),p));assert.equal(result.score.score,86,'the same recipient counts independently on both visits');
- assert.equal(result.score.policyVersion,'california-regulatory-posture.v24-per-visit');
+ assert.equal(result.score.policyVersion,'california-regulatory-posture.v26-verified-event');
  const failed=structuredClone(p);delete failed.scoringEvidence!.requests[0]!.httpStatus;delete failed.afterActionRequests![0]!.httpStatus;
- assert.equal(assessRejectPotentialRisk(failed)?.rows.length,0);assert.equal(assessRejectPotentialRisk(failed)?.responseUnverified,1);
+ assert.equal(assessRejectPotentialRisk(failed)?.rows[0]?.presenceBasis,"service_request");assert.equal(assessRejectPotentialRisk(failed)?.responseUnverified,1);
 });
 
 test('California risk findings do not change EU deductions or treat GPC as EU refusal',()=>{
@@ -205,12 +219,12 @@ test('stronger recipient proof never improves the score and the combined family 
  assert.equal(potentialRiskIncrement(['a'],['a'],true),0,'same recipient never adds risk points');
 });
 
-test('all four scale steps reach persisted canonical findings and California scores',()=>{
- for(let n=1;n<=5;n++){
+test('verified collection scale steps reach persisted canonical findings and California scores',()=>{
+ for(let n=1;n<=9;n++){
   const a=gpc(Array.from({length:n},()=>ga));
   a.observation.requests.collectionReview!.rows.forEach((r,i)=>{r.entityId=`ent_${String(i+1).padStart(12,'0')}`;r.label=`Fixture recipient ${i+1}`;});
-  const r=runtime(a,reject(403)),result=canonical(r);
-  const expected=[0,7,11,13,15,15][n]!;
+  const result=canonical({gpcResponseAssessment:a,californiaGpcPotentialRiskAssessment:assessGpcPotentialRisk(a)});
+  const expected=[0,7,11,13,15,15,15,15,15,15][n]!;
   assert.equal(result.score.score,100-expected);
   assert.equal(result.findings.find(f=>f.unifiedFindingId===CA_POTENTIAL_RISK_FINDING)?.scoreEffects?.[0]?.deductionPoints,expected);
  }
@@ -218,7 +232,7 @@ test('all four scale steps reach persisted canonical findings and California sco
 
 test('mixed-family headroom is applied through the canonical scorer',()=>{
  const a=gpc([ads,linkedin,'https://www.facebook.com/tr/?id=fixture&ev=PageView&fbp=visitor-fixture','https://track.hubspot.com/__ptc.gif?vi=visitor-fixture']);
- const result=canonical(runtime(a,reject(403)));
+ const result=canonical({gpcResponseAssessment:a,californiaGpcPotentialRiskAssessment:assessGpcPotentialRisk(a)});
  const full=result.score.deductions.find(r=>r.policyKey==='california.choice_enforcement.recipients');
  const risk=result.score.deductions.find(r=>r.findingId===CA_POTENTIAL_RISK_FINDING);
  assert.equal(full?.points,32);assert.equal(risk?.points,5);assert.equal(result.score.score,63);
@@ -235,14 +249,14 @@ test('expanded collector matrix persists GPC and Reject findings with one CA rec
   }
   const r=runtime(a,p),result=canonical(r),retained=retainedPotentialRisk(JSON.parse(JSON.stringify(r)));
   assert.equal(retained.length,2,url);assert.ok(retained.every(x=>x.rows.some(row=>row.entityId===vendor.registryAttribution!.entityId)),url);
-  assert.equal(result.score.score,86,url);assert.equal(result.score.deductions.length,1,'one capped family row containing both visit effects');
+  assert.equal(result.score.score,89,url);assert.equal(result.score.deductions.length,1,'one capped family row containing both visit effects');
   assert.equal(r.afterRejectScoringAssessment?.deductionPoints,15,'EU uses presence independently');
   const finding=result.findings.find(f=>f.unifiedFindingId===CA_POTENTIAL_RISK_FINDING)!;
   assert.equal(finding.surfacingDecision?.reportable,true);assert.match(finding.summary,/GPC visit start/);assert.match(finding.summary,/after the Reject click/);
   assert.doesNotMatch(finding.summary,/deduct|points|violation observed/i);
   for(const request of [...p.scoringEvidence!.requests,...p.afterActionRequests!]){delete request.httpStatus;request.californiaCollection!.httpStatus=null;}
-  assert.equal(assessRejectPotentialRisk(p)?.rows.length,0,'missing successful response cannot be repaired by recognition');
-  assert.equal(assessGpcPotentialRisk(gpc([url],403))?.rows.length,0);
+  assert.equal(assessRejectPotentialRisk(p)?.rows[0]?.presenceBasis,"service_request",'missing successful response cannot be repaired by recognition');
+  assert.equal(assessGpcPotentialRisk(gpc([url],403))?.rows.every(row=>row.presenceBasis==='service_request'),true);
  }
 });
 
@@ -271,7 +285,8 @@ test('source-reviewed pixel identity recipes reach the full CA family once per v
 test("Google GPC page views count once under collection review with a declared sale opt-out", () => {
  const endpoint = "https://pagead2.googlesyndication.com/ccm/collect?en=page_view&dl=https://example.test/&npa=1&us_privacy=1-Y-";
  const capture = gpc([endpoint, endpoint],200,"POST");
- const result = assessGpcPotentialRisk(capture)!;
+ const result = assessGpcPotentialRisk(capture,"california.collection-review.v7-presence")!;
+ assert.equal(scoreCaliforniaCollectionReview([assessGpcPotentialRisk(capture)!]).reviewPoints,0);
  assert.equal(result.rows.length,2);
  for (const row of result.rows) {
    assert.equal(row.treatment,"potential_risk");
@@ -279,16 +294,16 @@ test("Google GPC page views count once under collection review with a declared s
  }
  const projected = canonical({gpcResponseAssessment:capture,californiaGpcPotentialRiskAssessment:result});
  const legacyReject = reject();
- const mixed = canonical({...runtime(capture,legacyReject), californiaRejectPotentialRiskAssessment:assessRejectPotentialRisk(legacyReject,"california.collection-review.v3-retained-scope")});
- assert.equal(mixed.score.deductions.find(d=>d.findingId===CA_POTENTIAL_RISK_FINDING)?.points,14);
+ const mixed = canonical({...runtime(capture,legacyReject), californiaGpcPotentialRiskAssessment:result, californiaRejectPotentialRiskAssessment:assessRejectPotentialRisk(legacyReject,"california.collection-review.v3-retained-scope")});
+ assert.equal(mixed.score.deductions.find(d=>d.findingId===CA_POTENTIAL_RISK_FINDING)?.points,11);
  assert.equal(projected.score.potentialRiskRecipientIds?.length,1);
- assert.equal(projected.score.deductions.find(d=>d.findingId===CA_POTENTIAL_RISK_FINDING)?.points,7);
+ assert.equal(projected.score.deductions.find(d=>d.findingId===CA_POTENTIAL_RISK_FINDING)?.points,4);
  assert.equal(assessGpcPotentialRisk(capture,"california.collection-review.v3-retained-scope")?.rows[0]?.treatment,"declared_restriction");
  for (const value of [endpoint.replace("en=page_view","en=consent"),endpoint.replace("https://example.test/","https://other.test/"),endpoint+"&en=page_view"]) {
    assert.deepEqual(assessGpcPotentialRisk(gpc([value],200,"POST"))?.rows,[]);
  }
  assert.deepEqual(assessGpcPotentialRisk(gpc([endpoint],200,"GET"))?.rows,[]);
- assert.deepEqual(assessGpcPotentialRisk(gpc([endpoint],403,"POST"))?.rows,[]);
+ assert.equal(assessGpcPotentialRisk(gpc([endpoint],403,"POST"))?.rows[0]?.presenceBasis,"service_request");
  assert.equal(assessGpcPotentialRisk(gpc([endpoint+"&rdp=1"],200,"POST"))?.rows[0]?.treatment,"declared_restriction");
 });
 
@@ -345,4 +360,95 @@ test("historical scaled review assessments retain the shared recipient effect", 
   replay.californiaGpcPotentialRiskAssessment = assessGpcPotentialRisk(replay.gpcResponseAssessment, previous);
   replay.californiaRejectPotentialRiskAssessment = assessRejectPotentialRisk(replay.postRefusalEvidenceProjection, previous);
   assert.equal(canonical(replay).score.score, 93);
+});
+
+test("Google and OpenAI event receipts score once per recipient on each eligible visit", () => {
+ const document = gpcProductionRuntimeFixture().url;
+ for (const route of ["https://bzr.openai.com/v1/sdk/events","https://pagead2.googlesyndication.com/ccm/collect"]) {
+  const google = route.includes("googlesyndication");
+  const url = google ? route + "?en=page_view&dl=" + encodeURIComponent(document) : route;
+  const p = reject(200);
+  p.sourceIdentity!.targetSha256 = p.actionControlProof!.authorizedTargetSha256 = createHash("sha256").update(document).digest("hex");
+  for (const r of [...p.scoringEvidence!.requests,...p.afterActionRequests!]) {
+   r.sanitizedUrl=route; r.hostname=new URL(url).hostname; r.vendor=google?"Google":"OpenAI"; r.purpose="advertising"; r.measurementEvidence=undefined;
+   r.californiaCollection=captureCaliforniaRejectRequest({url,method:"POST",startedAtMs:r.startedAtMs,requestId:r.requestId,httpStatus:200,
+    hasBody:!google,body:google?null:'{"event":"page_view"}',headers:google?{}:{"content-type":"application/json"}})!;
+  }
+  assert.deepEqual(assessRejectPotentialRisk(p)?.rows.map(r=>r.treatment),["potential_risk"]);
+  const serviceOnly = assessGpcPotentialRisk(gpc([url],200,"POST",false))!;
+  if (!google) assert.equal(serviceOnly.rows[0]?.presenceBasis,"service_request");
+  const bothVisits = gpc([url,url],200,"POST",true);
+  assert.equal(canonical(buildPostRefusalRuntimeProjection(p)).score.score,google?93:96);
+  assert.equal(assessGpcPotentialRisk(bothVisits)?.rows.length,2);
+  assert.equal(canonical(runtime(bothVisits,p)).score.score,google?86:92);
+  assert.deepEqual(assessRejectPotentialRisk(p,"california.collection-review.v4-google-page-view")?.rows,[]);
+  for(const r of [...p.scoringEvidence!.requests,...p.afterActionRequests!]) delete r.californiaCollection!.reviewEvent;
+  assert.equal(assessRejectPotentialRisk(p)?.rows[0]?.presenceBasis,"service_request");
+ }
+});
+
+test("a nested OpenAI measurement earns verified credit under GPC and a redirect earns only presence", () => {
+  const url = "https://bzr.openai.com/v1/sdk/events?pid=fixture&ec=1";
+  const body = JSON.stringify({events:[{type:"page_viewed", data:{type:"contents"}}]});
+  const assessment = assessGpcPotentialRisk(gpc([url,url],202,"POST",true,body))!;
+  assert.ok(assessment.rows.some(row => row.verifiedCollection));
+  assert.equal(scoreCaliforniaCollectionReview([assessment]).reviewPoints,7);
+  const redirect = assessGpcPotentialRisk(gpc([ga],302))!;
+  assert.equal(scoreCaliforniaCollectionReview([redirect]).reviewPoints,4);
+});
+
+test("presence tiers score 7, 14 and 19 while preserving historical per-visit scores", () => {
+  const r = assessRejectPotentialRisk(reject())!;
+  const first = {...r.rows[0]!, verifiedCollection:undefined, presenceBasis:"service_request" as const};
+  const second = {...first, entityId:"ent_000000000011", evidenceId:"second"};
+  const partial = {...r, rows:[first,second,{...second,evidenceId:"repeat"}]};
+  assert.equal(scoreCaliforniaCollectionReview([partial]).reviewPoints,7);
+  const mixed = {...partial, rows:[r.rows[0]!, second]};
+  assert.equal(scoreCaliforniaCollectionReview([mixed]).reviewPoints,10);
+  assert.equal(scoreCaliforniaCollectionReview([partial,{...partial,path:"gpc"}]).reviewPoints,14);
+  const full = {gpc:new Set<string>(),reject:new Set([first.entityId]),explicitOptOut:new Set<string>(),supported:true};
+  assert.equal(californiaChoiceEnforcementPoints([...full.reject],true)+scoreCaliforniaCollectionReview([partial],full).reviewPoints,19);
+  const many = {...r,rows:Array.from({length:9},(_,i)=>({...first,entityId:"ent_"+String(i).padStart(12,"0"),evidenceId:String(i)}))};
+  assert.equal(scoreCaliforniaCollectionReview([many,{...many,path:"gpc"}]).reviewPoints,15);
+  const old = "california.collection-review.v6-per-visit";
+  const replay=runtime();
+  replay.californiaGpcPotentialRiskAssessment=assessGpcPotentialRisk(replay.gpcResponseAssessment,old);
+  replay.californiaRejectPotentialRiskAssessment=assessRejectPotentialRisk(replay.postRefusalEvidenceProjection,old);
+  assert.equal(canonical(replay).score.score,86);
+});
+
+test("Reject cookie presence alone earns partial credit with factual snapshot wording", () => {
+  const p=reject();
+  p.scoringEvidence!.requests=[];
+  p.afterActionRequests=[];
+  p.afterActionCapture!.requestAncestry=[];
+  p.afterActionCapture!.requestIds=[];
+  const cookies=[{storageType:"cookie" as const,name:"nmstat",hostname:"example.test",valueHash:"f".repeat(64),
+    purpose:"unknown" as const,nonEssential:false}];
+  p.afterActionStorage=cookies;
+  p.scoringEvidence!.postActionStorage=cookies;
+  const runtime=buildPostRefusalRuntimeProjection(p);
+  const result=canonical(runtime);
+  assert.equal(result.score.score,96);
+  const finding=result.findings.find(f=>f.unifiedFindingId===CA_POTENTIAL_RISK_FINDING)!;
+  assert.equal(finding.title,"Non-essential activity after Reject click");
+  assert.match(finding.summary,/cookie snapshot/);
+  assert.doesNotMatch(finding.summary,/collection was observed|retained requests/i);
+  p.afterActionCapture!.storageSnapshotRetained=false;
+  assert.equal(assessRejectPotentialRisk(p),null);
+});
+
+test("a bound GPC cookie alone reaches the California score through the persisted finding", () => {
+  const capture=gpc([]);
+  const o=capture.observation;
+  o.presenceEvidence=[{presenceBasis:"cookie_snapshot",evidenceId:"cookie:"+"e".repeat(64),entity:"Fixture recipient",
+    entityId:"ent_000000000001",purpose:"analytics",msFromAnchor:o.requests.throughMs!,processingSignals:[]}];
+  const risk=assessGpcPotentialRisk(capture);
+  const result=canonical({gpcResponseAssessment:capture,californiaGpcPotentialRiskAssessment:risk});
+  assert.equal(result.score.score,96);
+  const finding=result.findings.find(f=>f.unifiedFindingId===CA_POTENTIAL_RISK_FINDING)!;
+  assert.equal(finding.title,"Non-essential activity under GPC");
+  assert.match(finding.summary,/cookie snapshot observation under GPC/);
+  o.delivery.httpHeaderRetained=false;
+  assert.equal(assessGpcPotentialRisk(capture),null);
 });

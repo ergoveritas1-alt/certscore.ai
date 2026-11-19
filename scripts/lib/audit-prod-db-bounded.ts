@@ -36,19 +36,19 @@ const MAC_MINI_DELTA_MARKER = "MACMINI_DELTA_IDS";
 function compactDeltaCommand(marker: string, logChunkThrottle?: boolean) {
   // Compact launch syntax only. Retain the TLS gate, input/output files,
   // psql error handling, and the checksum path and markers used by recovery.
-  const throttle = logChunkThrottle ? ' if (NR % 64 == 0) system("sleep 0.5");' : '';
+  const throttle = logChunkThrottle ? ';if(NR%64==0)system("sleep 0.5")' : '';
   return [
     'set -eu',
     'cd /tmp',
-    'test "$PGSSLMODE" = require',
-    'echo "$QUERY_B64"|base64 -d|gzip -dc>q',
+    '[ "$PGSSLMODE" = require ]',
+    'echo "$Q"|base64 -d|gzip -dc>q',
     `m=__${marker}`,
     'echo ${m}_START__',
     'psql -XwAtvON_ERROR_STOP=1 "$DATABASE_URL" -fq>a',
     'o=/tmp/audit-output.gz',
-    'gzip -c a>$o',
+    'gzip <a>$o',
     'sha256sum $o',
-    `base64 <$o|tr -d '\\n'|fold -w8192|awk '{printf "__CHUNK_%08d__%s\\n",NR,$0;${throttle}}'`,
+    `base64 -w8192 $o|awk '{printf "__CHUNK_%08d__%s\\n",NR,$0${throttle}}'`,
     'echo ${m}_END__',
   ].join(';');
 }
@@ -66,13 +66,14 @@ export function prepareSqlOverride(input: Pick<RunProdDbSqlInput, 'marker'|'read
   // repetitive SQL more effectively. Keep the smaller standard gzip stream.
   const compactGzip = gzipSync(sqlBytes, { level: 9, memLevel: 5 });
   const queryGzipB64 = (compactGzip.length < defaultGzip.length ? compactGzip : defaultGzip).toString("base64");
-  const command = marker === MAC_MINI_DELTA_MARKER && input.readOnly ? [compactDeltaCommand(marker, input.logChunkThrottle)] : [
+  const compactDelta = marker === MAC_MINI_DELTA_MARKER && input.readOnly;
+  const command = compactDelta ? [compactDeltaCommand(marker, input.logChunkThrottle)] : [
     `set -eu; test "\${PGSSLMODE:-}" = require; printf %s "$QUERY_B64" | base64 -d | gzip -dc > /tmp/query.sql; echo __${marker}_START__; psql -X --no-password -v ON_ERROR_STOP=1 -P pager=off -P footer=off -t -A "$DATABASE_URL" -f /tmp/query.sql > /tmp/audit-output.txt; gzip -c /tmp/audit-output.txt > /tmp/audit-output.gz; sha256sum /tmp/audit-output.gz; base64 /tmp/audit-output.gz | tr -d '\\n' | fold -w 8192 | awk '{printf "__CHUNK_%08d__%s\\n", NR, $0;${input.logChunkThrottle ? ' if (NR % 64 == 0) system("sleep 0.5");' : ''}}'; echo __${marker}_END__`,
   ];
   const overrides = JSON.stringify({
     containerOverrides: [{
       command,
-      environment: [{ name: "QUERY_B64", value: queryGzipB64 }],
+      environment: [{ name: compactDelta ? "Q" : "QUERY_B64", value: queryGzipB64 }],
       name: containerName,
     }],
   });

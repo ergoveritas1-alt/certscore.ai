@@ -149,3 +149,51 @@ test("new identity proof remains bounded and body invalidation stays neutral rat
  assert.equal(isQualifyingSaleSharingRequest(foreign.qualification),false);
  assert.deepEqual(foreign.proof?.identifiers,[]);
 });
+
+test("choice event review excludes loaders, GETs, consent-only pings, wrong pages and incomplete inspections", () => {
+ const {hasVerifiedChoiceReviewEvent} = require("@certscore/contracts");
+ const page="https://fixture.test/";
+ const hash=require("node:crypto").createHash("sha256").update(page).digest("hex");
+ const capture=(url:string, method="POST", body:string|null=null)=>captureCaliforniaRejectRequest({
+  url, method, requestId:"event",startedAtMs:10,httpStatus:200,hasBody:body!==null,body,
+  headers:body===null?{}:{"content-type":"application/json"},
+ });
+ const google="https://pagead2.googlesyndication.com/ccm/collect";
+ assert.equal(capture(google+"?gcd=fixture")?.reviewEvent,undefined);
+ assert.equal(capture(google+"?en=page_view&en=page_view&dl="+encodeURIComponent(page))?.reviewEvent,undefined);
+ const view=capture(google+"?en=page_view&dl="+encodeURIComponent(page))!;
+ assert.equal(hasVerifiedChoiceReviewEvent(view,hash),true);
+ assert.equal(hasVerifiedChoiceReviewEvent(view,"0".repeat(64)),false);
+ const openai="https://bzr.openai.com/v1/sdk/events";
+ assert.equal(capture(openai,"GET"),null);
+ assert.equal(capture("https://bzrcdn.openai.com/sdk/oaiq.min.js"),null);
+ assert.equal(capture(openai)?.reviewEvent,undefined);
+ assert.equal(hasVerifiedChoiceReviewEvent(capture(openai,"POST","{malformed")!,hash),false);
+});
+
+test("OpenAI nested SDK inspection distinguishes measurement, telemetry, restrictions and unsupported data",()=>{
+ const {hasVerifiedChoiceReviewEvent}=require("@certscore/contracts");
+ const capture=(events:unknown[],ec=events.length)=>captureCaliforniaRejectRequest({
+   url:"https://bzr.openai.com/v1/sdk/events?pid=fixture&ec="+ec,method:"POST",requestId:"event",startedAtMs:100,
+   httpStatus:202,hasBody:true,headers:{"content-type":"text/plain"},body:JSON.stringify({events}),
+ })!;
+ const init={type:"openai::sdk_init",data:{type:"sdk_lifecycle"}};
+ const view={type:"page_viewed",data:{type:"contents"}};
+ const diagnostic={type:"oai::diagnostic",data:{type:"diagnostic",schema_version:1,
+   dropped_event_count:0,dropped_event_reason_counts:{},dropped_event_name_counts:{},dropped_event_phase_counts:{}}};
+ const proof=capture([init,diagnostic,view]);
+ assert.equal(proof.proof?.bodyStatus,"complete");
+ assert.equal(proof.proof?.processingCoverage?.body,"inspected");
+ assert.deepEqual(proof.reviewEvent,{kind:"openai_event_post",batchInspection:"measurement_observed"});
+ assert.ok(hasVerifiedChoiceReviewEvent(proof,""));
+ assert.equal(isQualifyingSaleSharingRequest(proof.qualification),false);
+ for(const events of [[init,diagnostic],[init,{...view,opt_out:true}],[{...diagnostic,data:{...diagnostic.data,consent:false}},view]]) {
+   const parsed=capture(events);
+   assert.equal(parsed.proof?.bodyStatus,"complete");
+   assert.equal(hasVerifiedChoiceReviewEvent(parsed,""),false);
+ }
+ for(const bad of [capture([view],2),capture([{...view,data:{rdp:1}}]),capture([{...view,opt_out:"false"}])]) {
+   assert.equal(bad.proof?.bodyStatus,"unsupported");
+   assert.equal(hasVerifiedChoiceReviewEvent(bad,""),false);
+ }
+});

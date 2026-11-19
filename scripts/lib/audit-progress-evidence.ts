@@ -1,3 +1,4 @@
+import {auditStageStates, STAGE_METRICS} from "./audit-visit-stages";
 import { pairedGpcAudit, GPC_PAIR_METRICS, GPC_PAIR_QUANTITIES, GPC_SESSION_METRICS, GPC_SESSION_QUANTITIES, GPC_DETAIL_METRICS, GPC_DETAIL_QUANTITIES } from "./audit-progress-gpc";
 import { checklistEvidence, returnedState } from './audit-progress-contracts';
 import {CONTROL_ACCESSIBILITY_METRICS} from './audit-progress-control-accessibility';
@@ -13,7 +14,7 @@ const count=(v:any):number|undefined=>Number.isSafeInteger(v)&&v>=0?v:undefined;
 const state=returnedState;
 const denominator="Readable reportable scans; missing historical fields stay not checked";
 export const EVIDENCE_METRICS:Metric[]=[
-  ...GPC_PAIR_METRICS, ...GPC_SESSION_METRICS, ...GPC_DETAIL_METRICS,
+  ...STAGE_METRICS, ...GPC_PAIR_METRICS, ...GPC_SESSION_METRICS, ...GPC_DETAIL_METRICS,
   ...["accept","reject"].flatMap(action=>[
     {id:`detail.${action}.activity_all`,label:`After ${action} non-essential activity (all)`,group:"A/R verdicts",denominator,success:["activity_observed"]},
     {id:`detail.${action}.verdict`,label:`${action} returned verdict`,group:"A/R verdicts",denominator,success:[action==="accept"?"eligible_nonessential_activity_observed_after_confirmed_acceptance":"eligible_nonessential_activity_observed_after_confirmed_refusal"]},
@@ -66,6 +67,7 @@ export function checklistGroup(id:string){return id.startsWith("transport_securi
 export function evidenceProgress(report:Obj,checklist:Obj[],covered:ReadonlySet<string>){
   const states:Record<string,string>={},measurements:Record<string,number>={},metricLabels:Record<string,string>={};
   for(const m of EVIDENCE_METRICS)if(!m.id.endsWith(".activity_all"))states[m.id]="unavailable";
+  Object.assign(states, auditStageStates(report, report.scanId ?? report.scan?.id));
   // Preserve returned customer status. A transport concern can have evidenceState
   // observed while status is Gap observed: it must not become a positive check.
   for(const r of checklist){

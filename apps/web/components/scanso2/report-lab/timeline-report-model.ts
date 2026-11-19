@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../../lib/scans/report-time";
 import { describePostRejectFinding } from "../../../lib/scans/post-reject-finding-copy";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../../../lib/scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../../../lib/scans/choice-path-execution";
@@ -161,19 +162,8 @@ export function getConsentControlSummaryLabel(
 }
 
 function formatDuration(milliseconds: number | null | undefined) {
-  if (typeof milliseconds !== "number" || !Number.isFinite(milliseconds)) return "Duration unavailable";
-  if (milliseconds < 1_000) return `${Math.round(milliseconds)} ms`;
-  return `${Math.round(milliseconds / 100) / 10} sec`;
-}
-
-function formatHeaderDuration(milliseconds: number | null | undefined) {
-  if (typeof milliseconds !== "number" || !Number.isFinite(milliseconds)) return "Duration unavailable";
-  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1_000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return minutes > 0
-    ? `${minutes} min${seconds > 0 ? ` ${seconds} sec` : ""}`
-    : `${seconds} sec`;
+  return typeof milliseconds === "number" && Number.isFinite(milliseconds)
+    ? formatReportSeconds(milliseconds) : "Duration unavailable";
 }
 
 function durationFromTimestamps(scan: ScanDetailResponse["scan"]) {
@@ -206,8 +196,7 @@ function retainedConsentVendor(scanRecord: ScanDetailResponse) {
 }
 
 function formatTimelineTime(milliseconds: number) {
-  if (milliseconds <= 0) return "0s";
-  return `${Math.round(milliseconds / 10) / 100}s`;
+  return formatReportSeconds(Math.max(0, milliseconds));
 }
 
 function formatTimestamp(value: string | null | undefined) {
@@ -605,7 +594,7 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
   return {
     benchmark: scanRecord.domainBenchmark?.industry ?? "Comparable public websites",
     createdAt: formatTimestamp(scanRecord.scan.createdAt),
-    duration: formatHeaderDuration(retainedScanDurationMs(scanRecord)),
+    duration: formatDuration(retainedScanDurationMs(scanRecord)),
     host: scanRecord.scan.domainHostname ?? "Public website",
     id: scanRecord.scan.id,
     observedWindow: formatDuration(retainedScanDurationMs(scanRecord) ?? 0),
@@ -721,7 +710,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
       ? "unavailable" as const
       : "not_requested" as const;
   const timeline: ShadowReportData["timeline"] = [
-    { at: "0s", atMs: 0, detail: "Public page observation began", label: "Scan start", tone: "neutral" },
+    { at: "0 s", atMs: 0, detail: "Public page observation began", label: "Scan start", tone: "neutral" },
     ...buildExecutiveTimelineEvents(scanRecord.runtimeArtifacts, reportableChecklistRows).map((event) => ({
       at: formatTimelineTime(event.atMs),
       atMs: event.atMs,

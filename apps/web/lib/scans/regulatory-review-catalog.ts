@@ -81,8 +81,8 @@ export const REGULATORY_REVIEW_TOPICS: RegulatoryReviewTopic[] = [
   { id: "california-gpc-choice", title: "GPC choice-enforcement risk", findingIds: ["gpc_response"], contexts: { ccpa_cpra: {
     why: "GPC communicates a sale/sharing opt-out. Verified advertising collection or an acknowledged signal with the applicable opt-out remaining off warrants checking whether the site and its services apply that choice.",
     rule: "CCPA §1798.135; regulations §§7025–7026", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_updates_cyber_risk_admt_appr_text.pdf", cases: ["sephora"], priority: 100 } } },
-  { id: "california-collection-review", title: "Collection under privacy-choice conditions", findingIds: ["california_collection_review"], contexts: { ccpa_cpra: {
-    why: "Verified collection was observed under privacy-choice conditions; the sale/sharing purpose of the specific requests remains unresolved.",
+  { id: "california-collection-review", title: "Activity under privacy-choice conditions", findingIds: ["california_collection_review"], contexts: { ccpa_cpra: {
+    why: "Review the purpose of the retained activity and the recipient’s role under the tested privacy choice.",
     rule: "California collection review", ruleUrl: california, cases: [], priority: 50 } } },
   { id: "california-opt-out-activity", title: "Activity after a sale/sharing opt-out", findingIds: ["california_sale_sharing_opt_out_activity"], contexts: { ccpa_cpra: {
     why: "An applicable sale/sharing opt-out must take effect for relevant data flows. Review whether the observed requests actually involve sale or sharing and whether the visitor’s recorded choice is applied by those services.",

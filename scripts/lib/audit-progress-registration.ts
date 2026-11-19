@@ -21,11 +21,12 @@ export function terminalDecisionStatus(projection: Record<string, any>, action: 
     const timing = retainedActionTimingSchema.safeParse(projection.retainedActionTiming);
     const completion = registeredObservationCompletionSchema.safeParse(projection.registeredObservationCompletion);
     const execution = choicePathExecutionSchema.safeParse(projection.execution);
-    if (!timing.success || !completion.success || !execution.success ||
-      !execution.data.observationCompleted || !execution.data.consentConfirmed ||
-      !/^[a-f0-9]{64}$/.test(projection.packetSha256 ?? "")) return "unverified";
+    const reload = decision.data.trustArcReloadReadback;
+    if (!timing.success || !execution.success || !execution.data.consentConfirmed ||
+        (reload ? !execution.data.clickCompleted : !completion.success || !execution.data.observationCompleted) ||
+        !/^[a-f0-9]{64}$/.test(projection.packetSha256 ?? "")) return "unverified";
     return terminalConsentDecisionBound(decision.data, undefined, projection.actionControlProof, action,
-      registeredTerminalWindow({retainedActionTiming: timing.data, registeredObservationCompletion: completion.data}))
+      registeredTerminalWindow({ ...projection, terminalDecisionEvidence: decision.data, retainedActionTiming: timing.data }))
       ? "verified" : "unverified";
   }
   const capture = afterActionCaptureSchema.safeParse(projection.afterActionCapture);

@@ -2,7 +2,7 @@ import type { GpcResponseAssessment } from "@certscore/contracts";
 import { classifyChoiceCookie } from "./choice-cookie-classification";
 import { cookieInventoryClassification } from "./runtime-inventory-projection";
 
-function readCookieIdentity(encoded: string) {
+export function readGpcCookieIdentity(encoded: string) {
   // The comparison producer stores only [name, domain, path]. Never render opaque legacy keys.
   try {
     const parts: unknown = JSON.parse(encoded);
@@ -19,5 +19,5 @@ function readCookieIdentity(encoded: string) {
 export function gpcCookieInventory(assessment: GpcResponseAssessment) {
   if (assessment.contractVersion === "certscore.gpc-response-assessment.v1") return [];
   const cookies = assessment.comparison.deltas.cookies;
-  return [...new Set([...cookies.shared, ...cookies.gpcOnly])].map(readCookieIdentity).filter(row => row !== null);
+  return [...new Set([...cookies.shared, ...cookies.gpcOnly])].map(readGpcCookieIdentity).filter(row => row !== null);
 }

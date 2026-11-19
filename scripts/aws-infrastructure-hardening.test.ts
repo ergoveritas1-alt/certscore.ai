@@ -356,6 +356,12 @@ test("checked-in AWS deployment paths enable the sale/sharing observer on web an
 
 test("regional scanner parity follows the bounded Lambda and region-specific proxy contracts", async () => {
   const source = await readFile("scripts/check-regional-scanner-parity.ts", "utf8");
+  const replacement = await readFile("scripts/local-v2-dag-lambda/replace-regional-proxy.sh", "utf8");
+  assert.match(source, /inventoryEnv\[key\] !== env\[key\]/);
+  assert.match(source, /configuredProxyServer !== expectedProxyServer/);
+  assert.match(replacement, /\[inventoryPath, inventoryOutput\]/);
+  assert.match(replacement, /RevisionId: Configuration\.RevisionId/);
+  assert.match(replacement, /for target_function in "\$function_name" "\$\{function_name\}-inventory"/);
   assert.match(source, /\["timeout", config\.Timeout, 75\]/);
   assert.match(source, /"eu-west-1": "ireland-parity-v1"/);
   assert.match(source, /"eu-central-1": "ireland-parity-v1"/);

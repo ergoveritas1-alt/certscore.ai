@@ -82,7 +82,7 @@ test("refusal and overlap retain every original finding exactly once without inv
     assert.deepEqual(m.otherIssues[0]!.findingIds, ["post_reject_click_tracking", "accept_reject_outcomes_indistinguishable"]);
     const copy = JSON.stringify(m.otherIssues[0]!.blocks);
     assert.match(copy, /partial overlap, not equivalent outcomes/);
-    assert.match(copy, /3.0 s; Reject 1.4 s/);
+    assert.match(copy, /3 s; Reject 1\.4 s/);
     assert.match(copy, /After Reject click/);
     assert.match(copy, /After Accept click/);
     assert.equal(JSON.stringify(r), before);

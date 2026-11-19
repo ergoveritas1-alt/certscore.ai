@@ -1,3 +1,4 @@
+import {STAGE_METRICS} from "./audit-stage-metrics";
 /** Current dashboard presentation only. Original contracts, rows and historical CSVs remain lossless. */
 import {CATALOG_VIEW_BINDINGS} from './audit-evidence-catalog';
 import {MASTER_CATALOG,masterFieldForLegacy} from './audit-evidence-master-catalog';
@@ -36,6 +37,7 @@ const extras:Record<string,[string,string]>={
  'detail.gpc.paired_collection':['gpc.behavioral_pair','Successful-collection sample availability in the matched window.'],
  'detail.gpc.paired_identifiers':['gpc.behavioral_pair','Identifier sample availability and proof scope in the matched window.'],
  'detail.gpc.session_collection':['gpc.full_visit_activity','Full-visit advertising collection availability; separate from early paired samples.'],
+ 'detail.gpc.cmp_receipt_source':['gpc.cmp_checkpoint','Provenance of the definite CMP readback at the retained checkpoint.'],
  'detail.gpc.semantic_probe':['gpc.cmp_checkpoint','Semantic probe status, distinct from readiness and receipt.'],
  'detail.gpc.acknowledgment':['gpc.cmp_checkpoint','Retained acknowledgment; not opt-out state or honoring.'],
  'detail.gpc.sale':['gpc.cmp_checkpoint','Single checkpoint sale setting; not paired transition.'],
@@ -73,6 +75,7 @@ const checklistConcepts:Record<string,string>={
 const topicChecks:Record<string,string>={controller_contact_disclosure:'controller_contact',processing_purposes_disclosure:'processing_purposes',legal_basis_disclosure_observed:'legal_basis',recipients_vendor_categories_disclosure:'recipients_or_vendor_categories',retention_disclosure_observed:'data_retention',data_subject_rights_disclosure:'data_subject_rights',international_transfers_disclosure:'international_transfers',dpo_contact_point_disclosure:'dpo_contact',supervisory_authority_complaint_disclosure:'supervisory_authority',automated_decision_making_profiling_disclosure:'automated_decision_making_or_profiling'};
 export function auditMeasureLinks(id:string,kind:string):Link[]{
  if(id==='outcome.no_go_total')return [field('operations.cohort.outcome','Count and share of retained no-go outcomes across all retained attempts.','assessment_context')];
+ if(STAGE_METRICS.some(m=>m.id===id))return [record('privacy.canonical_choice_result','Cumulative California evidence stages within one visit, before score caps.')];
  if(id.startsWith('outcome.no_go_reason.'))return [field('operations.cohort.outcome','Breakdown by the primary reason returned for a retained no-go outcome.','assessment_context')];
  if(id==='sealed.operations.transfer_framework_check')return [field('policies.stale_framework.evidence_state','Related audit coverage of the versioned retained-text matcher, separate from the returned checklist finding.','assessment_context')];
  if(id==='sealed.operations.transfer_framework_reasons')return [field('policies.stale_framework.evidence_state','Producer-recorded prerequisites for completing the retained-text matcher.','assessment_context')];
@@ -166,8 +169,14 @@ const FORWARD_MEASURES:Record<string,string[]>={
  'detail.accept.verdict':['detail.accept.projectable','detail.accept.reason','detail.accept.stop','accept.requests','accept.storage_writes'],
  'click.reject':['execution.reject','sealed.priority_evidence.reject'],
  'registration.reject':['sealed.terminal.audit_reject'],
+ 'detail.reject.stage1':['detail.reject.activity_all','detail.reject.verdict'],
+ 'detail.reject.stage2':[],
+ 'detail.reject.stage3':['sealed.choice_finding.california_post_reject_collection'],
+ 'detail.gpc.stage1':[],
+ 'detail.gpc.stage2':['detail.gpc.session_collection'],
+ 'detail.gpc.stage3':['detail.gpc.california_collection'],
  'detail.reject.activity_all':['customer_cmp_check.implementation','sealed.priority_evidence.reject_activity'],
- 'detail.reject.verdict':['sealed.choice_finding.california_post_reject_collection','detail.reject.projectable','detail.reject.reason','detail.reject.stop','reject.requests','reject.storage_writes'],
+ 'detail.reject.verdict':['detail.reject.projectable','detail.reject.reason','detail.reject.stop','reject.requests','reject.storage_writes'],
  gpc_delivery:['gpc_path'],
  'detail.gpc.cmp_receipt':['detail.gpc.cmp_receipt_source','detail.gpc.acknowledgment','detail.gpc.semantic_probe','detail.gpc.semantic_readiness','gpc.session.semantic_read_ms','detail.gpc.assessment_coverage'],
  'detail.gpc.assessment_coverage':['detail.gpc.response','detail.gpc.paired_pair','sealed.choice_evidence.paired_cmp','detail.gpc.paired_cmp','detail.gpc.paired_cmp_scope','detail.gpc.paired_window'],
@@ -300,6 +309,7 @@ export function buildAuditMeasureView(data:any){
  const checklistAliases=reviewedChecklistAliases(data);
  removals.push(...checklistAliases);
  const reviewed=all.filter(e=>!removals.some(r=>r.id===e.id)).map(e=>({...e,canonicalLinks:auditMeasureLinks(e.id,e.kind)}));
+ const choiceGroup='Accept, Reject, Options & GPC';
  const choiceLabels:Record<string,string>={
   'control.accept':'Accept control presence',
   'click.accept':'Accept click completed',
@@ -309,8 +319,10 @@ export function buildAuditMeasureView(data:any){
   'control.reject':'Reject control presence',
   'click.reject':'Reject click completed',
   'detail.reject.activity_all':'After Reject non-essential activity (all)',
-  'registration.reject':'Reject choice confirmed',
+  'registration.reject':'Reject recorded by consent platform',
+  ...Object.fromEntries(STAGE_METRICS.filter(m=>m.group==='Accept & Reject').map(m=>[m.id,m.label])),
   'detail.reject.verdict':'After Reject non-essential activity (confirmed)',
+  'control.options':'Options control presence',
  };
  const coreLabels:Record<string,string>=Object.fromEntries(MASTER_CATALOG.questionGroups.map(q=>[q.primaryMetric,q.title]));
  const quantityLabels:Record<string,string>={'site.link_evidence':'Hidden links','technology.detections':'Tech stack observed'};
@@ -352,10 +364,10 @@ export function buildAuditMeasureView(data:any){
  };
  const grouped=reviewed.map(entry=>{
   let group=(entry.group??'Other report signals').replace(/^Retained · /,'');
-  if(['GPC details','Canonical GPC & opt-out records'].includes(group))group='GPC';
-  if(Object.hasOwn(choiceLabels,entry.id)||['A/R paths','A/R verdicts'].includes(group)||entry.id==='sealed.choice_finding.california_post_reject_collection')group='Accept & Reject';
+  if(Object.hasOwn(choiceLabels,entry.id)||['Accept & Reject','A/R paths','A/R verdicts','GPC','GPC details','Canonical GPC & opt-out records'].includes(group)||entry.id==='sealed.choice_finding.california_post_reject_collection')group=choiceGroup;
+  if(group==='Controls')group='Opt-out';
   if(entry.id==='sealed.choice_finding.california_sale_sharing_opt_out_assessment')group='Opt-out';
-  if(group==='CMP details')group='Consent & CMP';
+  if(group==='CMP'||group==='CMP details')group='Consent & CMP';
   if(entry.id==='sealed.detail.sealed.form_destinations')group='Forms';
   const label=(trackingPresentation[entry.id]?.label??accessibilityLabels[entry.id]??choiceLabels[entry.id]??coreLabels[entry.id]??quantityLabels[entry.id]??entry.label??entry.id)
    .replace(/ · retained assessment$/,'').replace(/ · audit extract$/,'');
@@ -368,6 +380,11 @@ export function buildAuditMeasureView(data:any){
   return {...entry,group,label,denominator,...(trackingPresentation[entry.id]?{scopeNote:trackingPresentation[entry.id]!.scopeNote}:{})};
  });
  const groupOrder=[...new Set(grouped.map(entry=>entry.group))];
+ const optOutIndex=groupOrder.indexOf('Opt-out');
+ if(groupOrder.includes(choiceGroup)&&optOutIndex!==-1){
+  groupOrder.splice(optOutIndex,1);
+  groupOrder.splice(groupOrder.indexOf(choiceGroup)+1,0,'Opt-out');
+ }
  grouped.sort((a,b)=>groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group));
  const {entries,tableEntries:forwardTableEntries,retired}=forwardAuditMeasures(grouped);
  const noGoTotals=new Map<string,number>();
@@ -379,12 +396,10 @@ export function buildAuditMeasureView(data:any){
  noGoTotals.set('outcome.no_go_reason.unavailable',unavailableReasons);
  const tableEntries=forwardTableEntries.filter(entry=>!entry.id.startsWith('outcome.no_go_reason.')||(noGoTotals.get(entry.id)??0)>0).map(entry=>entry.id==='sealed.opt_out.action_completion'
   ? {...entry,label:'Opt-out execution and verification'}:entry);
- const coreOrder=MASTER_CATALOG.questionGroups.map(q=>q.primaryMetric);
- const choiceOrder=Object.keys(choiceLabels);
+ const choiceOrder=[...Object.keys(choiceLabels),...MASTER_CATALOG.questionGroups.map(q=>q.primaryMetric)];
  tableEntries.sort((a,b)=>{
   if(a.group!==b.group)return groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group);
-  if(a.group==='GPC')return coreOrder.indexOf(a.id)-coreOrder.indexOf(b.id);
-  if(a.group==='Accept & Reject')return choiceOrder.indexOf(a.id)-choiceOrder.indexOf(b.id);
+  if(a.group===choiceGroup)return choiceOrder.indexOf(a.id)-choiceOrder.indexOf(b.id);
   if(a.group==='No-go reasons')return Number(b.id==='outcome.no_go_total')-Number(a.id==='outcome.no_go_total')||
    (noGoTotals.get(b.id)??0)-(noGoTotals.get(a.id)??0);
   return 0;

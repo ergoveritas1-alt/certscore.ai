@@ -1,3 +1,4 @@
+import { formatReportSeconds, formatRetainedReportTiming } from "../../lib/scans/report-time";
 import { describeGpcCmpStateComparison, type GpcCmpStateComparison, type GpcGuidance } from "@certscore/contracts";
 
 /** Presentation only. Proof and diagnosis are shared canonical projections. */
@@ -14,15 +15,15 @@ export function GpcProductEvidence({ comparison, guidance }: { comparison?: GpcC
       </table>
       {comparison.contractVersion === "certscore.gpc-cmp-state-comparison.v2" ?
         <p className="mt-2">Main-document CMP snapshots. Worker and child-frame signal delivery is not established.</p> : null}
-      <details className="mt-2"><summary className="cursor-pointer font-medium">Snapshot evidence and timing</summary><p className="mt-2">{describeGpcCmpStateComparison(comparison)}</p></details>
+      <details className="mt-2"><summary className="cursor-pointer font-medium">Snapshot evidence and timing</summary><p className="mt-2">{formatRetainedReportTiming(describeGpcCmpStateComparison(comparison))}</p></details>
     </div> : null}
     {guidance?.items.map(item => <details key={item.code} open={item.kind === "adverse"} className="border-t border-zinc-200 pt-3">
-      <summary className="cursor-pointer font-medium text-zinc-800">{item.observation}</summary>
+      <summary className="cursor-pointer font-medium text-zinc-800">{formatRetainedReportTiming(item.observation)}</summary>
       <div className="mt-2 space-y-2">
-        {item.evidence.length ? <ul className="space-y-1">{item.evidence.map(e => <li key={e.evidenceId}>{e.recipient} · Request evidence <code className="break-all">{e.evidenceId}</code>{e.observedAtMs === undefined ? '' : ` · +${e.observedAtMs} ms from GPC visit start`}{e.priorCmpObservedAtMs === undefined ? '' : `; prior same-document CMP state +${e.priorCmpObservedAtMs} ms`}</li>)}</ul> : null}
+        {item.evidence.length ? <ul className="space-y-1">{item.evidence.map(e => <li key={e.evidenceId}>{e.recipient} · Request evidence <code className="break-all">{e.evidenceId}</code>{e.observedAtMs === undefined ? '' : ` · +${formatReportSeconds(e.observedAtMs)} from GPC visit start`}{e.priorCmpObservedAtMs === undefined ? '' : `; prior same-document CMP state +${formatReportSeconds(e.priorCmpObservedAtMs)}`}</li>)}</ul> : null}
         <p>Responsible role: {item.responsibleRole}.</p><p className="font-semibold">What to check</p>
-        <ol className="list-decimal space-y-2 pl-4">{item.whatToCheck.map(step => <li key={step}>{step}</li>)}</ol>
-        <p><strong>Retest:</strong> {item.retest}</p>
+        <ol className="list-decimal space-y-2 pl-4">{item.whatToCheck.map(step => <li key={step}>{formatRetainedReportTiming(step)}</li>)}</ol>
+        <p><strong>Retest:</strong> {formatRetainedReportTiming(item.retest)}</p>
       </div>
     </details>)}
   </div>;

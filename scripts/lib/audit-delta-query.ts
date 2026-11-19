@@ -46,6 +46,7 @@ select row_to_json(r) from (
  ${OPT_OUT_EXTRACT_SQL} control_assessment,
  ${choiceAuditSqlForTransport(includeOperations,includeControlAccessibility||includeOperations,diagnostics)} choice_audit,
  ${includeControlAccessibility?`case when not o."isCanary" and p.report_projection_payload#>>'{scan,id}'=s.id::text then ${CONTROL_ACCESSIBILITY_SQL} end "controlAccessibility",`:''}
+ ${b.includeVisitStages ? `case when octet_length((p.report_projection_payload->'auditVisitStages')::text)<=640 then p.report_projection_payload->'auditVisitStages' end "auditVisitStages",` : ''}
  ${includePrivacyForm ? `case when not o."isCanary" then p.report_projection_payload->>'auditPrivacyForm' end "auditPrivacyForm",` : ''}
  ${includeCaliforniaReject ? `${CALIFORNIA_REJECT_COVERAGE_SQL} "caReject",` : ''}
  ${b.includeRejectActivityReceipt===true ? `${REJECT_ACTIVITY_RECEIPT_SQL} "auditRejectActivity",` : ''}

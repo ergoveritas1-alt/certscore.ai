@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "./report-time";
 import { afterRejectScoringNarrative, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { GDPR_NARROW_RULES, gdprNarrowFindingId, isActiveGdprNarrowKind } from "@certscore/contracts";
 import { narrowKindForRow, readBoundGdprNarrow } from "./gdpr-narrow-evidence";
@@ -1133,8 +1134,7 @@ function formatCookiePriorityFirstSeen(value: number | null) {
 }
 
 function formatElapsedSeconds(value: number) {
-  const seconds = Math.max(0, value) / 1000;
-  return `${seconds.toPrecision(3)}s`;
+  return formatReportSeconds(Math.max(0, value));
 }
 
 function formatCookiePriorityEvidence(rows: RuntimeCookiePriorityGroupRow[]) {

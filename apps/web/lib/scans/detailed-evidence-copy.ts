@@ -1,3 +1,5 @@
+import { formatRetainedReportTiming } from "./report-time";
+
 /** Concise policy presentation. Source assessment and full passages stay in evidence. */
 export function policyFindingSummary(input: {
   id: string; status: string; summary?: string; hasSupportingEvidence: boolean;
@@ -160,5 +162,5 @@ export function detailedEvidenceCopy(input: { id?: string; status?: string; titl
   }
   summary = summary?.replace(/^Observed in policy-surface evidence; Privacy notice evidence was retained in public policy-surface evidence; policy surface: /, "Privacy-policy evidence: ")
     .replace("Potential issue based on scan evidence; Known 3rd party iframe embeds were retained before a recorded consent action on the scanned page.", "Known third-party iframes were detected before a consent choice.");
-  return { title, summary };
+  return { title, summary: summary === undefined ? undefined : formatRetainedReportTiming(summary) };
 }

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 import test from "node:test";
+import JSZip from "jszip";
+import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createCertScoreMcpServer } from "../packages/certscore-mcp/src/server";
@@ -19,11 +21,46 @@ const { selectReportEvidenceSection } = require("../apps/web/lib/api-v2/report-e
 const { scopeReportPresentation } = require("../apps/web/lib/scans/report-framework-scope.ts");
 import type { ReportEvidencePage } from "../packages/certscore-sdk/src/types";
 
+// Materialize one partial Reject recipient and one full GPC recipient. The consumers
+// below receive persisted findings and evidence, never a preassigned score.
+function addCaliforniaChoiceEvidence(scan: ReturnType<typeof reportRequestScanFixture>) {
+  const { californiaCoverageFixture, CA_FIXTURE_SOURCE } = require("../apps/web/server/scans/california-review-coverage.fixture.ts");
+  const { projectCaliforniaPrivacyReview } = require("../apps/web/server/scans/california-privacy-review-projection.ts");
+  const { afterRejectClickProjection } = require("../apps/web/lib/scans/test-fixtures/after-reject-scoring.ts");
+  const { buildPostRefusalRuntimeProjection } = require("../apps/web/lib/scans/post-refusal-runtime-projection.ts");
+  const { buildUnifiedFindingDisplayPackets } = require("../apps/web/lib/scans/unified-findings.ts");
+  const fixture = californiaCoverageFixture(undefined, scan.scan.requestedUrl);
+  fixture.bundle.scanId = fixture.policyEvidence.projection.scanId = scan.scan.id;
+  fixture.bundle.policySurfaceInspection.californiaReviewPolicy = "california-privacy-review.v10";
+  for (const observation of fixture.bundle.policySurfaceObservations) observation.documentLanguage = "en";
+  const {reportVisualEvidenceFixture} = require("../apps/web/server/scans/report-appendix-evidence.fixture.ts");
+  scan.runtimeArtifacts.consentControlAssessment = reportVisualEvidenceFixture(scan.scan.id,"d".repeat(64));
+  scan.runtimeArtifacts.consentControlAssessment.scan.finalUrl = scan.scan.requestedUrl;
+  scan.runtimeArtifacts.consentControlAssessment.californiaPrivacyReview = projectCaliforniaPrivacyReview(
+    fixture.bundle, CA_FIXTURE_SOURCE, scan.scan.requestedUrl, fixture.policyEvidence);
+  const reject = afterRejectClickProjection("measurement");
+  const targetSha256 = createHash("sha256").update(scan.scan.requestedUrl).digest("hex");
+  reject.actionControlProof.authorizedTargetSha256 = targetSha256;
+  reject.sourceIdentity = {policyVersion:"post_reject_source_identity.v1", scanId:scan.scan.id, targetSha256};
+  for (const request of [...reject.scoringEvidence.requests, ...reject.afterActionRequests]) request.httpStatus = 204;
+  const {californiaPriorityGpcFixture, QUALIFIED_URL} = require("../apps/web/lib/scans/test-fixtures/california-priority-gpc.ts");
+  const {assessGpcPotentialRisk} = require("../apps/web/lib/scans/california-potential-risk-policy.ts");
+  const gpc = californiaPriorityGpcFixture([QUALIFIED_URL], scan.scan.id);
+  Object.assign(scan.runtimeArtifacts, buildPostRefusalRuntimeProjection(reject), {
+    gpcResponseAssessment:gpc, californiaGpcPotentialRiskAssessment:assessGpcPotentialRisk(gpc),
+  });
+  const findings = buildUnifiedFindingDisplayPackets({runtimeArtifacts:scan.runtimeArtifacts,
+    reviewFindingCandidates:[], validationFindings:[], validationFindingLookup:new Map()});
+  scan.canonicalReportProjection.ownerUnifiedFindings = scan.canonicalReportProjection.globalUnifiedFindings = findings;
+}
+
 test("web, PDF/Word content, API, SDK and both MCP profiles retain identical forms, requests, choice proof and lens scope", async () => {
   const originalFetch = globalThis.fetch;
   try {
     for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) for (const proof of ["retained", "missing_receipt", "wrong_target"] as const) {
       const scan = reportRequestScanFixture(), scanId = scan.scan.id;
+      const checkPresenceScore = focus === "ccpa_cpra" && proof === "retained";
+      if (checkPresenceScore) addCaliforniaChoiceEvidence(scan);
       scan.snapshot.report_projection_status = "ready";
       if (proof === "missing_receipt") delete scan.runtimeArtifacts.postAcceptEvidenceProjection.packetSha256;
       if (proof === "wrong_target") scan.runtimeArtifacts.postAcceptEvidenceProjection.formSnapshotCapture.exactTargetSha256 = "f".repeat(64);
@@ -36,7 +73,28 @@ test("web, PDF/Word content, API, SDK and both MCP profiles retain identical for
       const pulse = buildPulseProjection({ scanRecord: scan, detail: "summary", format: "json", freshnessMode: "latest", requestedUrl: "https://example.test/", resolutionMode: "test", pulseRequestId: "owned-parity", waitSeconds: 0 });
       assert.deepEqual(pulse.summary.postureScores, resource.postureScores);
       assert.deepEqual(pulse.formsSummary, web.formsSummary);
-      view.postureScores = resource.postureScores;
+      const { buildApiV2PostureScores } = require("../apps/web/lib/api-v2/posture-scores.ts");
+      view.postureScores = buildApiV2PostureScores({score:web.score.value,scoreExplanation:web.scoreExplanation,californiaScore:web.californiaScore});
+      assert.deepEqual(view.postureScores,resource.postureScores);
+      const partialTitle = "Non-essential activity after Reject click";
+      if (checkPresenceScore) {
+        assert.equal(view.findings.find(f => f.id === "california_collection_review")?.title, partialTitle);
+        assert.equal(resource.postureScores.ccpaCpra.score,78);
+        assert.equal(resource.postureScores.ccpaCpra.policyVersion,"california-regulatory-posture.v26-verified-event");
+        const {renderCanonicalReportPdf} = require("../apps/web/server/scans/report-export-pdf.ts");
+        const {renderCanonicalReportDocx} = require("../apps/web/server/scans/report-export-docx.ts");
+        const pdf = renderCanonicalReportPdf(exported);
+        const docx = await renderCanonicalReportDocx(exported);
+        const {renderPulseMarkdown} = require("../apps/web/lib/pulse/markdown.ts");
+        assert.match(renderPulseMarkdown(pulse), /California posture score \| 78/);
+        const text = [...pdf.toString("latin1").matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(m=>m[1]).join(" ");
+        assert.ok(text.includes(partialTitle));
+        assert.match(text,/78 of 100 SCORE California assessment/);
+        const archive = await JSZip.loadAsync(docx);
+        const documentXml = await archive.file("word/document.xml")!.async("string");
+        assert.ok(documentXml.includes(partialTitle));
+        assert.match(documentXml,/Score 78\/100/);
+      }
       assert.deepEqual(resource.formsSummary, web.formsSummary);
       assert.equal(resource.score, web.score.value);
       assert.equal(focus === "ccpa_cpra" ? exported.californiaScore.score : exported.score.value, focus === "ccpa_cpra" ? resource.postureScores.ccpaCpra.score : resource.postureScores.gdprEprivacy.score);
@@ -90,6 +148,11 @@ test("web, PDF/Word content, API, SDK and both MCP profiles retain identical for
             } while (cursor);
             const mcp = reconstructReportEvidencePages(pages), viaSdk = await sdk.getReportEvidence(scanId, { section, reviewFocus: focus });
             assert.deepEqual(mcp, viaSdk);
+            if (checkPresenceScore) {
+              assert.deepEqual(mcp.postureScores, resource.postureScores);
+              const findings = mcp.findings as Array<{id:string; title:string}>;
+              assert.equal(findings.find(f => f.id === "california_collection_review")?.title, partialTitle);
+            }
             if (section === "forms") assert.deepEqual(mcp.formsSummary, web.formsSummary);
             if (section === "tracking") assert.deepEqual(mcp.inventorySummary, web.inventorySummary);
           }

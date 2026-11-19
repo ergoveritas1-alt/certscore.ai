@@ -33,7 +33,7 @@ test('post-Reject cookie snapshots are exposed separately, including later sampl
  report.appendix.evidenceDossier!.cmp!.audit.rows=[{supportingEvidence:{inventory:{choiceActivity:[{action:'reject',clockOrigin:'action_click',windowMs:1388,requestCount:0,nonEssentialRequestCount:0,requests:[]}]}}}] as never;
  const before=JSON.stringify(report);
  const lines=pdfChoicePathEvidence(report,{text:text=>[{text:String(text)}],heading:text=>({text})});
- const text=lines.map(l=>l.text).join(' ');assert.match(text,/Post-Reject cookie snapshots/);assert.match(text,/_ga.*example.test/);assert.match(text,/2092 ms/);assert.match(text,/separately from the request window/);
+ const text=lines.map(l=>l.text).join(' ');assert.match(text,/Post-Reject cookie snapshots/);assert.match(text,/_ga.*example.test/);assert.match(text,/2\.092 s/);assert.match(text,/separately from the request window/);
  assert.ok(!text.includes('b'.repeat(64)));assert.equal(JSON.stringify(report),before);
 });
 
@@ -43,5 +43,5 @@ test('unknown confirmed-refusal timing is not printed as a verified zero activit
  report.appendix.evidenceDossier!.cmp!.audit.rows=[{supportingEvidence:{inventory:{choiceActivity:[{action:'reject',windowMs:3000,requestCount:1,nonEssentialRequestCount:1,requests:[{hostname:'collector.example',path:'/event',vendor:'Example',purpose:'analytics',msAfterClick:284,nonEssential:true}]}]}}}] as never;
  const text=pdfChoicePathEvidence(report,{text:text=>[{text:String(text)}],heading:text=>({text})}).map(l=>l.text).join(' ');
  assert.match(text,/Confirmed-refusal timing was not established/);assert.match(text,/observations.*remain usable/);assert.doesNotMatch(text,/0 eligible network requests/);
- assert.match(text,/from saved session anchor/);assert.doesNotMatch(text,/284 ms after click/);
+ assert.match(text,/from saved session anchor/);assert.doesNotMatch(text,/0\.284 s after click/);
 });

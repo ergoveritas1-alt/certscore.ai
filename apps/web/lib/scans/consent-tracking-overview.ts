@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "./report-time";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 import type { ShadowReportData } from "../../components/scans/report-lab/shadow-report-data";
 import type { InventoryAssessmentCounts, ReportInventoryMetric } from "../../components/scans/report-inventory-summary";
@@ -20,7 +21,6 @@ export type ConsentTrackingTile = {
   deferredGpc?: { scanId: string; graphHash: string };
   gpcWindow?: GpcRequestWindow;
   state: "recorded" | "partial" | "not_tested" | "unavailable";
-  choiceUnconfirmed?: boolean;
   breakdown?: { nonEssential: number; review?: number };
   metrics?: Totals[];
   notes?: string[];
@@ -32,7 +32,7 @@ export type ConsentTrackingTile = {
 
 const format = (value: number) => value.toLocaleString("en-US");
 const formatCount = (value: number | null) => value === null ? "NA" : format(value);
-const duration = (ms: number) => ms < 1000 ? `${format(ms)} ms` : `${format(Math.round(ms / 10) / 100)} s`;
+const duration = formatReportSeconds;
 const { requests, storage, frames } = INVENTORY_METRIC_LABELS;
 
 type OverviewInput = Pick<ShadowReportData, "inventorySummary" | "resourceInventory" | "actionInventories" | "actionTimelines" |
@@ -88,9 +88,7 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
     count: baselineFlags?.count ?? null,
     unit: "flagged items", state: baselineState, breakdown: baselineFlags?.breakdown,
     metrics: baselineTotals, services: inventoryNames, evidence: hasBaselineInventory ? "pre-consent" : undefined,
-    notes: hasBaselineInventory ? [overview ? "Counts represent distinct retained resources. Services group requests, cookies and storage, and frames."
-      : "The counts below cover the retained inventory. A distinct flagged-item total is unavailable.",
-      "Timing and capture scope can differ across consent states."] : undefined,
+    notes: hasBaselineInventory && !overview ? ["The counts below cover the retained inventory. A distinct flagged-item total is unavailable."] : undefined,
   };
   const baselineServices = new Set(report.resourceInventory?.services.filter(service => service.context.identity).map(service => service.key));
   const actions = (["accept", "reject"] as const).map((id): ConsentTrackingTile => {
@@ -116,20 +114,16 @@ export function buildConsentTrackingOverview(report: OverviewInput, focus: Repor
     })[proof.stopReason];
     const samplesStorage = action.distinctStorage > 0 || proof?.storageSnapshotRetained;
     const metrics: Totals[] = [
-      { label: "Distinct requests", value: action.distinctResources, counts: req ? { nonEssential: req.nonEssential, review: req.review, unclassified: req.unclassified } : undefined },
+      { label: "Distinct requests", value: action.distinctResources, counts: req },
       { label: storage, value: samplesStorage ? action.distinctStorage : null,
-        counts: samplesStorage && action.distinctClassifications ? {
-          nonEssential: action.distinctClassifications.storage.nonEssential, review: action.distinctClassifications.storage.review,
-          unclassified: action.distinctClassifications.storage.unclassified,
-        } : undefined },
+        counts: samplesStorage ? action.distinctClassifications?.storage : undefined },
       { label: frames, value: null },
     ];
     return {
       id, label, count: flags.count, unit: "flagged items", state: states,
-      choiceUnconfirmed: proof?.execution.clickCompleted && !proof.execution.consentConfirmed,
       breakdown: flags?.breakdown,
       metrics,
-      notes: [`${capture.note} ${capture.clockLabel}.`, ...(stop ? [stop] : []),
+      notes: [...(stop ? [stop] : []),
         ...(proof?.documentChanged ? ["The page or control frame changed during the capture. Treat the counts as a partial view of this choice."] : []),
         ...(path?.note && states === "partial" ? [path.note] : [])],
       facts, services: action.identifiedServiceNames,

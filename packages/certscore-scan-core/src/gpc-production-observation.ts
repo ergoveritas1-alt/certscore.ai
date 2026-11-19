@@ -1,11 +1,12 @@
 import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {qualifyGpcRequest,prioritizeGpcRecipients} from "./gpc-request-proof";
-import {isCanonicalAdvertisingCollectionCandidate, resolveCanonicalVendor, CANONICAL_VENDOR_RESOLVER_VERSION,
+import { readOriginalGpcCookieReadBinding } from "./gpc-cookie-read-binding";
+import {resolveCanonicalCookieClassification,isCanonicalAdvertisingCollectionCandidate, resolveCanonicalVendor, CANONICAL_VENDOR_RESOLVER_VERSION,
   GPC_REQUEST_QUALIFICATION_POLICY} from "@certscore/vendor-resolver";
 import { extractPropertySaleSharingSource, matchPropertySaleSharingRequest } from "@certscore/vendor-resolver/property-sale-sharing";
 import { createHash } from "node:crypto";
 import {
-  GPC_OPT_OUT_ADAPTER_VERSION, choiceRequestRole, isQualifyingSaleSharingRequest, canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
+  GPC_OPT_OUT_ADAPTER_VERSION, choiceReviewEndpoint, hasVerifiedChoiceReviewEvent, choiceRequestRole, isQualifyingSaleSharingRequest, canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
   type CanonicalEvidenceBundle, type GpcBoundedObservation, type GpcResponseAssessmentV2, type NetworkEvent,
 } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
@@ -175,15 +176,32 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
   // recipient family. Reuse its qualification work and only unused inspection
   // slots; successful, source-bound collection is still required.
   const reviewRows: NonNullable<GpcBoundedObservation["requests"]["collectionReview"]>["rows"] = [];
+  const reviewEvents = new Set<string>();
+  let remainingPresenceInspections = 0;
   if (representative && session?.mainDocument && result.delivery.httpHeaderRetained && result.delivery.mainNavigatorReadbackRetained) {
-    const extra = prioritizeGpcRecipients(classified.filter(e => !allQualifications.has(e.eventId) && e.collectionEndpointObserved &&
+    const proofs = new Map(session.requestProofCapture?.rows.map(row => [row.eventId,row]));
+    for (const event of classified) {
+      const row = proofs.get(event.eventId), fact = row?.proof;
+      if (!row || !fact?.reviewEvent || row.documentToken !== session.mainDocument.documentToken ||
+          fact.requestId !== event.requestId || fact.method !== event.method || fact.startedAtMs !== event.timestampMs ||
+          fact.urlSha256 !== gpcDocumentHash(event.requestUrl) ||
+          !hasVerifiedChoiceReviewEvent({...fact,contractVersion:"california_reject_request.v2"},session.mainDocument.documentUrlSha256)) continue;
+      const response = bundle?.networkResponseEvents.find(r => r.requestId === event.requestId);
+      const vendor = resolveCanonicalVendor({type:"request",url:event.requestUrl,sourceScanner:"gpc_observation",matchSource:"network_request"}).observation;
+      if (vendor?.registryAttribution?.entityId === fact.entity.entityId &&
+          response?.responseUrl === event.requestUrl && response.status === fact.httpStatus &&
+          response.status != null && response.status >= 200 && response.status < 300 &&
+          response.timestampMs >= event.timestampMs && response.timestampMs <= session.captureEndedAtMs) reviewEvents.add(event.eventId);
+    }
+    const extra = prioritizeGpcRecipients(classified.filter(e => !allQualifications.has(e.eventId) && (e.collectionEndpointObserved || reviewEvents.has(e.eventId)) &&
       e.method !== "OPTIONS" && /^https:/.test(e.requestUrl) && !["script", "document", "stylesheet", "font"].includes(e.resourceType ?? "")),
       e => vendors.get(e.eventId)?.[0]?.registryAttribution?.entityId ?? e.eventId, () => false, Math.max(0, 100 - candidates.length));
     const reviewCandidates = [...candidates, ...extra];
+    remainingPresenceInspections = Math.max(0,100-reviewCandidates.length);
     for (const event of reviewCandidates) {
       const response = bundle?.networkResponseEvents.find(r => r.requestId === event.requestId);
       const status = response?.status;
-      if (!event.collectionEndpointObserved || status === undefined || status < 200 || status >= 400) continue;
+      if ((!event.collectionEndpointObserved && !reviewEvents.has(event.eventId)) || status === undefined || status < 200 || status >= 400) continue;
       const resolved = resolveCanonicalVendor({type:"request",url:event.requestUrl,sourceScanner:"gpc_observation",matchSource:"network_request"}).observation;
       if (!resolved?.registryAttribution || resolved.confidence < .9 ||
         !["analytics", "advertising", "marketing", "session_replay"].includes(resolved.purpose) ||
@@ -193,10 +211,56 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
         response?.responseUrl === event.requestUrl && response.timestampMs >= event.timestampMs &&
         response.timestampMs <= session.captureEndedAtMs && status < 300 && isGoogleGpcPageView(event, session.mainDocument.documentUrlSha256);
       if (resolved.registryAttribution.matchKind !== "endpoint" &&
-          !(resolved.registryAttribution.matchKind === "hostname" && googlePageView)) continue;
-      reviewRows.push({...(googlePageView ? {measurement:"google_ccm_document_page_view" as const} : {}),evidenceId:event.eventId,entityId:resolved.registryAttribution.entityId,label:resolved.entity,
+          !(resolved.registryAttribution.matchKind === "hostname" && (googlePageView || reviewEvents.has(event.eventId)))) continue;
+      const receipt = proofs.get(event.eventId)?.proof.reviewEvent;
+      const openAiMeasurement = reviewEvents.has(event.eventId) && receipt?.kind === "openai_event_post" &&
+        receipt.batchInspection === "measurement_observed";
+      reviewRows.push({...(openAiMeasurement ? {measurement:"openai_pixel_measurement" as const} : {}),...(googlePageView ? {measurement:"google_ccm_document_page_view" as const} : {}),evidenceId:event.eventId,entityId:resolved.registryAttribution.entityId,label:resolved.entity,
         purpose:resolved.purpose as "analytics"|"advertising"|"marketing"|"session_replay",observedAtMs:event.timestampMs,httpStatus:status,
         qualification:allQualifications.get(event.eventId) ?? qualifyGpcRequest(event,session!,{gpcDelivered:true,requestAtMs:event.timestampMs})});
+    }
+  }
+  type PresenceRow = NonNullable<GpcBoundedObservation["presenceEvidence"]>[number];
+  const presenceEvidence: PresenceRow[] = [];
+  const presenceInspected = bundle && session && representative && result.sourceVerified && result.documentBound &&
+      result.delivery.httpHeaderRetained && result.delivery.mainNavigatorReadbackRetained;
+  if (bundle && presenceInspected) {
+    const reviewed = new Set(reviewRows.map(row => row.evidenceId));
+    // Share the existing qualification budget. Each additional row needs affirmative
+    // service-purpose attribution as well as the bound, signal-bearing request.
+    for (const event of classified) {
+      if (reviewed.has(event.eventId) || retained.get(event.eventId)?.preTransmissionBlock ||
+          event.method==="OPTIONS" || !event.requestUrl.startsWith("https://")) continue;
+      const existingQualification = allQualifications.get(event.eventId);
+      if (!existingQualification && remainingPresenceInspections <= 0) continue;
+      if (!existingQualification) remainingPresenceInspections--;
+      const vendor = resolveCanonicalVendor({type:"request",url:event.requestUrl,sourceScanner:"gpc_observation",matchSource:"network_request"}).observation;
+      const reviewedService = choiceReviewEndpoint(event.requestUrl,event.method);
+      const knownService = reviewedService === "openai_event_post" ||
+        reviewedService === "google_ccm_page_view" && isGoogleGpcPageView(event,session.mainDocument!.documentUrlSha256);
+      if (!vendor?.registryAttribution || (vendor.registryAttribution.matchKind !== "endpoint" && !knownService) || vendor.confidence < .9 ||
+          !vendors.get(event.eventId)?.every(v=>v.registryAttribution?.entityId===vendor.registryAttribution!.entityId && v.purpose===vendor.purpose)) continue;
+      const q = existingQualification ?? qualifyGpcRequest(event,session,{gpcDelivered:true,requestAtMs:event.timestampMs});
+      const signals = new Set(q.processingSignals);
+      if (q.gpp?.status==="decoded") for (const section of q.gpp.sections) {
+        if ([section.saleOptOut,section.sharingOptOut,section.targetedAdvertisingOptOut].includes(1)) signals.add("gpp_opt_out");
+        if (section.serviceProviderMode===1) signals.add("gpp_service_provider");
+      }
+      presenceEvidence.push({evidenceId:event.eventId,entityId:vendor.registryAttribution.entityId,entity:vendor.entity,
+        purpose:vendor.purpose as PresenceRow["purpose"],presenceBasis:"service_request",msFromAnchor:event.timestampMs,processingSignals:[...signals]});
+    }
+    for (const snapshot of bundle.cookieSnapshots) {
+      const binding = readOriginalGpcCookieReadBinding(bundle,snapshot);
+      if (!binding) continue;
+      for (const cookie of snapshot.cookies) {
+        const classification = resolveCanonicalCookieClassification(cookie.name,{cookieDomain:cookie.domain},"certscore.cookie-purpose.v12");
+        if (classification.essentiality !== "non_essential" || !classification.provider ||
+            classification.category === "unknown") continue;
+        const id = "cookie:" + createHash("sha256").update(JSON.stringify([snapshot.artifactId,cookie.name,cookie.domain,cookie.path,cookie.partitionKey])).digest("hex");
+        if (!presenceEvidence.some(row=>row.evidenceId===id)) presenceEvidence.push({evidenceId:id,
+          entityId:classification.provider.registryAttribution.entityId,entity:classification.provider.entity,
+          purpose:classification.category as PresenceRow["purpose"],presenceBasis:"cookie_snapshot",msFromAnchor:binding.completedAtMs,processingSignals:[]});
+      }
     }
   }
   const propagation: NonNullable<GpcBoundedObservation["requests"]["gppPropagation"]> = {
@@ -229,6 +293,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     sessionSha256: result.sourceVerified ? bundle!.gpcPrototypeSessionBinding!.sessionSha256 : null,
     documentUrlSha256: result.documentBound ? session!.mainDocument!.documentUrlSha256 : null,
     positiveEvidence: { policyVersion: "gpc_positive_evidence.v1", representativeDocument: Boolean(result.sourceVerified && result.documentBound && representative) },
+    ...(presenceInspected ? {presenceEvidence:prioritizeGpcRecipients(presenceEvidence,r=>r.entityId,()=>false,32)} : {}),
     delivery: result.delivery, semanticProbe: semantic?.gppStatus ?? "incomplete",
     ...(semanticReadiness ? {semanticReadiness} : {}),
     ...(event?.state && typeof event.state.gpc === "boolean" ? { cmpEventReadback: {
@@ -247,7 +312,7 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       advertisingCollectionQualification: { policyVersion: qualification.some(row=>row.policyVersion==="ca_sale_sharing_qualification.v5-magnite-auction")?"gpc_sale_sharing_evidence.v7-auctions":qualification.some(row=>row.policyVersion==="ca_sale_sharing_qualification.v4-index-auction")?"gpc_sale_sharing_evidence.v6-index-auction":GPC_REQUEST_QUALIFICATION_POLICY, rows:qualification },
       ...(qualification.some(row=>row.propertyEvidence) ? {propertySaleSharingSource:propertySource} : {}),
       gppPropagation: propagation,
-      classifiedCount: classified.length, collectionCount: classified.filter(r => r.collectionEndpointObserved).length,
+      classifiedCount: classified.length, collectionCount: classified.filter(r => r.collectionEndpointObserved || reviewEvents.has(r.eventId)).length,
       collectionReview: {policyVersion:"gpc_collection_review.v2-google-page-view",rows:prioritizeGpcRecipients(reviewRows,r=>r.entityId,()=>false,32)},
       evidenceIds: classified.slice(0, 100).map(r => r.eventId), samplesTruncated: classified.length > 100 },
     limitationKeys, scoreEffect: "none", legalInterpretation: "not_assessed",

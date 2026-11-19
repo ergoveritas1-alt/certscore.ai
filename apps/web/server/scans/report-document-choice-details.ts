@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import {apiV2ChoiceConfirmationSummarySchema,apiV2ChoicePathExecutionSchema,apiV2GpcResponseSchema} from '../../../../packages/certscore-api-contracts/src/scan-observation-results';
 import type {CanonicalReportExport} from './report-export';
 
@@ -35,10 +36,10 @@ export function documentGpcDetails(report:CanonicalReportExport):string[][]{
   ['Full-visit classified requests',String(o.requests.classifiedCount)],
   ['Full-visit advertising collection',o.requests.advertisingCollectionCount===undefined?'Unknown':String(o.requests.advertisingCollectionCount)],
   ['Full-visit request coverage',o.requests.complete?'Complete within retained scope':'Limited'],
-  ['Full-visit horizon after document commit',o.requests.documentCommittedAtMs===null||o.requests.throughMs===null?'Unknown':`${o.requests.throughMs-o.requests.documentCommittedAtMs} ms`]];
- if(o.semanticReadiness)rows.push(['CMP readiness reason',words(o.semanticReadiness.reason)],['CMP readiness checkpoint',`${o.semanticReadiness.observedAfterDocumentCommitMs} ms after document commit`]);
+  ['Full-visit horizon after document commit',o.requests.documentCommittedAtMs===null||o.requests.throughMs===null?'Unknown':`${formatReportSeconds(o.requests.throughMs - o.requests.documentCommittedAtMs)}`]];
+ if(o.semanticReadiness)rows.push(['CMP readiness reason',words(o.semanticReadiness.reason)],['CMP readiness checkpoint',`${formatReportSeconds(o.semanticReadiness.observedAfterDocumentCommitMs)} after document commit`]);
  const p=g.activityComparison;
- if(p&&p.scanId===report.scan.id)rows.push(['Matched request-count window',`${p.durationMs} ms after each document commit`],
+ if(p&&p.scanId===report.scan.id)rows.push(['Matched request-count window',`${formatReportSeconds(p.durationMs)} after each document commit`],
   ['Paired advertising requests',`${p.activity.advertisingMarketing.baselineRequests} -> ${p.activity.advertisingMarketing.gpcRequests}`],
   ['Paired analytics requests',`${p.activity.analyticsReplay.baselineRequests} -> ${p.activity.analyticsReplay.gpcRequests}`]);
  else rows.push(['Matched request-count window','Unavailable']);

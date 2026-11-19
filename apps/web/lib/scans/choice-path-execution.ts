@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "./report-time";
 import {
   assessChoicePathExecution,
   postAcceptReportProjectionSchema,
@@ -13,10 +14,9 @@ export function earlyRegisteredObservation(value: unknown, action: "accept" | "r
   const { startedAtMs, completedAtMs, requiredWindowMs } = parsed.data;
   const durationMs = completedAtMs - startedAtMs;
   if (durationMs >= requiredWindowMs) return undefined;
-  const seconds = (milliseconds: number) => Math.round(milliseconds / 10) / 100;
   return {
     requiredWindowMs,
-    note: `After confirmation, observation ended at ${seconds(durationMs)}s when qualifying evidence was recorded. The configured maximum was ${seconds(requiredWindowMs)}s.`,
+    note: `After confirmation, observation ended at ${formatReportSeconds(durationMs)} when qualifying evidence was recorded. The configured maximum was ${formatReportSeconds(requiredWindowMs)}.`,
   };
 }
 
@@ -74,7 +74,7 @@ export function readChoicePathLimitation(
   if (!execution.consentConfirmed && navigation?.elapsedAfterClickMs !== undefined) {
     const event = navigation.outcome === "main_frame_navigated" ? "The page navigated"
       : navigation.outcome === "control_frame_navigated" ? "The control’s frame navigated" : "The control’s frame was detached";
-    navigationMessage = ` ${event} ${navigation.elapsedAfterClickMs} ms after the click.`;
+    navigationMessage = ` ${event} ${formatReportSeconds(navigation.elapsedAfterClickMs)} after the click.`;
   }
   if (execution.observationCompleted && execution.consentConfirmed) return null;
   if (execution.observationCompleted) return {

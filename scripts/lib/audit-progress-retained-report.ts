@@ -1,3 +1,4 @@
+import {auditStageStates} from "./audit-visit-stages";
 import {applyChoiceSummary,choiceSummaryFromRecord} from './audit-progress-choice';
 /** Full persisted projections remain separate from original runtime-bundle audits. */
 import {readFileSync} from 'node:fs';
@@ -75,12 +76,14 @@ export function applyRetainedReports(rows:ProgressRow[],receipts:(OptOutReceipt&
   if(seen.has(key)){duplicateReceipts++;continue;}seen.add(key);
   const e=readEnvelope(ref);if(inputDisposition(row,e)!=='matched')throw Error('Retained projection changed during import');
   const p=e.snapshot,record={...p.report_projection_payload,snapshot:{...p.report_projection_payload.snapshot,report_projection_version:p.report_projection_version,report_projection_source_hash:p.report_projection_source_hash}};
+  Object.assign(row.states,auditStageStates(record,row.scanId));
   for(const [index,action] of actions.entries()){
    if(row.states['click.'+action]!=='completed')continue;
    const policy=retainedClickActivity(record,action);
    if(!policy)continue;
    const key=RETAINED_CLICK_ACTIVITY_KEYS[index]!;
    row.states[key]='activity_observed';
+   if(action==='reject')row.states['detail.reject.stage1']='observed';
    (row.metricSources??={})[key]='persisted_report_projection/'+row.projectionVersion+'/'+policy;
   }
   if(row.states['click.reject']==='completed'){

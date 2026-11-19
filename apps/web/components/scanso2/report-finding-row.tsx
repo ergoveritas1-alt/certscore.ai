@@ -1,4 +1,5 @@
 "use client";
+import { formatRetainedReportTiming } from "../../lib/scans/report-time";
 import React from "react";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
@@ -117,7 +118,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, id
         <span className={`${monoClass} font-semibold ${priority ? "inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 bg-rose-50 text-xs text-rose-700" : "text-sm text-zinc-400"}`}>{String(finding.rank).padStart(2, "0")}</span>
         <span className={`min-w-0 ${priority ? "pr-7 sm:pr-0" : ""}`}>
           <span className={`${dense ? "text-sm" : "text-base"} block font-semibold text-zinc-950`}>{finding.title}{pages?.length ? <span className="ml-2 inline-block text-xs font-normal text-zinc-500">{pages.length === 1 && pages[0]?.homepage ? "Homepage" : `${pages.length} ${pages.length === 1 ? "page" : "pages"}`}</span> : null}</span>
-          {!dense ? <span className={`${priority ? "mt-0.5 text-xs leading-5 text-zinc-500 sm:pr-4" : "mt-1 text-sm leading-6 text-zinc-600"} overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] group-open:[display:block] group-open:[-webkit-line-clamp:unset]`}>{readerSummary}</span> : null}
+          {!dense ? <span className={`${priority ? "mt-0.5 text-xs leading-5 text-zinc-500 sm:pr-4" : "mt-1 text-sm leading-6 text-zinc-600"} overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] group-open:[display:block] group-open:[-webkit-line-clamp:unset]`}>{formatRetainedReportTiming(readerSummary)}</span> : null}
           {!dense && !priority ? <span className="mt-3 inline-flex sm:hidden"><StatusBadge status={finding.status} /></span> : null}
         </span>
         {!dense && finding.focus ? <span className={`${priority ? "hidden self-center rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
@@ -130,8 +131,8 @@ export function FindingRow({ finding, dense = false, priority = false, pages, id
         </span>
       </summary>
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
-        {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{finding.summary}</p> : null}
-        {priority && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{finding.summary}</p> : null}
+        {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{formatRetainedReportTiming(finding.summary)}</p> : null}
+        {priority && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{formatRetainedReportTiming(finding.summary)}</p> : null}
         {priority || pages?.length ? <div className="mb-4 divide-y divide-zinc-200 border-y border-zinc-200">
           {context ? <p className="py-2"><a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{context.rule} ↗</a></p> : null}
           {priority ? <FindingApplicabilityNote findingId={finding.id} reviewFocus="gdpr_eprivacy" presentationGroup={finding.evidenceJson.presentationGroup} /> : null}
@@ -147,7 +148,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, id
         ) : null}
         <ul className="grid gap-2 text-sm text-zinc-600 sm:grid-cols-2">
           {finding.evidence.map((item, index) => (
-            <li className="border-l-2 border-sky-300 pl-3 leading-6" key={`${item}:${index}`}>{item}</li>
+            <li className="border-l-2 border-sky-300 pl-3 leading-6" key={`${item}:${index}`}>{formatRetainedReportTiming(item)}</li>
           ))}
         </ul>
         <div className="mt-5"><EvidenceTools correctionSteps={finding.correctionSteps} evidenceJson={finding.evidenceJson} /></div>

@@ -2,6 +2,11 @@ import { z } from "zod";
 import { consentDecisionEvidenceSchema } from "./consent-action-evidence-policy";
 import type { AfterActionCapture } from "./after-action-capture";
 
+export const trustArcTerminalReloadReadbackSchema = z.object({
+  preReloadReadAtMs: z.number().int().nonnegative(),
+  reloadCommittedAtMs: z.number().int().nonnegative(),
+}).strict();
+
 /** Late decision proof is operational evidence. It never backdates the initial
  * registration protocol or makes after-click facts post-registration facts. */
 export const terminalConsentDecisionSchema = z.object({
@@ -11,12 +16,19 @@ export const terminalConsentDecisionSchema = z.object({
   readStartedAtMs: z.number().int().nonnegative(),
   readCompletedAtMs: z.number().int().nonnegative(),
   evidence: consentDecisionEvidenceSchema,
+  trustArcReloadReadback: trustArcTerminalReloadReadbackSchema.optional(),
 }).strict().superRefine((value, context) => {
   if (value.evidence.basis !== "verified_state" ||
     value.evidence.decision !== (value.action === "accept" ? "granted" : "denied") ||
     value.readCompletedAtMs < value.readStartedAtMs ||
     value.evidence.observedAtMs === undefined || value.evidence.observedAtMs > value.readCompletedAtMs) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Terminal proof requires a matching verified decision and retained read timing." });
+  }
+  const reload = value.trustArcReloadReadback;
+  if (reload && (value.policyVersion !== "bounded_registered_terminal_consent_decision.v1" || value.action !== "reject" ||
+      reload.preReloadReadAtMs >= reload.reloadCommittedAtMs || reload.reloadCommittedAtMs > value.readStartedAtMs ||
+      value.evidence.timestampBasis !== "verified_state_observed" || value.evidence.observedAtMs! < value.readStartedAtMs)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["trustArcReloadReadback"], message: "TrustArc readback must follow a verified pre-reload Reject." });
   }
 });
 export type TerminalConsentDecision = z.infer<typeof terminalConsentDecisionSchema>;
@@ -37,6 +49,12 @@ export function terminalConsentDecisionBound(value: TerminalConsentDecision, cap
     if (![registered.dispatchedAtMs, registered.startedAtMs, registered.endedAtMs, registered.requiredWindowMs]
       .every(value => Number.isSafeInteger(value) && value >= 0)) return false;
     const deadline = registered.startedAtMs + registered.requiredWindowMs;
+    if (value.trustArcReloadReadback) {
+      const clickDeadline = registered.dispatchedAtMs + registered.requiredWindowMs;
+      return action === "reject" && registered.requiredWindowMs === 8_000 && registered.endedAtMs >= deadline &&
+        value.trustArcReloadReadback.preReloadReadAtMs >= registered.startedAtMs &&
+        value.readStartedAtMs >= clickDeadline - 250 && value.readCompletedAtMs <= clickDeadline;
+    }
     return Number.isSafeInteger(deadline) && registered.requiredWindowMs > 0 && registered.endedAtMs >= deadline &&
       value.readStartedAtMs >= Math.max(registered.startedAtMs, deadline - 250) &&
       value.readCompletedAtMs <= deadline && value.evidence.observedAtMs! >= registered.dispatchedAtMs;
@@ -59,10 +77,21 @@ export function validateTerminalConsentDecision(value: TerminalConsentDecision |
 
 /** Use existing source-bound projection timing and explicit full-window completion. */
 export function registeredTerminalWindow(projection: {
+  terminalDecisionEvidence?: Pick<TerminalConsentDecision, "trustArcReloadReadback">;
+  refusalRegisteredAtMs?: number;
+  observationWindowMs?: number;
   retainedActionTiming?: { action: "accept" | "reject"; actionDispatchedAtMs: number; observationEndedAtMs?: number };
   registeredObservationCompletion?: { action: "accept" | "reject"; startedAtMs: number; requiredWindowMs: number; completedAtMs: number; termination: string };
 }): RegisteredTerminalWindow | undefined {
   const {retainedActionTiming: timing, registeredObservationCompletion: completion} = projection;
+  // A positive cookie readback across a witnessed reload has its own narrow
+  // scope. It cannot establish completeness of other after-action evidence.
+  if (projection.terminalDecisionEvidence?.trustArcReloadReadback) {
+    if (timing?.action !== "reject" || timing.observationEndedAtMs === undefined || projection.refusalRegisteredAtMs === undefined ||
+        projection.observationWindowMs !== 8_000) return undefined;
+    return {action: "reject", dispatchedAtMs: timing.actionDispatchedAtMs, startedAtMs: projection.refusalRegisteredAtMs,
+      requiredWindowMs: projection.observationWindowMs, endedAtMs: timing.observationEndedAtMs};
+  }
   if (!timing || !completion || completion.termination !== "window_elapsed" ||
       timing.action !== completion.action || timing.observationEndedAtMs !== completion.completedAtMs) return undefined;
   return {action: completion.action, dispatchedAtMs: timing.actionDispatchedAtMs, startedAtMs: completion.startedAtMs,

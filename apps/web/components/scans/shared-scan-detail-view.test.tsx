@@ -125,7 +125,7 @@ test("limited Reject explains completed click and retained capture without claim
   const result = buildExecutiveRejectPathProjection(item)!;
   assert.equal(result.label, "After-Reject observation recorded");
   assert.match(result.note!, /^The Reject control was clicked\./);
-  assert.match(result.note!, /During 3s.*2 requests.*1 main-document storage write.*post-click storage snapshot was retained/);
+  assert.match(result.note!, /During 3 s.*2 requests.*1 main-document storage write.*post-click storage snapshot was retained/);
   assert.doesNotMatch(result.note!, /could not be verified|not proof/);
   assert.equal(result.afterClickCoverage, "complete");
   assert.equal(result.registrationConfirmed, false);
@@ -155,7 +155,7 @@ test("executive Reject projection formats only the canonical checklist outcome",
   assert.deepEqual(projected, {
     afterClickCoverage: undefined,
     registrationConfirmed: false,
-    evidenceRows: [{ detail: "request · analytics.example.test · 120ms after Reject", label: "Example Analytics" }],
+    evidenceRows: [{ detail: "request · analytics.example.test · 0.12 s after Reject", label: "Example Analytics" }],
     label: "Activity observed after Reject",
     note: "Canonical Reject-path explanation.",
     observationWindowMs: 8_000,
@@ -180,8 +180,8 @@ test("executive Reject projection distinguishes early post-confirmation completi
   });
   const result = buildExecutiveRejectPathProjection(item(completion));
   assert.equal(result?.observationWindowMs, 8_000);
-  assert.match(result?.note ?? "", /observation ended at 1\.61s when qualifying evidence was recorded/);
-  assert.match(result?.note ?? "", /configured maximum was 8s/);
+  assert.match(result?.note ?? "", /observation ended at 1\.611 s when qualifying evidence was recorded/);
+  assert.match(result?.note ?? "", /configured maximum was 8 s/);
   for (const invalid of [
     item({ ...completion, action: "accept" }),
     item({ ...completion, termination: "window_elapsed" }),

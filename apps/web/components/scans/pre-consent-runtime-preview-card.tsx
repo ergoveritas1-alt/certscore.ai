@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import type { ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import React from "react";
 import {
@@ -33,10 +34,7 @@ function displayLabel(value: string) {
 }
 
 function formatElapsedTime(milliseconds: number | null) {
-  if (milliseconds === null) return "Timing unavailable";
-  if (milliseconds < 1_000) return `${milliseconds}ms`;
-  const seconds = Math.round(milliseconds / 10) / 100;
-  return `${seconds}s`;
+  return milliseconds === null ? "Timing unavailable" : formatReportSeconds(milliseconds);
 }
 
 function cookieEvidence(cookie: PreviewCookie) {
@@ -125,7 +123,7 @@ function previewTimeline(
     firstCookie?.observedAtMs ?? 0,
   );
   const events: RuntimeObservationTimelineEvent[] = [{
-    at: "0s",
+    at: "0 s",
     atMs: 0,
     detail: "Public page observation began",
     label: "Scan start",

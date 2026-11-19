@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import { reportBrandDisplayName } from "../../lib/scans/report-brand-display-name";
 import { executiveDocxChildren, executiveBookmark, type ExecutiveDocxBranding } from "./report-executive-docx";
 import {
@@ -86,7 +87,7 @@ export async function renderCanonicalReportDocx(source: CanonicalReportExport, o
       continue;
     }
     if (line.timeline) {
-      children.push(...line.timeline.map(event => paragraph(`${event.label}: ${event.milliseconds} ms`)));
+      children.push(...line.timeline.map(event => paragraph(`${event.label}: ${formatReportSeconds(event.milliseconds)}`)));
       continue;
     }
     if (["image", "imageFocus", "fullImageSlice", "chapterNavigation", "tableRow"].includes(line.kind ?? "")) continue;

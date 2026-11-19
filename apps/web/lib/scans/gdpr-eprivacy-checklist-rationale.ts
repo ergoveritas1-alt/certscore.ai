@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "./report-time";
 import { describePreconsentTrackingTiming, readPreconsentTrackingTiming } from "./preconsent-tracking-timing";
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
 import { getEvidenceLabel } from "./gdpr-eprivacy-assessment-direction";
@@ -1045,8 +1046,7 @@ function formatFirstSeenPhrase(value: number | null | undefined) {
 }
 
 function formatElapsedSeconds(value: number) {
-  const seconds = Math.max(0, value) / 1000;
-  return `${seconds.toPrecision(3)}s`;
+  return formatReportSeconds(Math.max(0, value));
 }
 
 function getPreConsentQualifier(item: GdprEprivacyCoverageChecklistItem) {

@@ -40,7 +40,7 @@ test("GPC detail groups qualifying recipients and shows retained request timing 
   ]};
   const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={timed} california />);
   assert.match(html,/Adobe Inc\./);assert.match(html,/2 advertising collection requests/);
-  assert.match(html,/1\.66/);assert.match(html,/3\.20/);assert.match(html,/after GPC visit start/);
+  assert.match(html,/1\.655–3\.2 s/);assert.match(html,/after GPC visit start/);
   assert.equal((html.match(/Adobe Inc\./g)??[]).length,1);
   assert.doesNotMatch(html,/deduct|penalt|15.point/i);
   delete timed.assessment.observation.requests.advertisingCollectionRecipients.rows[0]!.observedAtMs;

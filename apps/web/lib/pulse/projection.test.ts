@@ -494,6 +494,7 @@ test("Pulse v11 exports canonical opt-out facts through the audit reader without
           controls:[{label:"Do Not Sell",actionType:"do_not_sell_share"}]}}}),
     }) as Record<string, any>;
     assert.equal(pulse.consentSurfaceEvidence.firstLayerConsentChoices.privacyOptOutControlObserved,undefined);
+    assert.equal(pulse.californiaVisitStages, undefined);
   }
 });
 

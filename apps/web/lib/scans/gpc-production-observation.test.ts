@@ -61,7 +61,7 @@ test("verified bytes → typed persisted v3 → normalized concern/policy → un
     runtimeArtifacts: { gpcResponseAssessment: persisted, gpcActivityComparison: activityComparison } });
   const projectedActivity = buildCanonicalGpcResponseProjection(withActivity);
   assert.deepEqual(projectedActivity?.activityComparison,activityComparison);
-  assert.equal(projectedActivity?.comparisonHeadline, "5-second matched comparison");
+  assert.equal(projectedActivity?.comparisonHeadline, "Matched comparison over 5 s");
   assert.match(projectedActivity!.coverageSummary, /2 without GPC and 1 with GPC/);
   assert.equal(projectedActivity?.assessment.status, "indeterminate");
   assert.deepEqual(withActivity.map(f => f.scoreEffects), findings.map(f => f.scoreEffects));

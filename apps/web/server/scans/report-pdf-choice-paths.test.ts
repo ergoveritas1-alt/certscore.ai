@@ -24,7 +24,7 @@ test("choice paths use one session summary and only actual request rows, without
   assert.equal(summary[1]!.cells![2]!.join(" "), "0.346 s");
   const requests = lines.filter(line => line.tableId === "choice-path-requests" && line.kind === "tableRow");
   assert.equal(requests.length, 1);
-  assert.match(requests[0]!.text, /Reject.*metrics.example.test\/collect.*71 ms after click/);
+  assert.match(requests[0]!.text, /Reject.*metrics.example.test\/collect.*0\.071 s after click/);
   assert.doesNotMatch(lines.map(line => line.text).join(" "), /0 displayed requests|Choice-state request comparison/);
   assert.match(lines.map(line => line.text).join(" "), /not a vendor-by-vendor pass/);
   assert.deepEqual(report, before);

@@ -10,8 +10,11 @@ import {resolveCanonicalVendor} from "@certscore/vendor-resolver";
 export const ANALYTICS_URL = "https://www.google-analytics.com/g/collect?v=2&tid=G-ABC123&cid=visitor-fixture&sid=123&npa=1";
 export const QUALIFIED_URL = "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-ABC123&cid=visitor-fixture";
 export const UNRESOLVED_AD_URL = "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123/";
-export function californiaPriorityGpcFixture(urls = [ANALYTICS_URL]) {
+export function californiaPriorityGpcFixture(urls = [ANALYTICS_URL], scanId = "gpc-fixture") {
   const g = gpcProductionRuntimeFixture(), baseline = gpcRuntimeFixture({enabled:false}), event = g.networkEvents[1]!;
+  g.scanId = baseline.scanId = scanId;
+  g.gpcObservationSession!.scanId = scanId;
+  g.gpcObservationSession!.semanticObservation!.scanId = scanId;
   g.networkEvents = [g.networkEvents[0]!, ...urls.map((url,i)=>({...event,eventId:`collection-${i}`,requestId:`collection-${i}`,url,requestUrl:url,collectionEndpointObserved:true}))];
   g.normalizedVendorObservations = g.networkEvents.slice(1).map(e=>resolveCanonicalVendor({type:"request",url:e.requestUrl,evidenceId:e.eventId,sourceScanner:"fixture",matchSource:"network_request"}).observation!);
   g.gpcSignalObservation!.prototypeCaptureBinding = {captureId:g.gpcObservationSession!.captureId,documentToken:"fixture-loader",documentIdentitySource:"cdp_loader_id"};

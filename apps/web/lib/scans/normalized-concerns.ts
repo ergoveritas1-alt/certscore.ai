@@ -3805,19 +3805,33 @@ function buildCaliforniaCollectionReviewConcerns(runtimeArtifacts:Record<string,
  const rows=assessments.flatMap(a=>a.rows.filter(r=>r.treatment==="potential_risk").map(r=>({...r,path:a.path,sourceSha256:a.sourceSha256})));
  const sent=assessments.find(a=>a.identifierTransmission)?.identifierTransmission;
  if(!rows.length&&!sent)return [];
- const refs=[...new Set(rows.flatMap(r=>[`choice-source:sha256:${r.sourceSha256}`,`request:${r.evidenceId}`]))];
+ const refs=[...new Set(rows.flatMap(r=>[`choice-source:sha256:${r.sourceSha256}`,r.presenceBasis==="cookie_snapshot"?r.evidenceId:`request:${r.evidenceId}`]))];
  if (sent) refs.push(`choice-source:sha256:${sent.packetSha256}`,`request:${sent.requestId}`);
- const title=sent&&!rows.length?"Tracking identifiers sent after Reject":"Collection under privacy-choice conditions — review recommended";
+ const hasPresence=rows.some(r=>r.presenceBasis);
+ const underGpc = rows.some(row => row.path === "gpc");
+ const afterReject = Boolean(sent) || rows.some(row => row.path === "reject");
+ let title = "Tracking identifiers sent after Reject";
+ if (rows.length) {
+   const visit = afterReject && underGpc ? "after Reject click and under GPC" : underGpc ? "under GPC" : "after Reject click";
+   title = `Non-essential activity ${visit}`;
+ }
  const signalCopy:Record<string,string>={google_npa:"non-personalized ads declared",processing_declarations_not_retained:"processing declarations unavailable",
   gpp_unresolved:"GPP interpretation unresolved",privacy_signal_invalid:"invalid privacy signal",privacy_signal_conflict:"conflicting privacy signals"};
  const groups=rows.filter((r,i)=>rows.findIndex(x=>x.entityId===r.entityId&&x.path===r.path)===i);
  const observations=groups.slice(0,16).map(r=>{
    const matched=rows.filter(x=>x.entityId===r.entityId&&x.path===r.path),first=Math.min(...matched.map(x=>x.msFromAnchor));
    const signals=[...new Set(matched.flatMap(x=>x.processingSignals))].map(s=>signalCopy[s]??s.replaceAll("_"," "));
+   if (matched.some(row=>row.presenceBasis==="cookie_snapshot")) {
+     const cookies=matched.filter(row=>row.presenceBasis==="cookie_snapshot").length;
+     const requests = matched.length - cookies;
+     const counts = [`${cookies} retained cookie snapshot observation${cookies===1?"":"s"}`];
+     if (requests) counts.push(`${requests} request${requests===1?"":"s"}`);
+     return `${r.entity} (${r.purpose}): ${counts.join(" and ")} ${r.path==="gpc"?"under GPC":"after the Reject click"}${signals.length ? `, ${signals.join(", ")}` : ""}`;
+   }
    return `${r.entity} (${r.purpose}): ${matched.length} retained request${matched.length===1?"":"s"}, first at +${first} ms ${r.path==="gpc"?"from GPC visit start":"after the Reject click"}${signals.length?`; ${signals.join(", ")}`:""}`;
  });
  return [buildConcernFromSharedInput({categoryId:"privacy",domainContext,title,
-  description:`${sent ? `After Reject, the browser sent the identifier from ${sent.cookieName} to ${sent.endpoint}. ` : ""}${observations.length ? observations.join("; ")+". " : ""}Collection was observed; the sale/sharing purpose of these specific requests remains unresolved. Review recipient purposes, effective settings, processing arrangements and privacy-choice enforcement. A cookie Reject click does not establish a California sale/sharing opt-out. These observations do not establish a legal violation.`,
+  description:`${sent ? `After Reject, the browser sent the identifier from ${sent.cookieName} to ${sent.endpoint}. ` : ""}${observations.length ? observations.join("; ")+". " : ""}${hasPresence?"The sale/sharing purpose of this activity remains unresolved.":"Collection was observed; the sale/sharing purpose of these specific requests remains unresolved."} Review recipient purposes, effective settings, processing arrangements and privacy-choice enforcement. A cookie Reject click does not establish a California sale/sharing opt-out. These observations do not establish a legal violation.`,
   evidence:refs,observedValue:"observed",originKey:`privacy.${CA_POTENTIAL_RISK_FINDING}`,originType:"runtime_artifact",
   rawEvidence:{californiaGpcPotentialRiskAssessment:runtimeArtifacts?.californiaGpcPotentialRiskAssessment,
     californiaRejectPotentialRiskAssessment:runtimeArtifacts?.californiaRejectPotentialRiskAssessment,gpcResponseAssessment:runtimeArtifacts?.gpcResponseAssessment,

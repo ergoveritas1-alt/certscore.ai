@@ -1,3 +1,4 @@
+import { formatReportSecondsRange } from "./report-time";
 import {isRejectPresencePolicy} from "./after-reject-scoring-contract";
 import { afterRejectScoringNarrative, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 type ActivityDetails = {
@@ -60,12 +61,6 @@ function readDetails(value: unknown, count: number): ActivityDetails | null {
   return details as ActivityDetails;
 }
 
-function timingText(first: number, last: number) {
-  if (last < 1000) return `${first === last ? first : `${first}–${last}`} ms`;
-  const seconds = (ms: number) => Number((ms / 1000).toFixed(2));
-  return `${first === last ? seconds(first) : `${seconds(first)}–${seconds(last)}`} s`;
-}
-
 /** Copy for an already eligible checklist finding, never an eligibility test. */
 export function describePostRejectFinding(value: unknown): { title: string; summary: string } | null {
   const evidence = record(value);
@@ -106,11 +101,11 @@ export function describePostRejectFinding(value: unknown): { title: string; summ
     : complete?.storageWriteCount === count ? (count === 1 ? "storage write" : "storage writes")
     : (count === 1 ? "activity observation" : "activity observations");
   const timing = complete && complete.timedActivityCount === count && complete.firstObservedMsAfterReject !== null && complete.lastObservedMsAfterReject !== null
-    ? ` ${timingText(complete.firstObservedMsAfterReject, complete.lastObservedMsAfterReject)} after confirmed Reject`
+    ? ` ${formatReportSecondsRange(complete.firstObservedMsAfterReject, complete.lastObservedMsAfterReject)} after confirmed Reject`
     : " after confirmed Reject";
   // A historical bounded sample supports an example, not the full time range.
   const example = !complete && sampleDetails.firstObservedMsAfterReject !== null
-    ? ` One retained observation occurred ${timingText(sampleDetails.firstObservedMsAfterReject, sampleDetails.firstObservedMsAfterReject)} after confirmed Reject.` : "";
+    ? ` One retained observation occurred ${formatReportSecondsRange(sampleDetails.firstObservedMsAfterReject, sampleDetails.firstObservedMsAfterReject)} after confirmed Reject.` : "";
   return {
     title: `${allAttributed && vendorLabel ? vendorLabel : "Non-essential"} activity after Reject`,
     summary: `${count} non-essential ${allAttributed && vendorLabel ? `${vendorLabel} ` : ""}${activity} ${count === 1 ? "was" : "were"} observed${timing}${!allAttributed && vendorLabel ? `, including ${vendorLabel}` : ""}.${example}`,

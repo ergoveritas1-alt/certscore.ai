@@ -1,3 +1,4 @@
+import {STAGE_METRICS,auditStageStates} from "./lib/audit-visit-stages";
 import {EVIDENCE_METRICS} from './lib/audit-progress-evidence';
 import {extractExportRow} from './lib/audit-progress-export';
 import {GPC_CORE_METRICS} from './lib/audit-progress-gpc';
@@ -25,7 +26,7 @@ import {applyRetainedOptOutExtracts} from './lib/audit-progress-opt-out';
 import {NO_GO_METRICS,readAuditNoGoEvidence} from './lib/audit-progress-no-go';
 
 const [previous, manifest, output, upgrade] = process.argv.slice(2);
-if (!previous || !manifest || !output || (upgrade && !['--wire-current-cmp','--replay-opt-out-outcomes','--gpc-core-questions','--replay-gpc-evidence','--usable-choice-funnel','--choice-click-activity'].includes(upgrade))) {
+if (!previous || !manifest || !output || (upgrade && !['--visit-stages','--wire-current-cmp','--replay-opt-out-outcomes','--gpc-core-questions','--replay-gpc-evidence','--usable-choice-funnel','--choice-click-activity'].includes(upgrade))) {
   throw Error('Supply a sealed dashboard.json, a retained-only input manifest, and a fresh output directory');
 }
 const priorFile = realpathSync(previous);
@@ -141,6 +142,21 @@ if(upgrade==='--choice-click-activity'){
   });
   data.metrics.push(...definitions.values());
 }
+if(upgrade==='--visit-stages'){
+  const ids=new Set(data.metrics.map((m:{id:string})=>m.id));
+  data.metrics.push(...STAGE_METRICS.filter(m=>!ids.has(m.id)));
+  for(const row of data.rows as ProgressRow[]){
+    if(!row.reportable)continue;
+    for(const m of STAGE_METRICS)row.states[m.id]='unavailable';
+    const ref=row.refs.find(r=>r.role==='hash_verified_bot_archive_export');
+    if(!ref)continue;
+    const bytes=read(ref.file,6*1024*1024);
+    assert.equal(sha(bytes),ref.sha256);
+    const report=JSON.parse(bytes.toString('utf8'));
+    assert.equal(report.scanId,row.scanId);
+    Object.assign(row.states,auditStageStates(report,row.scanId));
+  }
+}
 const replay = structuredClone(data.rows) as ProgressRow[];
 for (const row of replay) delete row.navigationBlock;
 applyRetainedReports(replay, data.retainedReports);
@@ -148,6 +164,7 @@ applyRetainedOptOutExtracts(replay, inputs.sources);
 for (const [index, row] of (data.rows as ProgressRow[]).entries()) {
   if (replay[index]!.navigationBlock) row.navigationBlock = replay[index]!.navigationBlock;
   else delete row.navigationBlock;
+  if(upgrade==='--visit-stages'&&row.reportable)for(const m of STAGE_METRICS)row.states[m.id]=replay[index]!.states[m.id]??'unavailable';
   const coverage = replay[index]!.californiaRejectCoverage;
   if (coverage) row.californiaRejectCoverage = coverage;
   else delete row.californiaRejectCoverage;

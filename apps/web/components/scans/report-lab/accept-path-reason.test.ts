@@ -9,7 +9,7 @@ test("unverified Accept explains bounded after-click facts without claiming regi
     storageWrites: [{ storageType: "cookie", name: "bst_dsgvo_cookie", observedAtMs: 9100, nonEssential: false }],
     requestIds: ["r1", "r2"] };
   const copy = acceptPathIncompleteReason({ afterActionCapture: capture });
-  assert.match(copy, /During 3s.*2 requests.*1 main-document storage write/);
+  assert.match(copy, /During 3 s.*2 requests.*1 main-document storage write/);
   assert.doesNotMatch(copy, /bst_dsgvo_cookie/);
   assert.doesNotMatch(copy, /could not be verified|not proof|granted consent/);
   assert.match(copy, /tracking classifications are shown in the findings/);
@@ -21,7 +21,7 @@ test("unverified Accept explains bounded after-click facts without claiming regi
 
 test("Accept failure copy distinguishes search failure, click, ambiguity and legacy uncertainty", () => {
   assert.equal(acceptPathIncompleteReason({ resolver: { reason: "deterministic_accept_control_not_found" }, resolverDurationMs: 14_310 }),
-    "No actionable Accept control was found within 14.31 seconds. No click was attempted.");
+    "No actionable Accept control was found within 14.31 s. No click was attempted.");
   assert.match(acceptPathIncompleteReason({ resolver: { reason: "multiple_deterministic_accept_controls_found" } }), /ambiguous/);
   assert.match(acceptPathIncompleteReason({ interactionDiagnostics: { click: { outcome: "completed" } }, registrationStatus: "unconfirmed" }), /^The Accept control was clicked\./);
   assert.match(acceptPathIncompleteReason({ registrationStatus: "not_attempted" }), /does not include the specific discovery reason/);

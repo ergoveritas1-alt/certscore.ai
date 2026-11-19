@@ -1,4 +1,5 @@
 "use client";
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import { readPreconsentTrackingTiming } from "../../lib/scans/preconsent-tracking-timing";
 import { gdprNarrowCustomerEvidence } from "../../lib/scans/gdpr-narrow-evidence";
 
@@ -2325,8 +2326,7 @@ function formatFirstSeenPhrase(value: number | null | undefined) {
 }
 
 function formatElapsedSeconds(value: number) {
-  const seconds = Math.max(0, value) / 1000;
-  return `${seconds.toPrecision(3)}s`;
+  return formatReportSeconds(Math.max(0, value));
 }
 
 function getConsentActionQualifier(item: GdprEprivacyCoverageChecklistItem) {

@@ -1,3 +1,4 @@
+import { formatReportSeconds, formatRetainedReportTiming } from "../../lib/scans/report-time";
 import { reportBrandDisplayName } from "../../lib/scans/report-brand-display-name";
 import { reportRequestInventory } from "./report-request-inventory";
 import {cmpAuditReportSummary} from "../../lib/scans/cmp-audit-projection";
@@ -104,7 +105,7 @@ const titleAliases: Record<string, string> = { accept_reject_outcomes_indistingu
 const table = (title: string, headers: string[], rows: string[][], extra: Partial<Extract<PdfV2Block, {
     kind: "table";
 }>> = {}): PdfV2Block => ({ kind: "table", title, headers, rows, ...extra });
-const text = (v: string, muted = false): PdfV2Block => ({ kind: "text", text: pdfV2Words(v), muted });
+const text = (v: string, muted = false): PdfV2Block => ({ kind: "text", text: formatRetainedReportTiming(pdfV2Words(v)), muted });
 const heading = (v: string): PdfV2Block => ({ kind: "heading", text: v });
 const date = (v: unknown, tz: string, includeTime = false) => {
     if (!v || !Number.isFinite(new Date(String(v)).getTime()))
@@ -115,7 +116,7 @@ const date = (v: unknown, tz: string, includeTime = false) => {
     return shortZone ? formatted.replace(/(?:GMT[+-][\d:]+|UTC|GMT)$/, shortZone) : formatted;
 };
 const expiry = (v: unknown, tz: string) => typeof v === "number" && Number.isFinite(v) ? date(new Date(v * 1000).toISOString(), tz) : "Not recorded";
-const cleanSummary = (v: unknown) => reportFindingSummary(pdfV2Words(v));
+const cleanSummary = (v: unknown) => formatRetainedReportTiming(reportFindingSummary(pdfV2Words(v)));
 /** Local v2 view over the frozen canonical export. No raw bundle input, no
  * classifier, scoring, receipt inference, network request or state mutation. */
 export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
@@ -153,20 +154,20 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     const times = (action: typeof accept, request: {
         hostname: string;
         path: string;
-    }) => action?.requests.filter(r => r.hostname === request.hostname && r.path === request.path).map(r => `+${r.msAfterClick} ms`).join(", ") || "Not observed in sample";
+    }) => action?.requests.filter(r => r.hostname === request.hostname && r.path === request.path).map(r => `+${formatReportSeconds(r.msAfterClick)}`).join(", ") || "Not observed in sample";
     if (refusal) {
         const requests = reject?.requests.filter(r => r.nonEssential) ?? [];
         const vendors = unique(requests.map(requestName));
         const blocks: PdfV2Block[] = [];
         for (const vendor of vendors)
-            blocks.push(table(`${vendor}: observed request samples`, ["Request", "Purpose", "After Reject click", "After Accept click"], requests.filter(r => requestName(r) === vendor).map(r => [`${r.hostname}${r.path}`, purpose(r.purpose), `+${r.msAfterClick} ms`, times(accept, r)]), { mono: [0], widths: [.44, .16, .18, .22] }));
+            blocks.push(table(`${vendor}: observed request samples`, ["Request", "Purpose", "After Reject click", "After Accept click"], requests.filter(r => requestName(r) === vendor).map(r => [`${r.hostname}${r.path}`, purpose(r.purpose), `+${formatReportSeconds(r.msAfterClick)}`, times(accept, r)]), { mono: [0], widths: [.44, .16, .18, .22] }));
         const timing = report.appendix.evidenceDossier?.rejectTiming;
         if (timing)
             blocks.push(text(`${timing.storageWriteCount} classified non-essential storage-write events and ${timing.networkRequestCount} request events are recorded in the original post-Reject assessment. Storage events are separate from request counts.`));
         if (overlap)
             blocks.push(text("Some recorded activity identities also appear after Accept. This is partial overlap, not equivalent outcomes; query values are sanitized and observation windows can differ."));
         if (accept && reject && accept.windowMs !== reject.windowMs)
-            blocks.push(text(`Observed windows: Accept ${(accept.windowMs / 1000).toFixed(1)} s; Reject ${(reject.windowMs / 1000).toFixed(1)} s. Raw event totals do not establish comparable rates or overall equivalent outcomes.`, true));
+            blocks.push(text(`Observed windows: Accept ${formatReportSeconds(accept.windowMs)}; Reject ${formatReportSeconds(reject.windowMs)}. Raw event totals do not establish comparable rates or overall equivalent outcomes.`, true));
         issues.push({ id: "issue-refusal", title: refusal.title, tier: refusal.confidence.startsWith("Limited") ? "Verify first" : "Review", impact: refusal.impact, confidence: refusal.confidence,
             findingIds: [refusal.id, ...(overlap ? [overlap.id] : [])], findingNumbers: [refusal.number, ...(overlap ? [overlap.number] : [])],
             summary: reject ? `${reject.nonEssentialRequestCount} classified non-essential requests were recorded after the Reject click, including ${vendors.join(" and ") || "unattributed activity"}. ${refusal.summary}` : refusal.summary,
@@ -188,7 +189,7 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
         if (f.id === "policy_clarity_risk")
             diagnostics.push("Policy clarity markers are retained, but exact marker-to-passage ranges are absent; no invented highlighted passage or cookie-disclosure issue was added.");
         issues.push({ id: `issue-${f.number}`, title: f.title, tier: informational ? "For information" : f.confidence.startsWith("Limited") ? "Verify first" : "Review", impact: f.impact, confidence: f.confidence,
-            findingIds: [f.id], findingNumbers: [f.number], summary: informational && accept ? `${accept.nonEssentialRequestCount} classified non-essential request events were recorded in the ${(accept.windowMs / 1000).toFixed(1)} s Accept window. This is the recorded comparison baseline.` : f.summary,
+            findingIds: [f.id], findingNumbers: [f.number], summary: informational && accept ? `${accept.nonEssentialRequestCount} classified non-essential request events were recorded in the ${formatReportSeconds(accept.windowMs)} Accept window. This is the recorded comparison baseline.` : f.summary,
             owner: informational ? "Comparison baseline" : f.topic === "policy" ? "Privacy owner + webmaster" : "Responsible system owner", evidenceTarget: informational ? "choice-accept" : ({ consent: "consent", policy: "policy", storage: "storage", forms: "forms-security", security: "forms-security", external: "external", accessibility: "accessibility" } as Record<string, string>)[f.topic ?? ""] ?? "methodology", blocks,
             expected: informational ? "Use this recorded baseline when checking that a repair preserves intended Accept behavior." : f.topic === "policy" ? "Public wording describes the actual data practice clearly and remains consistent with the applicable implementation." : f.action,
             steps: informational ? [] : [f.action] });
@@ -241,22 +242,22 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
         table("Services declared in the CMP", ["Declared service", "Matched observed activity"], services.map(s => [str(s.name), serviceStates(str(s.name))]), { widths: [.35, .65] }),
         text("A missing exact attribution is not proof that a declared service is unused. Service aliases are not guessed in this PDF.", true),
         table("Categories offered", ["Category", "Recorded default"], categories.map(c => [str(c.name), c.checked === true ? "On" : c.checked === false ? "Off" : "Unresolved"])),
-        ...(geometry ? [table("Recorded button prominence", ["Control", "x, y, width, height", "Fill contrast / outer emphasis"], [["Accept", geometry.accept.bounds.join(", "), `${geometry.accept.fillContrast} / ${geometry.accept.outerEmphasisFraction}`], ["Reject", geometry.reject.bounds.join(", "), `${geometry.reject.fillContrast} / ${geometry.reject.outerEmphasisFraction}`]], { widths: [.16, .40, .44] }), text(`Capture skew ${geometry.captureSkewMs} ms. The saved prominence assessment is shown in the banner audit.`)] : []),
+        ...(geometry ? [table("Recorded button prominence", ["Control", "x, y, width, height", "Fill contrast / outer emphasis"], [["Accept", geometry.accept.bounds.join(", "), `${geometry.accept.fillContrast} / ${geometry.accept.outerEmphasisFraction}`], ["Reject", geometry.reject.bounds.join(", "), `${geometry.reject.fillContrast} / ${geometry.reject.outerEmphasisFraction}`]], { widths: [.16, .40, .44] }), text(`Capture skew ${formatReportSeconds(geometry.captureSkewMs)}. The saved prominence assessment is shown in the banner audit.`)] : []),
     ]);
     section("cookie-comparison", "A.4 · Observed cookies and declarations", "Partial", `${cookies.length} cookie names and ${declarations.length} declared patterns are recorded in the CMP comparison.`, comparison?.declarationInventoryComplete ? "The recorded declaration inventory is marked complete for this scope." : "The declaration inventory is incomplete; an unmatched name does not prove an absent declaration.", [
         table("Observed cookies across choice states", ["Cookie name", "Captured declaration match", "States seen", "Observed expiry"], cookies.map(c => [str(c.name), str(c.matchedPattern) || (c.possibleTemplateMatch ? "Possible template match only" : "No match in captured declarations"), arr(c.observedIn).map(v => ({ before_choice: "Before a choice", after_accept: "After Accept", after_reject: "After Reject" }[str(v)] ?? "State unresolved")).join(", "), expiry(obj(c.observedExpiry).expiresAtEpochSeconds, tz)]), { mono: [0], widths: [.26, .30, .24, .20] }),
         text("An observed expiry and a CMP-stated retention period describe different evidence. They do not by themselves prove a retention violation.", true),
     ]);
     section("declarations", "A.4 · Cookie declarations", declarations.length ? "Observed" : "Not tested", `${declarations.length} declared entries, with purpose and retention as stated by the site.`, "Names are reproduced literally. No declaration is labeled invalid solely because it lacks a registry or observation match.", [
-        table("Declared cookie patterns", ["Cookie / pattern", "CMP-stated purpose", "CMP-stated retention", "Observed matching name"], declarations.map(d => [str(d.name), purpose(d.purpose), pdfV2Words(d.duration || "Not stated"), cookies.filter(c => c.matchedPattern === d.name).map(c => str(c.name)).join(", ") || "Not observed in comparison"]), { mono: [0], widths: [.33, .17, .19, .31], compact: true }),
+        table("Declared cookie patterns", ["Cookie / pattern", "CMP-stated purpose", "CMP-stated retention", "Observed matching name"], declarations.map(d => [str(d.name), purpose(d.purpose), formatRetainedReportTiming(pdfV2Words(d.duration || "Not stated")), cookies.filter(c => c.matchedPattern === d.name).map(c => str(c.name)).join(", ") || "Not observed in comparison"]), { mono: [0], widths: [.33, .17, .19, .31], compact: true }),
     ]);
-    const requestRows = (w: typeof accept) => w?.requests.map(r => [`+${r.msAfterClick} ms`, `${requestName(r)} · ${purpose(r.purpose)}`, `${r.hostname}${r.path}`, r.nonEssential ? "Non-essential" : "Other recorded activity"]) ?? [];
+    const requestRows = (w: typeof accept) => w?.requests.map(r => [`+${formatReportSeconds(r.msAfterClick)}`, `${requestName(r)} · ${purpose(r.purpose)}`, `${r.hostname}${r.path}`, r.nonEssential ? "Non-essential" : "Other recorded activity"]) ?? [];
     const execution = (action: "accept" | "reject") => action === "accept" ? report.postAcceptObservation?.execution : report.postRefusalObservation && "execution" in report.postRefusalObservation ? report.postRefusalObservation.execution : undefined;
     section("choice-reject", "A.5 · Choice sessions and Reject", refusal ? "Needs review" : "Partial", "Choice completion, decision confirmation, network events and storage evidence are separate measurements.", "Times in request tables are relative to the click, as recorded; they are not relabeled as confirmation-relative.", [
         table("Choice-session comparison", ["Measurement", "After Accept", "After Reject"], [
             ["Click", ...(["accept", "reject"] as const).map(a => execution(a) ? execution(a)!.clickCompleted ? "Completed" : "Incomplete" : "Not recorded")],
             ["Decision registration", ...(["accept", "reject"] as const).map(a => execution(a) ? execution(a)!.consentConfirmed ? "Confirmed by stored assessment" : "Unconfirmed" : "Not recorded")],
-            ["Measured window", accept ? `${accept.windowMs / 1000} s` : "Not recorded", reject ? `${reject.windowMs / 1000} s` : "Not recorded"],
+            ["Measured window", accept ? `${formatReportSeconds(accept.windowMs)}` : "Not recorded", reject ? `${formatReportSeconds(reject.windowMs)}` : "Not recorded"],
             ["Recorded requests", scalar(accept?.requestCount), scalar(reject?.requestCount)],
             ["Classified non-essential requests", scalar(accept?.nonEssentialRequestCount), scalar(reject?.nonEssentialRequestCount)],
             ["Detailed request rows", scalar(accept?.requests.length), scalar(reject?.requests.length)],
@@ -275,7 +276,7 @@ export function buildReportPdfV2Model(report: CanonicalReportExport, options: {
     const preCookies = inventory.rows.filter(r => r.preConsent && (r.type === "cookie" || r.type === "storage"));
     const storageStatus: PdfV2Status = inventory.presentationStatus === "insufficient_evidence" ? "Partial" : "Observed";
     section("storage", "B · Cookies and browser storage", storageStatus, `${inventory.presentationStatus === "insufficient_evidence" ? "Cookie/storage inventory unavailable" : `${preCookies.length} cookie/storage inventory rows were recorded before a choice`}. Post-choice cookie names are listed separately in Appendix A.4.`, "Snapshot presence, an observed write and active use are distinct. This report does not infer a new write from presence alone.", [
-        table("Before a choice", ["Cookie / storage item", "Recorded purpose", "First seen", "Recorded classification"], preCookies.map(r => [r.cookieNames.join(", ") || r.resourceNames.join(", "), r.purpose.join(", "), r.firstSeenMs === null ? "Not recorded" : `${r.firstSeenMs / 1000} s`, pdfV2Words(r.evidenceClassification)]), { mono: [0], widths: [.31, .31, .13, .25] }),
+        table("Before a choice", ["Cookie / storage item", "Recorded purpose", "First seen", "Recorded classification"], preCookies.map(r => [r.cookieNames.join(", ") || r.resourceNames.join(", "), r.purpose.join(", "), r.firstSeenMs === null ? "Not recorded" : `${formatReportSeconds(r.firstSeenMs)}`, pdfV2Words(r.evidenceClassification)]), { mono: [0], widths: [.31, .31, .13, .25] }),
         table("State coverage", ["State", "Inventory"], [["Before a choice", `${preCookies.length} inventory rows`], ["After Accept", `${cookies.filter(c => arr(c.observedIn).includes("after_accept")).length} cookie names in the CMP comparison`], ["After Reject", `${report.appendix.evidenceDossier?.rejectTiming?.storageWriteCount ?? "Not recorded"} storage-write events in the post-Reject assessment`]]),
     ]);
     const policyFacts = (id: string) => details.find(d => d.id === id)?.facts ?? [];

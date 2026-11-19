@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import { choicePathExecutionSchema } from "@certscore/contracts";
 import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 
@@ -311,31 +312,7 @@ function formatCompactValue(value: unknown) {
 }
 
 function formatDurationMs(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    return "—";
-  }
-
-  if (value < 1000) {
-    return `${value}ms`;
-  }
-
-  const totalSeconds = Math.round(value / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const parts: string[] = [];
-
-  if (hours > 0) {
-    parts.push(`${hours}h`);
-  }
-  if (minutes > 0) {
-    parts.push(`${minutes}m`);
-  }
-  if (seconds > 0 || parts.length === 0) {
-    parts.push(`${seconds}s`);
-  }
-
-  return parts.join(" ");
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? formatReportSeconds(value) : "—";
 }
 
 function formatScanTimeLabel(input: {
@@ -386,23 +363,7 @@ function formatScanReadyTimeLabel(input: {
 }
 
 function formatScanTimeDurationMs(durationMs: number) {
-  const totalSeconds = Math.max(0, Math.ceil(durationMs / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const parts: string[] = [];
-
-  if (hours > 0) {
-    parts.push(`${hours} hr`);
-  }
-  if (minutes > 0) {
-    parts.push(`${minutes} min`);
-  }
-  if (seconds > 0 || parts.length === 0) {
-    parts.push(`${seconds} sec`);
-  }
-
-  return parts.join(" ");
+  return formatReportSeconds(durationMs);
 }
 
 function formatFirstSeenMs(value: number | null | undefined) {
@@ -417,8 +378,7 @@ function formatInventoryTiming(row: InventoryGroupRow) {
 }
 
 function formatElapsedSeconds(value: number) {
-  const seconds = Math.max(0, value) / 1000;
-  return `${seconds.toPrecision(3)}s`;
+  return formatReportSeconds(Math.max(0, value));
 }
 
 function formatInventorySummaryTime(value: number | null | undefined) {
@@ -1375,7 +1335,7 @@ function formatRejectEvidenceActivity(row: Record<string, unknown>) {
       activityType === "storage_write" ? "storage write" : activityType === "network_request" ? "request" : null,
       vendor && hostname ? hostname : null,
       storageName && storageName !== vendor ? storageName : null,
-      msAfterReject !== null ? `${Math.round(msAfterReject)}ms after Reject` : null,
+      msAfterReject !== null ? `${formatReportSeconds(msAfterReject)} after Reject` : null,
     ].filter((value): value is string => Boolean(value)).join(" · ") || null,
   };
 }

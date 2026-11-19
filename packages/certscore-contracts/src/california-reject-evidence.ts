@@ -21,6 +21,33 @@ export const californiaBodyDiagnosticSchema = z.object({
  limitContext:protocolJsonLimitContextSchema.optional(),
  structuralPolicy:z.literal("magnite_json_structure.v1").optional(),
 }).strict();
+/** Only the two reviewed POST routes can produce this lower-tier receipt. */
+export function choiceReviewEndpoint(raw: string, method?: string) {
+ if (method !== "POST" || raw.length > 16384 || !URL.canParse(raw)) return undefined;
+ const url = new URL(raw);
+ if (url.username || url.password || url.hash) return undefined;
+ if (url.origin === "https://pagead2.googlesyndication.com" && url.pathname === "/ccm/collect") return "google_ccm_page_view" as const;
+ if (url.origin === "https://bzr.openai.com" && url.pathname === "/v1/sdk/events") return "openai_event_post" as const;
+ return undefined;
+}
+export const openAiPixelEventTypeSchema = z.enum([
+ "page_viewed","contents_viewed","items_added","checkout_started","order_created","lead_created",
+ "appointment_scheduled","registration_completed","subscription_created","trial_started","custom",
+]);
+const measurementFactsSchema = z.discriminatedUnion("endpoint", [
+ z.object({
+  endpoint:z.literal("google_ccm_page_view"),eventType:z.enum(["page_view","conversion","purchase"]),
+  propertyIdSha256:z.string().regex(/^[a-f0-9]{64}$/).optional(),clickReferenceObserved:z.literal(true).optional(),
+ }).strict(),
+ z.object({
+  endpoint:z.literal("openai_event_post"),pixelIdSha256:z.string().regex(/^[a-f0-9]{64}$/),
+  events:z.array(z.object({
+   index:z.number().int().min(0).max(7),eventType:openAiPixelEventTypeSchema,
+   clickReferenceObserved:z.literal(true).optional(),hashedContactObserved:z.literal(true).optional(),
+   optOut:z.boolean().optional(),
+  }).strict()).min(1).max(8),
+ }).strict(),
+]);
 /** Observed on the exact browser Request before URL sanitization. No raw
  * visitor identifiers, payloads or GPP strings are added to retention. */
 export const californiaRejectRequestEvidenceSchema=z.object({
@@ -43,9 +70,32 @@ export const californiaRejectRequestEvidenceSchema=z.object({
   reasons:z.array(z.enum(["body_unavailable","unsupported_body","body_limit","duplicate_fields","unsupported_fields","headers_unavailable","header_limit","ambiguous_cookie","unsupported_privacy_header","cookie_opt_out_unresolved"])).max(10),
  }).strict().optional(),
  entity:z.object({entityId:z.string().regex(/^ent_[a-f0-9]{12}$/),label:z.string().min(1).max(200),resolverVersion:z.string().min(1).max(120)}).strict(),
+ measurementFacts:measurementFactsSchema.optional(),
+ reviewEvent:z.discriminatedUnion("kind",[
+  z.object({kind:z.literal("google_ccm_page_view"),documentSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
+  z.object({kind:z.literal("openai_event_post"),batchInspection:z.enum(["measurement_observed","restriction_observed","telemetry_only"]).optional()}).strict(),
+ ]).optional(),
  qualification:saleSharingRequestQualificationSchema,
  propertyBinding:z.object({policyVersion:z.enum(["google_analytics_property.v1","google_analytics_property.v2-browser"]),propertyIdSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict().optional(),
 }).strict().superRefine((row,ctx)=>{
+ if (row.measurementFacts && (row.contractVersion !== "california_reject_request.v2" || !row.proof ||
+     choiceReviewEndpoint(row.origin + row.path,row.method) !== row.measurementFacts.endpoint ||
+     row.qualification.activity !== "unresolved" ||
+     (row.measurementFacts.endpoint === "openai_event_post" && !row.proof.bodySha256))) {
+   ctx.addIssue({code:z.ZodIssueCode.custom,message:"Measurement facts require matching bounded request evidence."});
+ }
+ if (row.reviewEvent && (row.contractVersion !== "california_reject_request.v2" || !row.proof ||
+     choiceReviewEndpoint(row.origin + row.path,row.method) !== row.reviewEvent.kind ||
+     row.qualification.activity !== "unresolved" || row.propertyBinding ||
+     (row.reviewEvent.kind === "openai_event_post" && !row.proof.bodySha256))) {
+   ctx.addIssue({code:z.ZodIssueCode.custom,message:"Review event requires matching bounded POST evidence and unresolved purpose."});
+ }
+ if (row.reviewEvent?.kind === "openai_event_post" && row.reviewEvent.batchInspection &&
+     (row.proof?.bodyStatus !== "complete" || row.proof.bodyFormat !== "json" ||
+      row.proof.processingCoverage?.body !== "inspected" ||
+      (row.reviewEvent.batchInspection === "measurement_observed" && row.measurementFacts?.endpoint !== "openai_event_post"))) {
+   ctx.addIssue({code:z.ZodIssueCode.custom,message:"SDK batch inspection requires complete JSON evidence and matching measurement facts."});
+ }
  const diagnostic=row.proof?.bodyDiagnostic,status=row.proof?.bodyStatus;
  if(diagnostic && (status==="absent"&&(diagnostic.stage!=="not_applicable"||diagnostic.inputKind!=="none") ||
   status==="complete"&&diagnostic.stage!=="complete" || status==="unavailable"&&!(diagnostic.stage==="input_unavailable"&&diagnostic.inputKind==="unavailable"||diagnostic.stage==="header_body_framing") ||
@@ -156,6 +206,15 @@ export const californiaRejectRequestEvidenceSchema=z.object({
   ctx.addIssue({code:z.ZodIssueCode.custom,message:"Property binding requires identified Analytics collection on the exact request."});
 });
 export type CaliforniaRejectRequestEvidence=z.infer<typeof californiaRejectRequestEvidenceSchema>;
+
+export function hasVerifiedChoiceReviewEvent(fact: CaliforniaRejectRequestEvidence, documentSha256: string) {
+ const event = fact.reviewEvent;
+ return !!event && fact.proof?.headersStatus === "complete" &&
+  (fact.proof.bodyStatus === "absent" || fact.proof.bodyStatus === "complete") &&
+  !fact.qualification.processingSignals.some(signal => ["privacy_signal_invalid","privacy_signal_conflict","gpp_unresolved"].includes(signal)) &&
+  (event.kind !== "openai_event_post" || !event.batchInspection || event.batchInspection === "measurement_observed") &&
+  (event.kind !== "google_ccm_page_view" || event.documentSha256 === documentSha256);
+}
 
 export function validateCaliforniaRejectRequest(row:{requestId:string;startedAtMs:number;sanitizedUrl:string;method?:string;californiaCollection?:CaliforniaRejectRequestEvidence},ctx:z.RefinementCtx) {
  const proof=row.californiaCollection;if(!proof)return;

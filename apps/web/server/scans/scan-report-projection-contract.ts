@@ -1,3 +1,4 @@
+import {californiaVisitStages} from "../../lib/scans/california-visit-stages";
 import { MAX_AUDIT_POLICY_PROVENANCE_BYTES, auditPolicyProvenanceSchema } from '../../../../packages/certscore-contracts/src/audit-policy-provenance';
 import type { AuditRejectActivity } from "../../../../packages/certscore-contracts/src/audit-reject-activity";
 import { buildAuditRejectActivity } from "./audit-reject-activity";
@@ -199,6 +200,7 @@ type PrivateAuditFields = {
   auditPrivacyForm?: string;
   auditPolicyProvenance?: unknown;
   auditRejectActivity?: AuditRejectActivity;
+  auditVisitStages?: ReturnType<typeof californiaVisitStages>;
 };
 
 export function buildPersistedScanReportProjection(
@@ -226,8 +228,11 @@ export function buildPersistedScanReportProjection(
   const auditRejectActivity = reject && scanRecord.scan.status === "completed" && !projectScanReportNoGo(scanRecord)
     ? buildAuditRejectActivity(scanRecord.scan.id, reject)
     : undefined;
+  const stages = scanRecord.scan.status === "completed" && !projectScanReportNoGo(scanRecord)
+    ? californiaVisitStages(scanRecord.scan.id, {...runtimeArtifacts,postRefusalEvidenceProjection:reject,post_refusal_evidence_projection:undefined},auditRejectActivity) : null;
   const payload = {
     ...scanRecord,
+    auditVisitStages: stages?.gpc || stages?.reject ? stages : undefined,
     auditPrivacyForm: options.auditPrivacyForm,
     auditPolicyProvenance,
     auditRejectActivity,
@@ -243,6 +248,11 @@ export function buildPersistedScanReportProjection(
   const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse & PrivateAuditFields;
   let serialized = JSON.stringify(normalizedPayload);
   let sizeBytes = Buffer.byteLength(serialized);
+  if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && normalizedPayload.auditVisitStages) {
+    delete normalizedPayload.auditVisitStages;
+    serialized = JSON.stringify(normalizedPayload);
+    sizeBytes = Buffer.byteLength(serialized);
+  }
   if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES && normalizedPayload.auditRejectActivity !== undefined) {
     delete normalizedPayload.auditRejectActivity;
     serialized = JSON.stringify(normalizedPayload);
@@ -270,7 +280,7 @@ export function buildPersistedScanReportProjection(
     });
   }
   const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy,
-    auditRejectActivity: _privateReject, ...report } = normalizedPayload;
+    auditVisitStages: _privateStages, auditRejectActivity: _privateReject, ...report } = normalizedPayload;
   return {
     payload: normalizedPayload,
     report,
@@ -316,7 +326,7 @@ export function readPersistedScanReportProjection(
     return null;
   }
   const { auditPrivacyForm: _privateAudit, auditPolicyProvenance: _privatePolicy,
-    auditRejectActivity: _privateReject, ...report } = payload as ScanDetailResponse & PrivateAuditFields;
+    auditVisitStages: _privateStages, auditRejectActivity: _privateReject, ...report } = payload as ScanDetailResponse & PrivateAuditFields;
   return withScanReportDisposition({
     ...report,
     // Update the old Ireland display label after verifying the retained payload.

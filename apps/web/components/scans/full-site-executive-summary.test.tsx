@@ -22,7 +22,9 @@ test("retained baseline counts appear in the normal report when the distinct sum
   const before = tiles[0]!;
   assert.equal(before.count, null);
   assert.equal(before.state, "partial");
-  assert.match(renderToStaticMarkup(<ConsentTrackingSummary tiles={[before]} />), /Partial inventory.*Non-essential · 12 requests · 9 cookies &amp; storage/);
+  const html = renderToStaticMarkup(<ConsentTrackingSummary tiles={[before]} />);
+  assert.match(html, /Partial inventory.*Non-essential · 12 requests · 9 cookies &amp; storage/);
+  assert.match(html, /<button id="[^"]+-before" type="button" aria-expanded="false"/);
 });
 
 test("the consent overview displays missing counts as NA, plain form counts, and visible classification markers", () => {
@@ -50,22 +52,22 @@ test("positive flagged totals show only positive classification subcounts", () =
   assert.match(html, /title="2 review">2 review</);
 });
 
-test("consent tiles offer a disclosure only when there are details to show", () => {
+test("consent tiles showing zero or NA are static even when details are retained", () => {
   const html = renderToStaticMarkup(<ConsentTrackingSummary tiles={[
-    { id: "reject", label: "After Reject", count: null, unit: "requests", state: "unavailable", metrics: [{ label: "Requests", value: null }] },
-    { id: "services", label: "Services", count: 0, unit: "identified services", state: "recorded", services: [] },
+    { id: "forms", label: "Forms", count: null, unit: "observed forms", state: "partial", notes: ["After Accept form capture was limited."] },
+    { id: "opt-out", label: "After Opt-out", count: 0, unit: "responses", state: "recorded", evidence: "privacy" },
+    { id: "services", label: "Services", count: 3, unit: "identified services", state: "recorded" },
     { id: "accept", label: "After Accept", count: null, unit: "requests", state: "partial", notes: ["The target changed during capture."] },
     { id: "before", label: "Before consent", count: 0, unit: "requests", state: "recorded", metrics: [{ label: "Distinct requests", value: 0 }] },
+    { id: "reject", label: "After Reject", count: 2, unit: "requests", state: "recorded", metrics: [{ label: "Distinct requests", value: 2 }] },
   ]} />);
 
-  for (const id of ["reject", "services"]) {
+  for (const id of ["forms", "opt-out", "services", "accept", "before"]) {
     const tile = html.match(new RegExp(`<div id="[^"]+-${id}"[^>]*>(.*?)</div>`))?.[1];
     assert.ok(tile);
     assert.doesNotMatch(tile, /<svg|aria-expanded/);
   }
-  for (const id of ["accept", "before"]) {
-    assert.match(html, new RegExp(`<button id="[^"]+-${id}" type="button" aria-expanded="false"[^>]*>.*?<svg`));
-  }
+  assert.match(html, /<button id="[^"]+-reject" type="button" aria-expanded="false"[^>]*>.*?<svg/);
 });
 
 test("the storage tile shows the distinct total without a classification caption", () => {

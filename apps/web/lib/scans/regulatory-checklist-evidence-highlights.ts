@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "./report-time";
 import { projectPreconsentTrackingTiming, describePreconsentTrackingTiming } from "./preconsent-tracking-timing";
 import { canonicalEvidenceVendorName as normalizeEvidenceVendor } from "./canonical-evidence-vendor-name";
 import type { CertScoreFindingEvidenceDetails } from "./finding-registry";
@@ -45,8 +46,7 @@ function getFirstNumberValue(record: Record<string, unknown> | null | undefined,
 const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
 
 function formatElapsedSeconds(value: number) {
-  const seconds = Math.max(0, value) / 1000;
-  return `${seconds.toPrecision(3)}s`;
+  return formatReportSeconds(Math.max(0, value));
 }
 
 function normalizeRuntimeElapsedMs(value: number | null | undefined) {

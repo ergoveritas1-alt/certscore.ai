@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRetainedReportTiming, formatReportSeconds } from "../../lib/scans/report-time";
 import React, { useId, useState, type ReactNode } from "react";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { reportEyebrow, reportSectionTitle } from "./report-typography";
@@ -103,11 +104,11 @@ export function RuntimeObservationTimeline({
                 ) : null}
               </div>
               <p className="mt-0.5 max-w-[11rem] overflow-hidden text-[11px] leading-4 text-zinc-500 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                {event.detail}
+                {formatRetainedReportTiming(event.detail)}
               </p>
               {event === firstConcern && leadMs !== null ? (
                 <span className="absolute -top-10 left-0 whitespace-nowrap rounded-md bg-rose-50 px-2 py-1 text-[0.65rem] font-semibold text-rose-800">
-                  {Math.round(leadMs / 10) / 100}s before consent surface
+                  {formatReportSeconds(leadMs)} before consent surface
                 </span>
               ) : null}
             </div>

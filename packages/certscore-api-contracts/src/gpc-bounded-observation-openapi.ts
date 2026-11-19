@@ -90,6 +90,72 @@ export const gpcBoundedObservationOpenApi = {
         }
       }
     },
+    "presenceEvidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evidenceId",
+          "entityId",
+          "entity",
+          "purpose",
+          "presenceBasis",
+          "msFromAnchor",
+          "processingSignals"
+        ],
+        "properties": {
+          "evidenceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "entityId": {
+            "type": "string",
+            "pattern": "^ent_[a-f0-9]{12}$"
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "analytics",
+              "advertising",
+              "marketing",
+              "session_replay",
+              "personalization",
+              "tag_management",
+              "consent_management",
+              "infrastructure",
+              "security"
+            ]
+          },
+          "presenceBasis": {
+            "type": "string",
+            "enum": [
+              "service_request",
+              "cookie_snapshot"
+            ]
+          },
+          "msFromAnchor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "processingSignals": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "maxItems": 12
+          }
+        }
+      },
+      "maxItems": 32
+    },
     "delivery": {
       "type": "object",
       "additionalProperties": false,
@@ -420,8 +486,11 @@ export const gpcBoundedObservationOpenApi = {
                     ]
                   },
                   "measurement": {
-                    "const": "google_ccm_document_page_view",
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "google_ccm_document_page_view",
+                      "openai_pixel_measurement"
+                    ]
                   },
                   "httpStatus": {
                     "type": "integer",

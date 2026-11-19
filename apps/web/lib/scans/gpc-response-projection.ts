@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "./report-time";
 import { redactGpcProducerBindings } from "./gpc-public-evidence";
 import { readBoundGpcCmpStateComparison } from "@certscore/contracts";
 import { buildGpcGuidance } from "./gpc-guidance";
@@ -101,11 +102,11 @@ export function describeCanonicalGpcResponse(assessment: GpcResponseAssessment) 
  * the historical whole-page quiet test. It never changes response eligibility. */
 export function describeMeasuredGpcActivity(comparison?: GpcActivityComparison) {
   if (!comparison) return null;
-  const seconds = comparison.durationMs / 1000;
+  const duration = formatReportSeconds(comparison.durationMs);
   const { advertisingMarketing: ads, analyticsReplay: analytics } = comparison.activity;
   return {
-    headline: `${seconds}-second matched comparison`,
-    summary: `Over the same ${seconds}-second interval after page commit, advertising/marketing requests: ${ads.baselineRequests} without GPC and ${ads.gpcRequests} with GPC; analytics/replay requests: ${analytics.baselineRequests} without GPC and ${analytics.gpcRequests} with GPC.`,
+    headline: `Matched comparison over ${duration}`,
+    summary: `Over the same ${duration} interval after page commit, advertising/marketing requests: ${ads.baselineRequests} without GPC and ${ads.gpcRequests} with GPC; analytics/replay requests: ${analytics.baselineRequests} without GPC and ${analytics.gpcRequests} with GPC.`,
   };
 }
 

@@ -1,3 +1,4 @@
+import { formatRetainedReportTiming } from "../../lib/scans/report-time";
 import type { CanonicalReportExport } from "./report-export";
 import { buildReportPdfV2Model } from "./report-pdf-v2-model";
 import { pdfNarrativeFindings } from "./report-pdf-evidence";
@@ -36,7 +37,7 @@ export function reportExecutiveSummary(report: CanonicalReportExport): Executive
   const findings: ExecutiveFindingCard[] = groups.map((group, index) => {
     const finding = review.topIssues[index]!, observation = group.observations[0]!;
     const packet = narratives.find(item => pdfPrioritySourceIds(finding).includes(String(item.unifiedFindingId)));
-    return { id: finding.id, title: pdfPublicWords(group.title), summary: pdfPublicWords(finding.summary), status: reportStatusLabel(group.status),
+    return { id: finding.id, title: pdfPublicWords(group.title), summary: formatRetainedReportTiming(pdfPublicWords(finding.summary)), status: reportStatusLabel(group.status),
       impact: observation.severity ?? (typeof packet?.severity === "string" ? packet.severity : "Not recorded"), confidence: observation.confidence ?? "Confidence not established", priority: true, target: "findings" };
   });
   for (const finding of narratives) {
@@ -44,7 +45,7 @@ export function reportExecutiveSummary(report: CanonicalReportExport): Executive
     if (covered.has(id)) continue;
     const presentation = object(finding.presentation);
     const topic = pdfDisplayTopic(pdfTopicForFinding(finding)) ?? "policy";
-    findings.push({ id, title: pdfPublicWords(String(presentation.findingName ?? finding.title ?? id)), summary: pdfPublicWords(String(finding.summary ?? "")),
+    findings.push({ id, title: pdfPublicWords(String(presentation.findingName ?? finding.title ?? id)), summary: formatRetainedReportTiming(pdfPublicWords(String(finding.summary ?? ""))),
       status: id === "post_accept_consent_dependent_activity" ? "For information" : reportStatusLabel(String(finding.status ?? "Finding")),
       impact: typeof finding.severity === "string" ? finding.severity : "Not recorded", confidence: pdfConfidenceLabel(presentation.confidenceScore), priority: false, target: otherIds.has(id) ? "other-findings" : topic });
   }

@@ -41,7 +41,9 @@ test("verified zero flags can coexist with requests, and complete after-click ob
     actionInventories: { accept } }, "gdpr_eprivacy");
   assert.equal(tiles[0]?.count, 0);
   assert.equal(tiles[0]?.metrics?.[0]?.value, 9);
+  assert.equal(tiles[0]?.notes, undefined);
   assert.equal(tiles[1]?.count, 0);
+  assert.deepEqual(tiles[1]?.notes, []);
   assert.deepEqual(tiles[1]?.facts, [{ label: "Choice", value: "Click recorded, choice unconfirmed" }, { label: "Observed duration", value: "1 s" }]);
   assert.equal(tiles[2]?.count, null);
   assert.equal(tiles[4]?.count, null);
@@ -181,7 +183,87 @@ test("a verified California opt-out reports its own bounded advertising sample, 
     assert.equal(tiles[2]?.count, null);
     assert.equal(tiles[3]?.count, rows.length);
     assert.equal(tiles[3]?.evidence, "privacy");
-    assert.equal(tiles[3]?.facts?.find(fact => fact.label === "Post-confirmation observation")?.value, "500 ms");
+    assert.equal(tiles[3]?.facts?.find(fact => fact.label === "Post-confirmation observation")?.value, "0.5 s");
+  }
+});
+
+test("GPC and choice tiles count distinct classified resources, independently of request events and the matched window", () => {
+  const { assessment, activityComparison } = gpcProductFixture({ scanId: scan.id });
+  const gpcResponse = { assessment, activityComparison, headline: "", summary: "", comparisonHeadline: "",
+    coverageSummary: "", observedFacts: [], evidenceRefs: [], californiaDeductionPoints: 0 as const };
+  const row = (key: string, kind: string, inventoryEvidence: string) => ({ key, kind, inventoryEvidence, occurrence: {details:{}}, eventCount: 7, context: { identity: null } });
+  const ad = row("a", "request", "Non-essential");
+  const resources = [ad, ad, row("b", "cookie", "Non-essential"), row("c", "request", "Review"),
+    row("d", "storage", "Unclassified"), row("e", "request", "Essential"), row("f", "embed", "Contextual")];
+  const capture = (items: typeof resources, status: string) => ({
+    inventory: { services: [{ key: "unattributed", context: { identity: null }, resources: items }] },
+    captureCoverage: { status },
+  } as unknown as NonNullable<typeof SHADOW_REPORT.gpcResourceInventory>);
+  const tile = (items: typeof resources, status: string) => buildConsentTrackingOverview({
+    scan, gpcResponse, gpcResourceInventory: capture(items, status),
+  }, "ccpa_cpra")[4]!;
+  assert.equal(tile(resources, "complete").count, 3);
+  assert.deepEqual(tile(resources, "complete").breakdown, { nonEssential: 2, review: 1 });
+  assert.equal(tile([], "complete").count, 0);
+  assert.equal(tile([], "limited").count, null);
+  assert.equal(tile(resources, "limited").count, 3);
+  assert.equal(tile(resources, "limited").state, "partial");
+});
+
+test("both click inventories retain ordinary CDN images as contextual and preserve flagged image activity", () => {
+  for (const action of ["accept", "reject"] as const) {
+    const base = completedActionProjection(action);
+    const request = { requestId: "image", sanitizedUrl: "https://cdn.sanity.io/images/abc/production/photo.png",
+      method: "GET", resourceType: "image", hostname: "cdn.sanity.io", startedAtMs: 200, rootStartedAtMs: 200,
+      httpStatus: 200, nonEssential: false, purpose: "infrastructure", responseCookieNamesSet: [],
+      inFlightAtAcceptanceRegistration: false, inFlightAtRefusalRegistration: false };
+    for (const [row, expected] of [
+      [request, "Contextual"],
+      [{ ...request, sanitizedUrl: request.sanitizedUrl + "?auto=format&w=100" }, "Contextual"],
+      [{ ...request, sanitizedUrl: request.sanitizedUrl + "?uid=redacted" }, "Review"],
+      [{ ...request, responseCookieNamesSet: ["id"] }, "Review"],
+      [{ ...request, purpose: "advertising", nonEssential: true }, "Non-essential"],
+    ] as const) {
+      const capture = projectActionResourceInventory({ ...input, action, projection: { ...base,
+        afterActionCapture: { ...base.afterActionCapture, requestIds: ["image"], requestAncestry: [{ requestId: "image", rootStartedAtMs: 200 }] },
+        afterActionRequests: [row] } });
+      assert.ok(capture);
+      assert.equal(capture.inventory.resources[0]?.inventoryEvidence, expected);
+      const tile = buildConsentTrackingOverview({ scan, actionInventories: { [action]: capture } }, "ccpa_cpra").find(t => t.id === action)!;
+      assert.equal(tile.count, expected === "Contextual" ? 0 : 1);
+    }
+  }
+});
+
+test("Accept and Reject count successful measurement endpoints once and retain their tag libraries", () => {
+  for (const action of ["accept", "reject"] as const) {
+    const base = completedActionProjection(action);
+    const rows = [
+      ["https://www.googletagmanager.com/gtm.js", "GET", "script", true, undefined, 200],
+      ["https://www.googletagmanager.com/gtag/js", "GET", "script", true, undefined, 200],
+      ["https://measure.fixture.test/g/collect", "GET", "fetch", false, "analytics", 200],
+      ["https://pagead2.googlesyndication.com/ccm/collect", "POST", "fetch", true, undefined, 200],
+      ["https://pagead2.googlesyndication.com/ccm/collect", "POST", "fetch", true, undefined, 200],
+      ["https://www.sanity.io/intake/dp/beacon/v1/batch", "POST", "ping", false, undefined, 204],
+      ["https://www.sanity.io/intake/dp/beacon/v1/batch?writeKey=example", "POST", "ping", false, undefined, 200],
+      ["https://failed.fixture.test/g/collect", "GET", "fetch", true, "analytics", 503],
+    ] as const;
+    const requests = rows.map(([sanitizedUrl, method, resourceType, nonEssential, choiceRequestRole, httpStatus], index) => ({
+      sanitizedUrl, method, resourceType, nonEssential, choiceRequestRole, httpStatus, requestId: String(index),
+      hostname:new URL(sanitizedUrl).hostname, startedAtMs:200, rootStartedAtMs:200,
+    }));
+    const capture = projectActionResourceInventory({...input, action, projection:{...base,
+      afterActionCapture:{...base.afterActionCapture, requestIds:requests.map(r=>r.requestId), requestAncestry:requests.map(r=>({requestId:r.requestId, rootStartedAtMs:200}))},
+      afterActionRequests:requests}});
+    assert.ok(capture);
+    const tile = buildConsentTrackingOverview({scan, actionInventories:{[action]:capture}}, "ccpa_cpra").find(t=>t.id===action)!;
+    assert.deepEqual(tile.breakdown, {nonEssential:2, review:1});
+    const beacons = capture.inventory.resources.filter(r => r.name.includes("/intake/dp/beacon/v1/batch"));
+    assert.equal(beacons.length, 1);
+    assert.equal(beacons[0]?.inventoryEvidence, "Review");
+    assert.equal(beacons[0]?.eventCount, 2);
+    assert.equal(capture.inventory.resources.filter(r=>r.inventoryEvidence==="Contextual").length, 2);
+    assert.equal(capture.inventory.resources.find(r=>r.name.includes("failed.fixture"))?.inventoryEvidence,"Unclassified");
   }
 });
 

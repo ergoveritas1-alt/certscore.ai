@@ -1,3 +1,4 @@
+import { formatReportSecondsRange } from "./report-time";
 import { CERT_SCORE_FINDING_REGISTRY } from "./finding-registry";
 import { gpcReaderSummary } from "./gpc-reader-summary";
 import { type AssessmentBrief, normalizeAssessmentCopy } from "./assessment-brief";
@@ -12,7 +13,7 @@ const list = (values: string[]) => values.length < 3 ? values.join(" and ") : `$
 
 function firstObservedTime(times: number[]) {
   const min = Math.min(...times), max = Math.max(...times);
-  return max - min < 0.1 ? `about ${max.toFixed(1)} seconds` : `about ${min.toFixed(1)}–${max.toFixed(1)} seconds`;
+  return `about ${formatReportSecondsRange(max - min < 100 ? max : min, max)}`;
 }
 
 /** Shorten only known projected wording. Unknown copy and its qualifications stay whole. */
@@ -33,7 +34,7 @@ export function assessmentHighlightFacts(summary: string, id: string | null, sup
       const rows = inventory.split("; ").map(row => row.match(/^(.+) \((?:service request and cookie snapshot|cookie snapshot and service request|service request|cookie snapshot), first observed \+(\d+(?:\.\d+)?) ms after Reject click\)$/));
       if (rows.some(row => !row)) return original;
       const names = rows.map(row => RECIPIENT_NAMES[row![1]!] ?? row![1]!);
-      const time = firstObservedTime(rows.map(row => Number(row![2]) / 1000));
+      const time = firstObservedTime(rows.map(row => Number(row![2])));
       return `After the Reject click, non-essential cookies or service requests were observed for ${list(names)}; first observed ${time} after the click.`;
     });
   }
@@ -76,7 +77,7 @@ export function assessmentHighlightFacts(summary: string, id: string | null, sup
     const rows = inventory.split("; ").map(row => row.match(/^(.+) \(first observed \+(\d+(?:\.\d+)?) ms from GPC visit start\)$/));
     if (rows.some(row => !row)) return original;
     const names = rows.map(row => RECIPIENT_NAMES[row![1]!] ?? row![1]!);
-    const times = rows.map(row => Number(row![2]) / 1000);
+    const times = rows.map(row => Number(row![2]));
     const time = firstObservedTime(times);
     core = `With Global Privacy Control (GPC) on, advertising identity, audience or sync activity was first observed for ${list(names)} ${time} into the visit.`;
     return core;

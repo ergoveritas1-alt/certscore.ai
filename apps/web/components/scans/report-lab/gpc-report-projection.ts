@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../../lib/scans/report-time";
 import { buildCanonicalGpcResponseProjection, describeMeasuredGpcActivity } from "../../../lib/scans/gpc-response-projection";
 import type { UnifiedFindingDisplayPacket } from "../../../lib/scans/unified-findings";
 import type { GpcResponseReportProjection } from "./shadow-report-data";
@@ -10,7 +11,7 @@ export function projectGpcTimeline(projection: GpcResponseReportProjection | nul
   if (observation.status === "unavailable" || !observation.delivery.httpHeaderRetained || !observation.delivery.mainNavigatorReadbackRetained) return null;
   const requests = observation.requests;
   const eligibleIds = new Set(requests.advertisingCollectionEvidenceIds ?? []);
-  const events: ActionTimelineProjection["events"] = [{ at: "0s", atMs: 0, label: "GPC visit", detail: "GPC verified on the page request and in the browser", tone: "positive" }];
+  const events: ActionTimelineProjection["events"] = [{ at: "0 s", atMs: 0, label: "GPC visit", detail: "GPC verified on the page request and in the browser", tone: "positive" }];
   const recipients = new Map<string, { label: string; atMs: number }>();
   for (const row of requests.advertisingCollectionRecipients?.rows ?? []) {
     if (!eligibleIds.has(row.evidenceId) || row.observedAtMs === undefined || !Number.isFinite(row.observedAtMs) || row.observedAtMs < 0 ||
@@ -18,9 +19,9 @@ export function projectGpcTimeline(projection: GpcResponseReportProjection | nul
     const existing = recipients.get(row.entityId);
     if (!existing || row.observedAtMs < existing.atMs) recipients.set(row.entityId, { label: row.label, atMs: row.observedAtMs });
   }
-  for (const { label, atMs } of recipients.values()) events.push({ at: `${Math.round(atMs / 10) / 100}s`, atMs,
+  for (const { label, atMs } of recipients.values()) events.push({ at: formatReportSeconds(atMs), atMs,
     label: "Advertising collection", detail: label, vendor: label, tone: "concern" });
-  if (requests.throughMs != null && requests.throughMs > 0) events.push({ at: `${Math.round(requests.throughMs / 10) / 100}s`,
+  if (requests.throughMs != null && requests.throughMs > 0) events.push({ at: formatReportSeconds(requests.throughMs),
     atMs: requests.throughMs, label: "Observation end", detail: "Retained GPC visit closed", tone: "neutral" });
   if (events.length < 2) return null;
   events.sort((a, b) => a.atMs - b.atMs);

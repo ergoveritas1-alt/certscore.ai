@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRetainedReportTiming } from "../../lib/scans/report-time";
 import React, { useId, useState, type ReactNode } from "react";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { reportEyebrow, reportSectionTitle } from "./report-typography";
@@ -99,7 +100,7 @@ export function RuntimeObservationTimeline({
                 ) : null}
               </div>
               <p className={`mt-0.5 max-w-[11rem] overflow-hidden text-[11px] leading-4 ${event.tone === "concern" ? "text-rose-700" : "text-zinc-500"} [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]`}>
-                {event.detail}
+                {formatRetainedReportTiming(event.detail)}
               </p>
 
             </div>

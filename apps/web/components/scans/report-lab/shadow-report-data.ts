@@ -311,8 +311,8 @@ export const SHADOW_REPORT: ShadowReportData = {
     url: "https://www.pferdeklinik-roentorf.de/kontakt-anfahrt/",
     host: "www.pferdeklinik-roentorf.de",
     createdAt: "Aug 24, 2026, 10:08:07 PM PDT",
-    duration: "31 sec",
-    observedWindow: "25.1 sec",
+    duration: "31 s",
+    observedWindow: "25.1 s",
     origin: "Germany (EU)",
     originCode: "EU-DE",
     benchmark: "Veterinary",
@@ -350,41 +350,41 @@ export const SHADOW_REPORT: ShadowReportData = {
     limited: 8
   },
   verdict:
-    "Overall, this scan points to a focused review rather than a site-wide breakdown. The clearest issue is visitor choice: Accept was retained on the first layer, while Reject and Options were not. Tracking activity and embedded services also appeared before the first consent surface at 9.6s. Transport security checks were observed. Eight checklist items remain technically limited and should be verified manually.",
+    "Overall, this scan points to a focused review rather than a site-wide breakdown. The clearest issue is visitor choice: Accept was retained on the first layer, while Reject and Options were not. Tracking activity and embedded services also appeared before the first consent surface at 9.6 s. Transport security checks were observed. Eight checklist items remain technically limited and should be verified manually.",
   executiveHeadline: "4 issues to review",
   nextStep:
     "Start with the first-layer refusal path, then review tag and embed gating before any recorded consent action.",
   timeline: [
-    { at: "0s", atMs: 0, label: "Scan start", detail: "Public page observation began", tone: "neutral" },
+    { at: "0 s", atMs: 0, label: "Scan start", detail: "Public page observation began", tone: "neutral" },
     {
-      at: "5.71s",
+      at: "5.71 s",
       atMs: 5710,
       label: "Third-party request",
       detail: "Tracking-classified activity first observed",
       tone: "concern"
     },
     {
-      at: "5.71s",
+      at: "5.71 s",
       atMs: 5710,
       label: "Embedded content",
       detail: "Third-party embedded content first observed",
       tone: "concern"
     },
     {
-      at: "6.61s",
+      at: "6.61 s",
       atMs: 6610,
       label: "Social/media embed",
       detail: "Meta/Facebook evidence first observed",
       tone: "concern"
     },
     {
-      at: "9.6s",
+      at: "9.6 s",
       atMs: 9600,
       label: "Consent banner",
       detail: "Accept observed; Reject and Options not observed",
       tone: "positive"
     },
-    { at: "25.1s", atMs: 25100, label: "Observation end", detail: "Retained scan window closed", tone: "neutral" }
+    { at: "25.1 s", atMs: 25100, label: "Observation end", detail: "Retained scan window closed", tone: "neutral" }
   ],
   findings: [
     {
@@ -420,12 +420,12 @@ export const SHADOW_REPORT: ShadowReportData = {
       title: "Pre-consent non-essential tracking",
       status: "Potential gap",
       summary:
-        "Tracking-classified third-party requests fired before any recorded consent action; first seen 5.71s after scan start.",
+        "Tracking-classified third-party requests fired before any recorded consent action; first seen 5.71 s after scan start.",
       focus: "Tag gating",
       vendors: ["Google"],
       evidence: [
-        "First tracking-classified third-party request: 5.71s",
-        "Consent banner first observed: 9.6s",
+        "First tracking-classified third-party request: 5.71 s",
+        "Consent banner first observed: 9.6 s",
         "Third-party requests in the report summary: 8"
       ],
       correctionSteps: [
@@ -451,7 +451,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       focus: "Embed gating",
       vendors: ["Google"],
       evidence: [
-        "Embedded content first observed: 5.71s",
+        "Embedded content first observed: 5.71 s",
         "Map embed evidence: google.com and www.google.com",
         "Review retained domains by purpose before changing implementation."
       ],
@@ -474,12 +474,12 @@ export const SHADOW_REPORT: ShadowReportData = {
       title: "Social/media embeds or plugins before consent",
       status: "Potential gap",
       summary:
-        "A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Meta/Facebook; first seen 6.61s.",
+        "A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Meta/Facebook; first seen 6.61 s.",
       focus: "Social embeds",
       vendors: ["Meta/Facebook"],
       evidence: [
         "Observed vendor family: Meta/Facebook",
-        "First seen: 6.61s after scan start",
+        "First seen: 6.61 s after scan start",
         "The report treats this as observed pre-consent embed evidence, not a legal conclusion."
       ],
       correctionSteps: [
@@ -594,7 +594,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       title: "Pre-consent non-essential tracking",
       status: "Potential gap",
       summary:
-        "Tracking-classified 3rd party requests fired before any recorded consent action; first seen 5.71s after scan start.",
+        "Tracking-classified 3rd party requests fired before any recorded consent action; first seen 5.71 s after scan start.",
       correctionSteps: [
         "Gate tracking-classified third-party requests until the applicable visitor choice is recorded.",
         "Re-scan from the same region and verify the retained request sequence."
@@ -622,7 +622,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       title: "Social/media embeds or plugins loaded before consent",
       status: "Potential gap",
       summary:
-        "A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Meta/Facebook; first seen 6.61s after scan start.",
+        "A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: Meta/Facebook; first seen 6.61 s after scan start.",
       correctionSteps: [
         "Review the Meta/Facebook embed, plugin, widget, or pixel initialization path.",
         "Use a non-networked placeholder until the applicable visitor choice is recorded where appropriate."
@@ -634,7 +634,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       title: "Embedded third-party services before consent",
       status: "Partial concern",
       summary:
-        "3rd party embedded content loaded before any recorded consent action, including map embed evidence (google.com and www.google.com), social embed evidence (facebook.com and www.facebook.com), lower-risk font/static resource evidence (fonts.googleapis.com). Review retained domains by purpose; first seen 5.71s after scan start.",
+        "3rd party embedded content loaded before any recorded consent action, including map embed evidence (google.com and www.google.com), social embed evidence (facebook.com and www.facebook.com), lower-risk font/static resource evidence (fonts.googleapis.com). Review retained domains by purpose; first seen 5.71 s after scan start.",
       correctionSteps: [
         "Review each retained embedded domain by purpose and gate non-essential services until the applicable visitor choice is recorded.",
         "Keep lower-risk static-resource evidence distinct from tracking-classified activity during remediation."
@@ -822,7 +822,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       evidence: "Non-essential",
       entityRelationship: "External entity",
       name: "Facebook Page Plugin",
-      observed: "6.21s",
+      observed: "6.21 s",
       domains: "facebook.com",
       relationship: "Cross-site",
       confidence: "High",
@@ -842,7 +842,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       evidence: "Contextual",
       entityRelationship: "Unknown",
       name: "BST DSGVO Cookie",
-      observed: "5.57s",
+      observed: "5.57 s",
       domains: "pferdeklinik-roentorf.de",
       relationship: "Same-site",
       confidence: "High",
@@ -862,7 +862,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       evidence: "Contextual",
       entityRelationship: "External entity",
       name: "Google Fonts",
-      observed: "5.71s",
+      observed: "5.71 s",
       domains: "fonts.googleapis.com, fonts.gstatic.com",
       relationship: "Cross-site",
       confidence: "High",

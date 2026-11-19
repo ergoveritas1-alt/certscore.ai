@@ -16,7 +16,7 @@ export function documentFixture(focus:'gdpr_eprivacy'|'ccpa_cpra',choices=false,
  scan.runtimeArtifacts.visualEvidenceArtifacts=[{id:'owned-image',key:'owned-fixture/image.png',status:'available',sha256:'d'.repeat(64),pageUrl:'https://example.test/',width:100,height:100,
   bannerCrop:{...crop,version:'consent_banner_crop.v1'},rejectCrop:{...crop,version:'consent_control_crop.v1',control:'reject'},prominenceCrop:{...crop,version:'consent_prominence_crop.v1'}}];
  scan.canonicalReportProjection.normalizedConcerns=cmp.normalizedConcerns;
- const g=gpcProductFixture({scanId:scan.scan.id,...(lateCollection?{urls:['https://example.test/late-noise','https://www.facebook.com/tr/?id=12345&ev=PageView']}:{}),priorCmpState:!notReady,...(notReady?{notReady:'cmp_status_not_loaded' as const}:{})});
+ const g=gpcProductFixture({scanId:scan.scan.id,...(lateCollection?{matchedWindowMs:500,urls:['https://example.test/late-noise','https://www.facebook.com/tr/?id=12345&ev=PageView']}:{}),priorCmpState:!notReady,...(notReady?{notReady:'cmp_status_not_loaded' as const}:{})});
  const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts:{gpcResponseAssessment:g.assessment,gpcActivityComparison:g.activityComparison,gpcCmpStateComparison:g.cmpStateComparison},reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
  scan.canonicalReportProjection.globalUnifiedFindings=findings;scan.canonicalReportProjection.ownerUnifiedFindings=findings;
  if(choices)for(const f of terminal)(scan.runtimeArtifacts as Record<string,unknown>)[f.action==='accept'?'postAcceptEvidenceProjection':'postRefusalEvidenceProjection']=f.projection;

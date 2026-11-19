@@ -4,8 +4,7 @@ import {type CanonicalEvidenceBundle, policyTextEvidenceProjectionSchema} from "
 export const CA_FIXTURE_URL = "https://california-fixture.test/";
 export const CA_FIXTURE_SOURCE = {verificationStatus:"verified",sha256:"a".repeat(64)};
 export const CA_FIXTURE_POLICY = "California Privacy Notice. Categories of personal information include identifiers and contact details. We use personal information to provide requested services. We retain personal information for as long as necessary to fulfill those purposes. You have the right to know what personal information we collect. You have the right to delete your personal information. You have the right to correct inaccurate personal information. We will not discriminate against you for exercising your privacy rights. To exercise your privacy rights, contact privacy@example.test or submit our online form. We do not sell or share personal information.";
-export function californiaCoverageFixture(text=CA_FIXTURE_POLICY) {
-  const url=CA_FIXTURE_URL;
+export function californiaCoverageFixture(text=CA_FIXTURE_POLICY, url=CA_FIXTURE_URL) {
   const inspection = {contractVersion:"certscore.privacy-choice-inspection.v4",homepageAccessPolicy:"representative_homepage.v1",
     documentUrl:url,capturedAt:"2026-10-17T12:00:01.000Z",sourceHash:"b".repeat(64),scope:"rendered_named_links_and_buttons",coverage:"complete",
     namedChoiceCandidateCount:0,unnamedControlCount:0,hiddenUnnamedControlCount:0,candidateEnumerationTruncated:false,

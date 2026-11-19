@@ -1,3 +1,4 @@
+import { formatReportSeconds, formatRetainedReportTiming } from "../../../lib/scans/report-time";
 import { NoGoBrowserExtensionRecovery } from "../no-go-browser-extension-recovery";
 import { GpcProductEvidence } from "../../scans/gpc-product-evidence";
 import { GpcActivityComparison } from "../../scans/gpc-activity-comparison";
@@ -691,12 +692,6 @@ function HorizontalTimeline({ dominant = false, report }: { dominant?: boolean; 
   return <RuntimeObservationTimeline dominant={dominant} events={report.timeline} />;
 }
 
-function formatChoicePathOffset(milliseconds: number) {
-  if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`;
-  const seconds = Math.round(milliseconds / 100) / 10;
-  return `${seconds}s`;
-}
-
 function CompactAcceptPathCard({ projection }: { projection: NonNullable<ShadowReportData["acceptPath"]> }) {
   const presentation = projection.state === "review_signal"
     ? {
@@ -722,7 +717,7 @@ function CompactAcceptPathCard({ projection }: { projection: NonNullable<ShadowR
             cardTone: "border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90",
           };
   const context = [
-    projection.observationWindowMs !== null ? `${formatChoicePathOffset(projection.observationWindowMs)} observation` : null,
+    projection.observationWindowMs !== null ? `${formatReportSeconds(projection.observationWindowMs)} observation` : null,
     projection.resolverMethod === "tcf_api_cmp_registry_recipe"
       ? "TCF + CMP registry resolver"
       : projection.resolverMethod
@@ -747,7 +742,7 @@ function CompactAcceptPathCard({ projection }: { projection: NonNullable<ShadowR
         <ul className="mt-1.5 space-y-1" aria-label="Retained Accept-path evidence">
           {projection.evidenceRows.map((row, index) => (
             <li className="rounded-lg border border-white/80 bg-white/75 px-2 py-1 text-[10px] leading-4 text-slate-700" key={`${row.label}:${index}`}>
-              <span className="font-semibold text-slate-900">{row.label}</span>{row.detail ? <span> · {row.detail}</span> : null}
+              <span className="font-semibold text-slate-900">{row.label}</span>{row.detail ? <span> · {formatRetainedReportTiming(row.detail)}</span> : null}
             </li>
           ))}
         </ul>
@@ -819,7 +814,7 @@ function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: S
         <h4 className="text-sm font-semibold leading-5 text-zinc-950">{projection.label}</h4>
         <p className="text-xs leading-5 text-zinc-600">{projection.note}</p>
         <div className="mt-3 flex flex-wrap gap-1.5 text-[0.68rem] text-zinc-600">
-          {projection.observationWindowMs !== null ? <span className="rounded-md bg-zinc-100 px-2 py-1">{formatChoicePathOffset(projection.observationWindowMs)} window</span> : null}
+          {projection.observationWindowMs !== null ? <span className="rounded-md bg-zinc-100 px-2 py-1">{formatReportSeconds(projection.observationWindowMs)} window</span> : null}
           {events.length > 0 ? <span className="rounded-md bg-zinc-100 px-2 py-1">{events.length} retained event{events.length === 1 ? "" : "s"}</span> : null}
         </div>
         {projection.registrationConfirmed !== undefined ? (
@@ -831,8 +826,8 @@ function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: S
             <ul className="mt-2 space-y-2 text-xs leading-5 text-zinc-600">
               {evidence.map((event, index) => (
                 <li className="flex gap-2" key={`${event.label}:${index}`}>
-                  <span className={`${monoClass} min-w-10 text-zinc-500`}>{event.atMs === null ? "—" : formatChoicePathOffset(event.atMs)}</span>
-                  <span><strong className="font-semibold text-zinc-800">{event.label}</strong>{event.detail ? ` · ${event.detail}` : ""}</span>
+                  <span className={`${monoClass} min-w-10 text-zinc-500`}>{event.atMs === null ? "—" : formatReportSeconds(event.atMs)}</span>
+                  <span><strong className="font-semibold text-zinc-800">{event.label}</strong>{event.detail ? ` · ${formatRetainedReportTiming(event.detail)}` : ""}</span>
                 </li>
               ))}
             </ul>

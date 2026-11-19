@@ -1,10 +1,28 @@
 # CertScore.ai collection review risk policy
 
+## Verified collection under GPC or after Reject
+
+New local assessments use `california.collection-review.v8-verified-event`. One recipient incurs 4 points for classified presence, 7 for a verified successful collection with unresolved purpose, or 15 for qualified collection. Apply the strongest evidence once per recipient per visit. Repeated requests add no points. For 1–4+ verified recipients the totals are 7/11/13/15. Additional presence-only recipients use the marginal steps of the existing presence schedule. A declared sale opt-out on a Google CCM page view excludes that request from review scoring. An independent eligible request can still count.
+
+Both visits share the 15-point partial and 47-point combined caps. The existing per-visit full-schedule ceiling and independent Reject identifier rule still apply. Historical assessments retain their versioned treatment.
+
+
 Owner approval: October 22, 2026. Local implementation; no deployment or historical production rewrite.
 
 CertScore.ai separately assesses observed facts, potential regulatory exposure and stronger purpose-qualified collection. A supported privacy-risk finding does not require a legal violation determination. Missing evidence alone never creates a finding, a pass or a deduction.
 
-## Current recipient scoring by visit
+## November 18, 2026 · Non-essential presence
+
+For new California assessments, `california.collection-review.v7-presence` counts a canonical recipient once per verified GPC or applicable Reject visit. A retained non-essential cookie snapshot or a classified service request supports partial credit. A successful event with unresolved purpose receives the same partial weight. A snapshot establishes presence at the read time. Full qualification continues to require request-specific collection evidence.
+
+| Recipients on one visit | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8+ |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Partial points | 4 | 7 | 9 | 11 | 12 | 13 | 14 | 15 |
+| Full points | 15 | 25 | 32 | 37 | 40 | 43 | 45 | 47 |
+
+Apply the strongest tier per recipient per visit and add the two visit effects. Cap each mixed visit at the full schedule for its recipient count, all partial effects at 15, and the combined family at 47. Existing request-local processing restrictions and the independent Reject identifier rule apply. New scores using the partial schedule carry `california-regulatory-posture.v25-presence`. Historical assessments use their recorded policy versions.
+
+## November 17, 2026 · Recipient scoring by visit
 
 The November 17, 2026 approval supersedes the cross-visit recipient union below for new assessments. Under `california.collection-review.v6-per-visit` and `california-post-reject.v7-per-visit`, CertScore.ai applies the existing recipient schedules separately to the GPC and Reject visits. A canonical recipient gets its strongest supported collection tier once per visit, regardless of request count. Potential collection on both visits contributes 7 + 7 for one recipient. Qualified collection on both contributes 15 + 15. Qualified collection on one and potential collection on the other contributes 15 + 7 for one recipient.
 
@@ -56,3 +74,31 @@ No new browser visit, Options opening, request/header read, wait, retry, worker,
 Primary background: [California privacy FAQ](https://www.cppa.ca.gov/faq.html), [EU cookie guidance](https://europa.eu/youreurope/business/growing/digitalising/online-privacy/index_en.htm), [EDPB lawful processing guidance](https://www.edpb.europa.eu/sme/be-compliant/process-personal-data-lawfully_en). These sources explain the regulatory objectives; the numeric weights are CertScore.ai product policy.
 
 October 22 scale update: scoring-only computation with unchanged evidence retention and capture; no incremental infrastructure or per-scan cost.
+
+### Google CCM and OpenAI event review
+
+New bounded request proofs can retain an exact-route POST event receipt on the Reject or GPC visit.
+For Google's `pagead2.googlesyndication.com/ccm/collect`, a single explicit page-view event must
+identify the observed document. For OpenAI's `bzr.openai.com/v1/sdk/events`, the receipt records
+a nonempty submission. The review path requires successful, timely, request-bound evidence and
+complete supported processing inspection. Existing request-local restrictions and per-visit
+recipient schedules apply. This receipt establishes review eligibility only. Historical packets
+without the receipt retain their existing interpretation. SDK downloads, configuration reads and
+consent-only pings do not produce the receipt. Capture uses the existing budgets.
+
+The optional `measurementFacts` in bounded Reject and GPC request proofs describes
+what the exact POST carried. Google CCM can retain a recognized event type, the
+SHA-256 of a single supported `tid`, and whether a supported `gclid` was present.
+For the OpenAI web pixel, the reader follows the published
+[SDK](https://bzrcdn.openai.com/sdk/oaiq.min.js) envelope (reviewed version
+0.1.105). It hashes the query pixel ID and retains the index and standard type
+of each recognized event in batches of up to eight, explicit boolean opt-out,
+and observed click-reference or hashed-contact field kinds. Batch-level matching
+fields are attributed only in single-event batches. Custom event names, pixel IDs
+in clear text, contact hashes and click-reference values are excluded from these
+facts. The existing body parser and limits apply. A supported OpenAI batch now receives complete body inspection only when every
+event and its nested fields match the reviewed SDK format. Telemetry-only batches,
+event opt-outs and explicit diagnostic consent denial cannot supply a verified
+measurement receipt. Unsupported members or batches over the existing limits
+can retain individual field observations without establishing complete inspection. These facts
+alone do not qualify sale/sharing purpose or alter the score.

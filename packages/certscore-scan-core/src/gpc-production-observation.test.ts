@@ -413,3 +413,24 @@ test("body-only Analytics property and identity proof can add a recipient withou
  bundle.gpcObservationSession!.requestProofCapture.rows[0]!.proof.requestId="different-request";
  assert.equal(run().requests.advertisingCollectionEvidenceIds?.length,0);
 });
+
+test("exact collection POST receipts support GPC review under the delivered signal", () => {
+ for (const google of [false,true]) {
+  const route=google?"https://pagead2.googlesyndication.com/ccm/collect":"https://bzr.openai.com/v1/sdk/events";
+  const url=google?route+"?en=page_view&dl="+encodeURIComponent(gpcProductionRuntimeFixture().url):route;
+  const {bundle,event,run}=collectorFixture(url);
+  event.method="POST"; event.resourceType="fetch"; event.collectionEndpointObserved=false;
+  const session=bundle.gpcObservationSession!;
+  const {captureCaliforniaRejectRequest}=require("./california-reject-request");
+  const proof=captureCaliforniaRejectRequest({url,method:"POST",requestId:event.requestId,startedAtMs:event.timestampMs,httpStatus:200,
+   hasBody:!google,body:google?null:'{"event":"page_view"}',headers:google?{}:{"content-type":"application/json"}});
+  session.requestProofCapture={contractVersion:"gpc_request_capture.v1",inspected:1,skipped:0,pending:0,failed:0,retentionDropped:0,rows:[
+   {eventId:event.eventId,documentToken:session.mainDocument!.documentToken,capturedAtMs:900,proof:{...proof,contractVersion:"gpc_request_proof.v1"}}],restrictions:[]};
+  const result=run();
+  assert.equal(result.requests.collectionReview?.rows.length,1);
+  assert.equal(result.requests.collectionReview?.rows[0]?.qualification.activity,"unresolved");
+  assert.equal(result.requests.advertisingCollectionEvidenceIds?.length,0);
+  bundle.networkResponseEvents[0]!.status=500;
+  assert.equal(run().requests.collectionReview?.rows.length,0);
+ }
+});

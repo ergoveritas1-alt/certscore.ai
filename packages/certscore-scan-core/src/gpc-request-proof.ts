@@ -32,7 +32,7 @@ export function createGpcRequestProofCapture(now:()=>number){
   reserve(event:Pick<NetworkEvent,"eventId"|"timestampMs"|"requestUrl"> & Partial<Pick<NetworkEvent,"requestId"|"method">>,documentToken:string|undefined,
     request:{postData?:()=>string|null;method?:()=>string}){
    if(finished||!documentToken||!request.postData||!request.method||!event.requestId)return null;
-   const recipient=californiaProofRecipient(event.requestUrl);if(!recipient)return null;
+   const recipient=californiaProofRecipient(event.requestUrl,event.method);if(!recipient)return null;
    if(!budget.available(true,recipient.entityId)){skipped++;return null;}
    budget.retained(true,recipient.entityId);inspected++;pending++;statuses.set(event.eventId,null);
    let body:string|null|undefined;
@@ -77,7 +77,7 @@ export function qualifyGpcRequest(event:Pick<NetworkEvent,"eventId"|"requestId"|
  session:GpcObservationSession,context:Parameters<typeof inspectGpcRequestQualification>[1]){
  const base=inspectGpcRequestQualification(event.requestUrl,context);
  const capture=session.requestProofCapture;
- const expected=californiaProofRecipient(event.requestUrl),url=new URL(event.requestUrl);
+ const expected=californiaProofRecipient(event.requestUrl,event.method),url=new URL(event.requestUrl);
  const row=capture?.rows.find(r=>r.eventId===event.eventId&&r.documentToken===session.mainDocument?.documentToken&&
   r.proof.requestId===event.requestId&&r.proof.method===event.method&&r.proof.startedAtMs===event.timestampMs&&
   r.proof.urlSha256===gpcDocumentHash(event.requestUrl)&&r.proof.origin===url.origin&&r.proof.path===url.pathname&&r.proof.entity.entityId===expected?.entityId);

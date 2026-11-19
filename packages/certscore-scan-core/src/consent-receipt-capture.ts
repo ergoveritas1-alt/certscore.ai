@@ -8,6 +8,7 @@ import type {ActionStateWrite} from './consent-action-semantic-state.js';
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const captures=new WeakMap<object,ReturnType<typeof installConsentReceiptCapture>>();
 const enumValues=new Set(['yes','no','allow','deny','ACCEPT','DENY','granted','denied','mixed','unknown','active','inactive','always active']);
+const TRUSTARC_RECEIPT_COOKIE_NAMES = ["notice_preferences", "notice_gdpr_prefs", "cmapi_cookie_privacy"];
 const candidate=(name:string)=>/consent|optanon|^cmplz_|^__cmp|^cmapi_|(?:^|[.])notice_(?:gdpr_prefs|preferences)$|(?:^|[.])cmapi_cookie_privacy$/i.test(name)||name.toLowerCase().startsWith('_iub_cs')&&matchesCanonicalCmpCookieName(name,'_iub_cs');
 function duplicateJsonFields(text:string):boolean{
  const stack:Array<Set<string>|null>=[];
@@ -27,6 +28,17 @@ export function projectReceiptValue(key:string,value:string,api=false):Projectio
   if(out.facts.length===16){out.factsLimited=true;return;}out.facts.push({pathSha256:hash(path),value:value as boolean|'yes'});};
  if(value.length>2048){out.factsLimited=true;return out;}
  let text=value;try{text=decodeURIComponent(text);}catch{out.factsLimited=true;return out;}
+ // Retain the exact TrustArc encoding seen on both preference cookies. Its
+ // site-specific category meaning is not a whole-choice decision.
+ if((key==='notice_preferences'||key==='notice_gdpr_prefs')&&text==='0:'){
+  out.format='scalar';add('trustarc.preference_code_zero_colon',true);return out;
+ }
+ if(key==='cmapi_cookie_privacy'&&text==='permit 1 required'){
+  out.format='scalar';add('trustarc.permit_1_required_literal',true);return out;
+ }
+ if(key==='cmapi_cookie_privacy'&&text==='permit_1_required'){
+  out.format='scalar';add('trustarc.permit_1_required_underscore_literal',true);return out;
+ }
  if(key==='cookieyes-consent'){
   out.format='cookieyes';const seen=new Set<string>();
   for(const part of text.split(',').slice(0,25)){const pieces=part.split(':');const name=pieces[0]!;
@@ -94,7 +106,11 @@ export function installConsentReceiptCapture(page:Page,input:{scanId:string;acti
  const detach = (frame: Frame) => {if (!closed && frame === actionFrame) recordNavigation('control_frame_detached');};
  page.on('framenavigated',navigation);
  page.on('framedetached',detach);
- const handle={token():Token|undefined{if(closed||invalid||input.signal?.aborted)return;if(spent>=4){limited=true;return;}return{capture:handle,epoch,phase,url:page.url()};},
+ // Initial polling and replayed writes share 3 ms on Reject. Leave the
+ // last millisecond of the existing cooperative budget for final readbacks.
+ const processingBudget=(readPhase:typeof phase,source?:ConsentReceiptObservation['source'])=>
+  input.action==='reject'&&(readPhase!=='terminal'||source==='write')?3:4;
+ const handle={token():Token|undefined{if(closed||invalid||input.signal?.aborted)return;if(spent>=processingBudget(phase)){limited=true;return;}return{capture:handle,epoch,phase,url:page.url()};},
   phase(value:ConsentReceiptObservation['phase']){phase=value;},
   dispatch(at:number, framed?:{controlFrame?:Frame}){
    dispatched=at;phase='initial';
@@ -116,9 +132,10 @@ export function installConsentReceiptCapture(page:Page,input:{scanId:string;acti
   // A permanently ineligible cookie branch may keep one diagnostic read per
   // invocation. Skipped intermediate snapshots must remain incomplete evidence.
   markObservationsTruncated(){if(!closed)truncated=true;},
-  record(token:Token,key:string,value:string|undefined,base:Omit<ConsentReceiptObservation,'phase'|'keySha256'|'readAtEpochMs'|'available'|'format'|'facts'|'factsLimited'|'omittedFields'|'valueSha256'>,exactWrite?:{assignment?:string;url?:string;limited?:boolean;configuration?:boolean;partialApi?:boolean;omittedFields?:number}){
+  record(token:Token,key:string,value:string|undefined,base:Omit<ConsentReceiptObservation,'phase'|'keySha256'|'readAtEpochMs'|'available'|'format'|'facts'|'factsLimited'|'omittedFields'|'valueSha256'>,exactWrite?:{assignment?:string;url?:string;limited?:boolean;configuration?:boolean;partialApi?:boolean;omittedFields?:number;prioritizeTerminalAvailability?:boolean}){
    if(closed||invalid||input.signal?.aborted||token.epoch!==epoch||token.url!==page.url())return;
-   if(spent>=4){limited=true;return;}const start=performance.now();
+   if(input.action==='reject'&&token.phase!==phase){limited=true;return;}
+   if(spent>=processingBudget(token.phase,base.source)){limited=true;return;}const start=performance.now();
    try{
     const oversized=value!==undefined&&value.length>2048;
     if(oversized)truncated=true;
@@ -127,7 +144,9 @@ export function installConsentReceiptCapture(page:Page,input:{scanId:string;acti
     // Oversized values are available inputs, not missing receipts. Retain only
     // that fact: do not hash, copy or interpret an out-of-budget value.
     const signature=JSON.stringify([token.phase,key,oversized?{oversized:true}:value,base]);if(seen.has(signature))return;
-    const max=token.phase==='initial'?16:8;if(inspections[token.phase]>=max){truncated=true;return;}
+    const terminalWrite=input.action==='reject'&&token.phase==='terminal'&&base.source==='write';
+    const inspectionLimit=token.phase==='initial'?16:8;
+    if(inspections[token.phase]>=inspectionLimit-(terminalWrite?2:0)){truncated=true;return;}
     inspections[token.phase]++;seen.add(signature);
     let identitySha256=base.identitySha256;
     if(!oversized&&exactWrite?.assignment&&exactWrite.url&&value!==undefined){const proof=captureExactCookieWrite({assignment:exactWrite.assignment,url:exactWrite.url,observedAtMs:0,source:'main_document_setter'});
@@ -141,12 +160,19 @@ export function installConsentReceiptCapture(page:Page,input:{scanId:string;acti
     const fits=(candidate:ConsentReceiptObservation[])=>candidate.length<=8&&JSON.stringify(candidate).length<=7000;
     if(!fits([...rows,row])){
      truncated=true;
-     if(oversized||value===undefined)return;
+     const terminalTrustArcCookie = input.action==='reject'&&token.phase==='terminal'&&
+      base.source==='cookie'&&exactWrite?.prioritizeTerminalAvailability;
+     if(oversized||(value===undefined&&!terminalTrustArcCookie))return;
      // Newly retained availability markers must not displace a later bounded
-     // value. Only these limited, unhashed markers may yield their output slot.
+     // value. Terminal Reject readbacks can also displace initial polling
+     // evidence, including exact TrustArc cookie absence at the final read.
      const preferred=[...rows,row];
      while(!fits(preferred)){
-      const index=preferred.findIndex(r=>r.available&&r.valueSha256===undefined&&r.factsLimited&&r.facts.length===0);
+      let index=preferred.findIndex(r=>r.available&&r.valueSha256===undefined&&r.factsLimited&&r.facts.length===0);
+      if(index<0&&input.action==='reject'&&row.phase==='terminal'&&row.source!=='write'){
+       index=preferred.findIndex(r=>r.phase==='initial'&&r.source==='write');
+       if(index<0)index=preferred.findIndex(r=>r.phase==='initial');
+      }
       if(index<0)return;preferred.splice(index,1);
      }
      rows=preferred;return;
@@ -164,18 +190,30 @@ export function installConsentReceiptCapture(page:Page,input:{scanId:string;acti
   }};
  captures.set(page,handle);captures.set(page.context(),handle);return handle;
 }
-export function retainReceiptCookies(token:Token|undefined,cookies:Awaited<ReturnType<BrowserContext['cookies']>>,name:string){
+export function retainTrustArcReceiptCookies(token:Token|undefined,cookies:Awaited<ReturnType<BrowserContext['cookies']>>){
+ for(const name of TRUSTARC_RECEIPT_COOKIE_NAMES)retainReceiptCookies(token,cookies,name,true);
+}
+export function retainReceiptCookies(token:Token|undefined,cookies:Awaited<ReturnType<BrowserContext['cookies']>>,name:string,prioritizeTerminalAvailability=false){
  if(!token)return;try{
   const url=new URL(token.url);
   const matching=cookies.filter(c=>{const domain=c.domain.replace(/^\./,'');return (c.name===name||c.name.toLowerCase().startsWith(name.toLowerCase().replace(/[*]$/,''))&&matchesCanonicalCmpCookieName(c.name,name))&&
    (url.hostname===domain||c.domain.startsWith('.')&&url.hostname.endsWith('.'+domain))&&
    (url.pathname===c.path||url.pathname.startsWith(c.path.endsWith('/')?c.path:c.path+'/'))&&(!c.secure||url.protocol==='https:');});
-  if(!matching.length)token.capture.record(token,name,undefined,{source:'cookie',storageType:'cookie',cookieMultiplicity:'none'});
+  if(!matching.length)token.capture.record(token,name,undefined,{source:'cookie',storageType:'cookie',cookieMultiplicity:'none'},{prioritizeTerminalAvailability});
   for(const c of matching.slice(0,2))token.capture.record(token,c.name,c.value,{source:'cookie',storageType:'cookie',cookieMultiplicity:matching.length===1?'unique':'ambiguous',identitySha256:hash(JSON.stringify(['cookie_name_domain_path_partition',c.domain.toLowerCase().replace(/^\./,''),c.path,c.partitionKey??'',c.name]))});
  }catch{/* Observations cannot change confirmation. */}}
 export function retainReceiptWrites(token:Token|undefined,writes:ActionStateWrite[]){
- if(!token)return;try{for(const w of writes.slice(-96))if(candidate(w.name)&&w.value!==undefined&&(!w.documentUrl||w.documentUrl===token.url))
-  token.capture.record(token,w.name,w.value,{source:'write',storageType:w.storageType,writeSequence:w.sequence,writeObservedAtEpochMs:w.observedAtEpochMs},w.cookieAssignment&&w.documentUrl?{assignment:w.cookieAssignment,url:w.documentUrl}:undefined);}catch{/* Optional retention never discards observed writes. */}
+ if(!token)return;
+ try{
+  for(const w of writes.slice(-96)){
+   const firstPartyPreference=w.name==='cookie_preferences'&&w.storageType==='cookie'&&w.documentUrl===token.url;
+   if(!firstPartyPreference&&!candidate(w.name))continue;
+   if(w.value===undefined||(w.documentUrl&&w.documentUrl!==token.url))continue;
+   token.capture.record(token,w.name,w.value,{source:'write',storageType:w.storageType,
+    writeSequence:w.sequence,writeObservedAtEpochMs:w.observedAtEpochMs},
+    w.cookieAssignment&&w.documentUrl?{assignment:w.cookieAssignment,url:w.documentUrl}:undefined);
+  }
+ }catch{/* Optional retention never discards observed writes. */}
 }
 export function retainReceiptApi(token:Token|undefined,provider:CmpApiConsentProvider,snapshot:CmpApiConsentSnapshot|undefined){
  token?.capture.record(token,provider,snapshot?.canonicalState,{source:'api',provider,...(snapshot?{decision:snapshot.decision,eventSequence:snapshot.eventSequence,

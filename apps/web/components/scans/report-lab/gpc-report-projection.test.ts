@@ -133,14 +133,14 @@ test("responsive GPC card describes the measured request counts", async () => {
     assessment: { status: "responsive" },
     activityComparison: gpcActivityComparisonFixture(),
   } as GpcResponseReportProjection;
-  assert.equal(gpcCardResponse(projection), "Over the same 1-second interval after page commit, advertising/marketing requests: 2 without GPC and 1 with GPC; analytics/replay requests: 1 without GPC and 1 with GPC.");
+  assert.equal(gpcCardResponse(projection), "Over the same 1 s interval after page commit, advertising/marketing requests: 2 without GPC and 1 with GPC; analytics/replay requests: 1 without GPC and 1 with GPC.");
   projection.activityComparison!.activity.advertisingMarketing.baselineRequests = 1;
   projection.activityComparison!.activity.advertisingMarketing.gpcRequests = 0;
   projection.activityComparison!.activity.analyticsReplay.baselineRequests = 5;
   projection.activityComparison!.activity.analyticsReplay.gpcRequests = 5;
-  assert.equal(gpcCardResponse(projection), "Over the same 1-second interval after page commit, advertising/marketing requests: 1 without GPC and 0 with GPC; analytics/replay requests: 5 without GPC and 5 with GPC.");
+  assert.equal(gpcCardResponse(projection), "Over the same 1 s interval after page commit, advertising/marketing requests: 1 without GPC and 0 with GPC; analytics/replay requests: 5 without GPC and 5 with GPC.");
   projection.activityComparison!.activity.analyticsReplay.gpcRequests = 0;
-  assert.equal(gpcCardResponse(projection), "Over the same 1-second interval after page commit, advertising/marketing requests: 1 without GPC and 0 with GPC; analytics/replay requests: 5 without GPC and 0 with GPC.");
+  assert.equal(gpcCardResponse(projection), "Over the same 1 s interval after page commit, advertising/marketing requests: 1 without GPC and 0 with GPC; analytics/replay requests: 5 without GPC and 0 with GPC.");
 });
 
 test("fails closed for non-surfaced packets and malformed score effects", () => {

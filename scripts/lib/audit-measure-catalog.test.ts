@@ -78,12 +78,29 @@ test('same-source checklist aliases retire from the chart and CSV only while the
  }
 });
 
-test('four canonical GPC questions own the diagnostics without merging their values',()=>{
+test('canonical GPC stages and coverage questions own the diagnostics without merging their values',()=>{
  const primary=MASTER_CATALOG.questionGroups.map(q=>q.primaryMetric);
  const diagnostics=['detail.gpc.response','detail.gpc.paired_pair','detail.gpc.assessment_coverage','sealed.choice_evidence.paired_cmp','gpc.paired.duration_ms','sealed.choice_finding.gpc_response'];
  const view=buildAuditMeasureView({metrics:[...primary,...diagnostics.filter(id=>!id.startsWith('gpc.paired.'))].map(id=>({...metric(id),group:'GPC'})),quantities:[{id:'gpc.paired.duration_ms',label:'Interval',unit:'ms'}],rows:[]});
  assert.deepEqual(view.tableEntries.map(e=>e.id),primary);
+ assert.ok(view.tableEntries.every(entry=>entry.group==='Accept, Reject, Options & GPC'));
  assert.ok(diagnostics.every(id=>view.tableEntries.some(e=>e.details.some(d=>d.id===id))));
  assert.ok(view.tableEntries.find(e=>e.id==='detail.gpc.cmp_receipt')!.details.some(d=>d.id==='detail.gpc.response'));
  assert.ok(view.tableEntries.find(e=>e.id==='detail.gpc.cmp_receipt')!.details.some(d=>d.id==='detail.gpc.assessment_coverage'));
+ assert.equal(auditMeasureLinks('detail.gpc.cmp_receipt_source','metric')[0]?.recordType,'gpc.cmp_checkpoint');
+});
+
+test('choice and CMP measures share their combined sections, followed by opt-out controls',()=>{
+ const metrics=[{...metric('control.accept'),group:'A/R paths'},{...metric('control.reject'),group:'A/R paths'},
+  {...metric('gpc_delivery'),group:'GPC'},{...metric('control.options'),group:'Controls'},
+  {...metric('cmp_provider'),group:'CMP'},
+  {...metric('checklist.consent_surface_observed'),group:'Consent & CMP'},
+  {...metric('sealed.control.privacyOptOut'),group:'Controls'}];
+ const {tableEntries}=buildAuditMeasureView({metrics,rows:[]});
+ assert.deepEqual(tableEntries.map(({id,group})=>[id,group]),[
+  ['control.accept','Accept, Reject, Options & GPC'],['control.reject','Accept, Reject, Options & GPC'],
+  ['control.options','Accept, Reject, Options & GPC'],['gpc_delivery','Accept, Reject, Options & GPC'],
+  ['sealed.control.privacyOptOut','Opt-out'],
+  ['cmp_provider','Consent & CMP'],['checklist.consent_surface_observed','Consent & CMP'],
+ ]);
 });

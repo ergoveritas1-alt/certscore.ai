@@ -1,4 +1,5 @@
 "use client";
+import { formatRetainedReportTiming } from "../../lib/scans/report-time";
 import { projectRejectPresenceDetails, factualCustomerEvidence } from "../../lib/scans/reject-presence-details";
 import React, { useRef, type ReactNode } from "react";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
@@ -146,8 +147,8 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
   const badge = <StatusBadge status={finding.status} priority={finding.priority} />;
   const detailsContent = (
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-16 sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
-        {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{readerSummary}</p> : null}
-        {priority && finding.id !== "gpc_response" && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{finding.summary}</p> : null}
+        {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{formatRetainedReportTiming(readerSummary)}</p> : null}
+        {priority && finding.id !== "gpc_response" && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{formatRetainedReportTiming(finding.summary)}</p> : null}
         {priority || pages?.length ? <div className="mb-4 divide-y divide-zinc-200 border-y border-zinc-200">
           {priority ? <FindingApplicabilityNote findingId={finding.id} reviewFocus={reviewFocus} presentationGroup={finding.evidenceJson.presentationGroup} /> : null}
           {context && !mappedReferences.length ? <p className="py-2"><a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">Related guidance · {context.rule} ↗</a></p> : null}
@@ -176,7 +177,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
           </details> : null}
         </div> : null}
         {observations?.length ? <div className="mb-4 space-y-3">{observations.map(observation => <section key={observation.id} className="border-l-2 border-sky-300 pl-3">
-          <h3 className="text-sm font-semibold">{observation.title}</h3><p className="mt-1 text-sm text-zinc-600">{observation.summary}</p>
+          <h3 className="text-sm font-semibold">{observation.title}</h3><p className="mt-1 text-sm text-zinc-600">{formatRetainedReportTiming(observation.summary)}</p>
           <p className="mt-1 text-xs text-zinc-500">{observation.pages.length === 1 && observation.pages[0]?.homepage ? "Starting page only" : observation.pages.length ? `${observation.pages.length} pages with this observation` : "Page attribution unavailable"}</p>
           {observation.pages.length ? <details className="group/finding-disclosure mt-2 text-xs"><FindingDisclosureSummary>Observed pages</FindingDisclosureSummary><ul className="mt-1 max-h-28 overflow-auto break-all">{observation.pages.map(page => <li key={page.id}>{page.url}{page.homepage ? " · Starting page" : ""}</li>)}</ul></details> : null}
         </section>)}</div> : null}
@@ -187,7 +188,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
         ) : null}
         <ul className="grid gap-2 text-sm text-zinc-600 sm:grid-cols-2">
           {finding.evidence.map((item, index) => (
-            <li className="border-l-2 border-sky-300 pl-3 leading-6" key={`${item}:${index}`}>{item}</li>
+            <li className="border-l-2 border-sky-300 pl-3 leading-6" key={`${item}:${index}`}>{formatRetainedReportTiming(item)}</li>
           ))}
         </ul>
         <div className="mt-4"><EvidenceTools showCorrections={false} correctionSteps={finding.correctionSteps} evidenceJson={finding.evidenceJson} recommendedFixes={<>
@@ -213,7 +214,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
       <div className="min-w-0">
         <h3 className="pr-10 text-base font-semibold text-zinc-950 sm:pr-0">{finding.title}</h3>
         <FindingReferenceLine references={references.slice(0, 2)} scope={applicability?.scopeCheck ?? ""} />
-        {!dense ? <p className="mt-0.5 line-clamp-3 text-xs leading-5 text-zinc-600 group-has-[>details[open]]/priority-finding:line-clamp-none">{readerSummary}</p> : null}
+        {!dense ? <p className="mt-0.5 line-clamp-3 text-xs leading-5 text-zinc-600 group-has-[>details[open]]/priority-finding:line-clamp-none">{formatRetainedReportTiming(readerSummary)}</p> : null}
         {why ? <p className={`mt-1 max-w-3xl text-zinc-700 ${combinedOptOut ? "text-xs leading-5" : "text-sm leading-5"}`}><span className="font-semibold text-zinc-900">Why it matters: </span>{why}</p> : null}
         {!dense ? <span className="mt-2 inline-flex sm:hidden">{badge}</span> : null}
       </div>
@@ -236,7 +237,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
       <span className={`${monoClass} text-sm font-semibold text-zinc-400`}>{rank}</span>
       <span className="min-w-0">
         <span className={`${dense ? "text-sm" : "text-base"} block font-semibold text-zinc-950`}>{finding.title}</span>
-        {!dense ? <span className="mt-1 line-clamp-3 text-sm leading-6 text-zinc-600 group-open:line-clamp-none">{readerSummary}</span> : null}
+        {!dense ? <span className="mt-1 line-clamp-3 text-sm leading-6 text-zinc-600 group-open:line-clamp-none">{formatRetainedReportTiming(readerSummary)}</span> : null}
         {!dense ? <span className="mt-3 inline-flex sm:hidden">{badge}</span> : null}
       </span>
       {!dense && finding.focus ? <span className="hidden self-start text-xs font-medium text-zinc-500 sm:block">{finding.focus}</span> : null}

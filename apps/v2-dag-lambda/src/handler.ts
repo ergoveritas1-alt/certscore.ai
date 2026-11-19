@@ -1,3 +1,4 @@
+import type { PostRefusalObserverInput } from "@certscore/scan-core/post-refusal-observer";
 import { retainRuntimeCmsMetadataSnapshot } from "@certscore/contracts";
 import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { assessGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
@@ -2311,6 +2312,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
         cmpCanonicalName: config.resolver.cmpCanonicalName,
         confirmation: config.resolver.confirmation,
       })].flatMap((recipe) => recipe ? [recipe] : []);
+  let trustArcSources: Parameters<NonNullable<PostRefusalObserverInput["onTrustArcResponseCapture"]>>[0] | undefined;
   const packet = await timeLambdaPhase(phaseTimings, "post_refusal_observation", async () => {
     const recipe = recipes[0];
     if (!recipe) {
@@ -2322,6 +2324,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     const { runPostRefusalObserver } = await import("@certscore/scan-core/post-refusal-observer");
     return runPostRefusalObserver({
       runtimeGraph: payload.runtimeGraph,
+      onTrustArcResponseCapture: capture => { trustArcSources = capture; },
       onActionDispatchCommitted: () => { void checkpoint("action_dispatched"); },
       allowCanonicalRejectDiscovery: config.resolver.kind === "canonical_cmp_registry",
       actionSearchTimeoutMs: config.actionSearchTimeoutMs,
@@ -2361,6 +2364,20 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
       Metadata: { sha256 },
     }), { abortSignal: options.signal });
     await checkpoint("artifact_upload_completed");
+    if (trustArcSources) {
+      const trustArcSourceBody = Buffer.from(JSON.stringify(trustArcSources));
+      // Keep vendor source bodies in the private scanner archive only. The
+      // coordinator and report readers receive only the ordinary Reject packet.
+      const sourceKey = key.replace(/PostRefusalEvidencePacket\.json$/, "TrustArcResponseBodies.json");
+      try {
+        await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({
+          Body: trustArcSourceBody, Bucket: bucket, ContentType: "application/json", Key: sourceKey,
+          Metadata: { sha256: createHash("sha256").update(trustArcSourceBody).digest("hex"), "reject-packet-sha256": sha256 },
+        }), { abortSignal: options.signal });
+      } catch {
+        console.warn("[v2-lambda-post-refusal] TrustArc response archive upload failed", { scanId: payload.scanId });
+      }
+    }
   });
   const packetPointer = s3Uri(bucket, key);
   const descriptor = postRefusalLambdaEvidenceDescriptorSchema.parse({

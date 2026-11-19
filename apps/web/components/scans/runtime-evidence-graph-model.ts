@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import type { ApiRuntimeEvidenceGraph } from "@certscore/api-contracts";
 
 export type GraphNode = ApiRuntimeEvidenceGraph["nodes"][number];
@@ -16,7 +17,7 @@ export const RELATIONS: Record<GraphEdge["relation"], string> = {
   loaded_resource: "Loaded source association",
 };
 export function humanize(value: string) { return value.replaceAll("_", " "); }
-export function observationTime(ms: number) { return `${Number((ms / 1000).toFixed(2))}s`; }
+export function observationTime(ms: number) { return formatReportSeconds(ms); }
 export function nodeDomain(node: GraphNode) {
   if (node.cookie) return node.cookie.domain;
   try { return node.url ? new URL(node.url).hostname : "Endpoint not retained"; } catch { return "Endpoint not retained"; }

@@ -7,6 +7,8 @@ import {pdfText,docxText,docxParts,normalizeDocumentText} from './lib/report-for
 import {pdfPublicWords} from '../apps/web/server/scans/report-pdf-reader';
 import {reportStatusLabel} from '../apps/web/lib/scans/report-status-presentation';
 import {buildTimelineReportModel} from '../apps/web/components/scans/report-lab/timeline-report-model';
+import {buildCmpTableCopyPayload} from '../apps/web/components/scans/cmp-inventory-table';
+import {formatReportSeconds,formatRetainedReportTiming} from '../apps/web/lib/scans/report-time';
 async function outputs(report:ReturnType<typeof documentFixture>['report']){return {pdf:pdfText(renderCanonicalReportPdf(report)),docx:docxText(await renderCanonicalReportDocx(report))};}
 const present=(content:string,value:string)=>assert.ok(content.includes(normalizeDocumentText(pdfPublicWords(reportStatusLabel(value)))),`Missing rendered value: ${value}`);
 
@@ -33,7 +35,7 @@ test('actual files keep terminal verification separate from initial registration
 
 test('actual files retain independent paired GPC counts, CMP snapshots and full-visit measurements',async()=>{
  const {report}=documentFixture('ccpa_cpra'),rows=documentGpcDetails(report);assert.ok(rows.length>12);
- for(const content of Object.values(await outputs(report))){for(const row of rows)present(content,row.join(' '));present(content,'sale Off, sharing Off; With GPC: sale On, sharing On');present(content,'Semantic observations: +899 ms and +899 ms');}
+ for(const content of Object.values(await outputs(report))){for(const row of rows)present(content,row.join(' '));present(content,'sale Off, sharing Off; With GPC: sale On, sharing On');present(content,'Semantic observations: +0.899 s and +0.899 s');}
  const bad=structuredClone(report);bad.gpcResponse!.comparison.gpcArtifact!.sha256='0'.repeat(64);assert.deepEqual(documentGpcDetails(bad),[['Bound GPC detail','Unavailable']]);
  for(const content of Object.values(await outputs(bad))){present(content,'No verified GPC assessment available');assert.doesNotMatch(content,/Site-recorded GPC receipt: Received|Full-visit classified requests/);}
  const missing=structuredClone(report);delete missing.gpcResponse!.activityComparison;delete missing.gpcResponse!.cmpStateComparison;
@@ -43,6 +45,34 @@ test('actual files retain independent paired GPC counts, CMP snapshots and full-
  const late=documentFixture('ccpa_cpra',false,false,true).report;const lr=documentGpcDetails(late);assert.equal(lr.find(r=>r[0]==='Paired advertising requests')?.[1],'0 -> 0');assert.equal(lr.find(r=>r[0]==='Full-visit advertising collection')?.[1],'1');
  for(const content of Object.values(await outputs(late))){present(content,'Paired advertising requests 0 -> 0');present(content,'Full-visit advertising collection 1');}
  const eu=documentFixture('gdpr_eprivacy').report;for(const content of Object.values(await outputs(eu)))assert.doesNotMatch(content,/Full-visit classified requests|CMP sale snapshots/);
+});
+
+test('web, copied tables and both documents display seconds from millisecond inputs', async () => {
+  const { scan, report } = documentFixture('gdpr_eprivacy');
+  scan.scan.durationMs = 34567;
+  report.scan.durationMs = 34567;
+  const before = structuredClone({ scan, report });
+  const web = buildTimelineReportModel(scan);
+  assert.ok('timeline' in web);
+  assert.equal(web.scan.duration, '34.567 s');
+  assert.equal(web.timeline[0]?.at, '0 s');
+  const request = report.appendix.evidenceDossier.cmp.audit.rows.find(row => row.id === 'implementation')
+    ?.supportingEvidence?.inventory?.choiceActivity?.[0]?.requests[0];
+  assert.ok(request);
+  assert.equal(request.msAfterClick, 750);
+  assert.equal(buildCmpTableCopyPayload(['After Reject'], [[`+${formatReportSeconds(request.msAfterClick)}`]]), 'After Reject\n+0.75 s');
+  for (const content of Object.values(await outputs(report))) {
+    assert.match(content, /\+0\.75 s from saved session anchor/);
+    assert.doesNotMatch(content, /750\s*ms from saved session anchor/);
+  }
+  assert.deepEqual({ scan, report }, before);
+});
+
+test('historical timing copy preserves URL and clock context', () => {
+  assert.equal(formatRetainedReportTiming('Found 56–774 ms after Reject at https://example.test/?v=20ms.'),
+    'Found 0.056–0.774 s after Reject at https://example.test/?v=20ms.');
+  assert.equal(formatReportSeconds(8_000), '8 s');
+  assert.equal(formatReportSeconds(67.2), '0.067 s');
 });
 
 test('actual files preserve typed form fields, independent flags, snapshot status and bounded phase counts',async()=>{

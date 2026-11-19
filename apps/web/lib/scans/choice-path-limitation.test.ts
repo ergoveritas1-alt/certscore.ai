@@ -23,7 +23,7 @@ test('source-bound navigation explains an unconfirmed click on either action pat
   const original = readChoicePathLimitation(projection, action)!;
   const updated = readChoicePathLimitation(withNavigation, action)!;
   assert.equal(updated.code, original.code);
-  assert.equal(updated.message, `${original.message} The control’s frame was detached 213 ms after the click.`);
+  assert.equal(updated.message, `${original.message} The control’s frame was detached 0.213 s after the click.`);
   assert.doesNotMatch(readChoicePathLimitation({ ...withNavigation, packetSha256: undefined }, action)?.message ?? '', /frame was detached/);
   const interrupted = { ...projection, interactionDiagnostics: { ...diagnostics,
    postClickNavigation: { scope: 'unverified_control_frame', outcome: 'interrupted' } } };

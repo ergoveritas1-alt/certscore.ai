@@ -138,6 +138,7 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
   const [snapshot, setSnapshot] = useState<{ title: string; url: string } | null>(null);
   const [sort, setSort] = useState<{ key: FormSortKey; direction: "asc" | "desc" }>({ key: "page", direction: "asc" });
   const sortedRows = useMemo(() => sortCollectionSurfaces(rows, sort.key, sort.direction), [rows, sort]);
+  if (!loading && !scanning && rows.length === 0) return null;
   if (!loading && !afterAcceptLimited && rows.length === 0) return <section id="report-forms" aria-label="Forms & fields" className="my-5 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600 lg:p-5">
     {scanning ? "Forms: none observed yet; scan in progress." : pagesWithoutInventory > 0 || limitedPages > 0 ? "Forms: no retained rows; form coverage is incomplete." : "Forms: no forms observed on the scanned pages."}
   </section>;

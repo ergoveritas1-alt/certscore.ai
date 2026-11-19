@@ -29,7 +29,7 @@ for (const canary of canaries) {
         assert.match(result.expanded.text, /All \d sampled tracking requests collected data/);
         assert.match(result.expanded.text, /assuming CCPA\/CPRA applies; it does not prove requests would be refused/);
         if (canary.url.endsWith("test1.html")) {
-          assert.match(result.expanded.text, /about 1\.2 seconds/);
+          assert.match(result.expanded.text, /about 1\.211 s/);
           assert.doesNotMatch(`${result.text} ${result.expanded.text}`, /paired comparison|no observable (?:GPC )?response/i);
           assert.match(canary.findings.find(finding => finding.id === "gpc_response")!.summary, /Paired activity comparison: no observable response/);
           assert.doesNotMatch(result.expanded.text, /within 1\.2 seconds|started advertising/);
@@ -121,7 +121,7 @@ test("Reject wording stays about presence after a click, with semantic qualifica
   const result = assessmentHighlightFacts(summary, "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction");
   assert.equal(result.length, 1);
   assert.match(result[0]!, /After the Reject click, non-essential cookies or service requests were observed for Microsoft and Google/);
-  assert.match(result[0]!, /about 0.2–0.4 seconds/);
+  assert.match(result[0]!, /about 0\.159–0\.432 s/);
   assert.match(result[0]!, /Cookie presence does not establish active use or verify refusal registration/);
   assert.doesNotMatch(result[0]!, /confirmed Reject|ignored|sent data|collected data/);
 });

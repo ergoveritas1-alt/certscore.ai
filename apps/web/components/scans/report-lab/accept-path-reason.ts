@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../../lib/scans/report-time";
 import { consentReceiptAvailabilitySchema } from "@certscore/contracts";
 import { readChoicePathLimitation } from "../../../lib/scans/choice-path-execution";
 import { afterClickCoverage, afterClickSummary } from "../after-action-summary";
@@ -10,7 +11,7 @@ export function acceptPathIncompleteReason(projection: Record<string, unknown>):
   const resolver = projection.resolver as { reason?: string } | undefined;
   const diagnostics = projection.interactionDiagnostics as { click?: { outcome?: string } } | undefined;
   const duration = typeof projection.resolverDurationMs === "number" && Number.isFinite(projection.resolverDurationMs)
-    ? ` within ${(projection.resolverDurationMs / 1_000).toFixed(2)} seconds` : "";
+    ? ` within ${formatReportSeconds(projection.resolverDurationMs)}` : "";
   if (resolver?.reason === "deterministic_accept_control_not_found") {
     return `No actionable Accept control was found${duration}. No click was attempted.`;
   }

@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import { accessibilitySelectorHint } from "@certscore/contracts";
 import { pdfNarrativeFindings, pdfFindingLocations } from "./report-pdf-evidence";
 import type { CanonicalReportExport } from "./report-export";
@@ -80,7 +81,7 @@ export function pdfAppendixActions(report: CanonicalReportExport): Record<PdfRep
     if (!steps.length) continue;
     sections.consent.push({
       id: `cmp-${row.id}`, title: row.label, status: row.status, explanation: row.detail ?? "",
-      affected: (row.supportingEvidence?.requests ?? []).map(request => `${request.vendor}: ${request.hostname}${request.path} (+${request.msAfterReject} ms after Reject)`),
+      affected: (row.supportingEvidence?.requests ?? []).map(request => `${request.vendor}: ${request.hostname}${request.path} (+${formatReportSeconds(request.msAfterReject)} after Reject)`),
       steps, references: row.sourceIds,
     });
   }

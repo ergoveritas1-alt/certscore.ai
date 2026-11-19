@@ -1,5 +1,6 @@
+import {inspectOpenAiPixelBatch} from "./openai-pixel-batch";
 import {createHash} from "node:crypto";
-import {californiaRejectRequestEvidenceSchema,isQualifyingSaleSharingRequest,type CaliforniaRejectRequestEvidence} from "@certscore/contracts";
+import {openAiPixelEventTypeSchema,choiceReviewEndpoint,californiaRejectRequestEvidenceSchema,isQualifyingSaleSharingRequest,type CaliforniaRejectRequestEvidence} from "@certscore/contracts";
 import {resolveCanonicalVendor,inspectGpcRequestQualification,isAdvertisingIdentityValue,CANONICAL_VENDOR_RESOLVER_VERSION,isCanonicalAdvertisingCollectionCandidate,readBoundedProtocolJson,decodeCanonicalCollectionBody,canonicalCollectionBodyFields,collectionBodyPrivacySignals,isCanonicalProtocolIdentityField,readCanonicalBodyProcessing,usesExpandedCollectionBody} from "@certscore/vendor-resolver";
 import {decodeLinkedInWaBody} from "./linkedin-wa-body";
 import { isIndexExchangeCollection, isGoogleBrowserCollection, isRubiconExchangeCollection,ProtocolLimitError,protocolLimit } from "@certscore/vendor-resolver";
@@ -13,19 +14,56 @@ export type CaliforniaRequestInput={url:string;method:string;requestId:string;st
   * limit/framing diagnostics only, never payload, identity or purpose proof. */
  observedBodyByteLength?:number;
  body?:string|null;headers?:Record<string,string>};
-export function californiaProofRecipient(url:string) {
- if(url.length>16384 || !isCanonicalAdvertisingCollectionCandidate(url))return null;
+export function californiaProofRecipient(url:string, method?:string) {
+ const review = choiceReviewEndpoint(url, method);
+ if(url.length>16384 || (!review && !isCanonicalAdvertisingCollectionCandidate(url)))return null;
  const vendor=resolveCanonicalVendor({type:"request",url,sourceScanner:"reject_observation",matchSource:"network_request"}).observation;
- if(!vendor || vendor.confidence<0.9 || vendor.registryAttribution?.matchKind!=="endpoint" ||
+ if(!vendor || vendor.confidence<0.9 || (!vendor.registryAttribution || (vendor.registryAttribution.matchKind!=="endpoint" && !review)) ||
   !["advertising","marketing","analytics","session_replay"].includes(vendor.purpose))return null;
  return {entityId:vendor.registryAttribution.entityId,label:vendor.entity,resolverVersion:CANONICAL_VENDOR_RESOLVER_VERSION};
 }
+type MeasurementFacts = NonNullable<CaliforniaRejectRequestEvidence["measurementFacts"]>;
+
+function record(value: unknown): Record<string, unknown> | undefined {
+ return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+// SDK 0.1.105 sends the pixel in the query and serializes individual events in a batch.
+// Keep only field kinds. Never assign a sibling event's matching evidence to this event.
+function openAiMeasurementFacts(url: URL, body: unknown): MeasurementFacts | undefined {
+ const envelope = record(body);
+ const events = envelope?.events;
+ const pixels = url.searchParams.getAll("pid");
+ if (!envelope || !Array.isArray(events) || !events.length || events.length > 8 ||
+     pixels.length !== 1 || !/^[a-zA-Z0-9_-]{1,128}$/.test(pixels[0]!)) return;
+ const user = events.length === 1 ? record(envelope.user) : undefined;
+ const hashedContact = ["in","fm","ht","js"].some(source => {
+   const fields = record(user?.[source]);
+   return ["em","ph","php"].some(key => {
+     const value = fields?.[key];
+     return (Array.isArray(value) ? value : [value]).some(hash => typeof hash === "string" && /^[a-f0-9]{64}$/i.test(hash));
+   });
+ });
+ const observations = events.flatMap((item: unknown, index: number) => {
+   const event = record(item);
+   const type = openAiPixelEventTypeSchema.safeParse(event?.type);
+   if (!event || !type.success) return [];
+   const click = Object.hasOwn(event,"oppref") ? event.oppref : events.length === 1 ? envelope.oppref : undefined;
+   return [{index,eventType:type.data,
+     ...(typeof click === "string" && /^[a-zA-Z0-9_=-]{8,2048}$/.test(click) ? {clickReferenceObserved:true as const} : {}),
+     ...(hashedContact ? {hashedContactObserved:true as const} : {}),
+     ...(typeof event.opt_out === "boolean" ? {optOut:event.opt_out} : {}),
+   }];
+ });
+ if (observations.length) return {endpoint:"openai_event_post",pixelIdSha256:sha(pixels[0]!),events:observations};
+}
+
 /** Bounded interpretation of already-issued Request bytes. Raw inputs never
  * enter retained proof; missing, truncated and unsupported formats stay unknown. */
 export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
  let url:URL;try{url=new URL(input.url);}catch{return null;}
  if(url.protocol!=="https:" || url.username || url.password || url.port || url.hash || url.pathname.length>500 || url.origin.length>300)return null;
- const entity=californiaProofRecipient(input.url);if(!entity)return null;
+ const entity=californiaProofRecipient(input.url,input.method);if(!entity)return null;
  const v2=Object.hasOwn(input,"body")||Object.hasOwn(input,"headers");
  const proof:NonNullable<CaliforniaRejectRequestEvidence["proof"]>={policyVersion:"bounded_ca_request_proof.v4",
   bodyStatus:input.hasBody?"unavailable":"absent",bodyFormat:input.hasBody?"unknown":"none",bodySha256:null,
@@ -40,6 +78,9 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
  const discardedBodyByteLength=input.body===undefined && Number.isSafeInteger(input.observedBodyByteLength) &&
   input.observedBodyByteLength!>32768?input.observedBodyByteLength:undefined;
  const bodyByteLength=typeof input.body==="string"?Buffer.byteLength(input.body):discardedBodyByteLength;
+ const endpoint = choiceReviewEndpoint(input.url,input.method);
+ let batchInspection: ReturnType<typeof inspectOpenAiPixelBatch> | undefined;
+ let measurementFacts: MeasurementFacts | undefined;
  let structured=false,googleBrowserDecoded=false;
  if(v2 && input.hasBody) {
   if((bodyByteLength??0)>32768){proof.bodyStatus="limited";bodyDiagnostic.inputKind="uninspected";bodyDiagnostic.stage="input_limit";bodyDiagnostic.limitReason="bytes";reason("body_limit");}
@@ -67,9 +108,16 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
      // are accepted outside the reviewed endpoint-owned envelopes.
      bodyDiagnostic.stage="json_structure";
      const object=readBoundedProtocolJson(body,[...url.searchParams].length);
-     bodyDiagnostic.stage="flat_fields";
-     if(!object || Array.isArray(object)||typeof object!=="object"||Object.values(object).some(v=>v===null || !["string","number","boolean"].includes(typeof v)))throw Error("unsupported_body");
-     for(const [key,value]of Object.entries(object))bodyFields.append(key,String(value));proof.bodyFormat="json";
+     if (endpoint === "openai_event_post") measurementFacts = openAiMeasurementFacts(url,object);
+     if (endpoint === "openai_event_post" && record(object)?.events !== undefined) {
+      batchInspection = inspectOpenAiPixelBatch(url,object);
+      proof.bodyFormat="json";
+     } else {
+      bodyDiagnostic.stage="flat_fields";
+      if(!object || Array.isArray(object)||typeof object!=="object"||Object.values(object).some(v=>v===null || !["string","number","boolean"].includes(typeof v)))throw Error("unsupported_body");
+      for(const [key,value]of Object.entries(object))bodyFields.append(key,String(value));
+      proof.bodyFormat="json";
+     }
     }else{
      if(/[{}\r\n]/.test(body)||/%(?![a-f0-9]{2})/i.test(body)||body && !body.includes("="))throw Error("unsupported_body");
      bodyDiagnostic.stage="flat_fields";
@@ -196,11 +244,37 @@ export function captureCaliforniaRejectRequest(input:CaliforniaRequestInput) {
   combined.getAll("cid").length===1&&proof.identifiers.some(id=>id.field==="cid")
   ?{policyVersion:legacyPropertyOrigin?"google_analytics_property.v1" as const:"google_analytics_property.v2-browser" as const,propertyIdSha256:sha(propertyId)}:undefined;
  if(v2 && proof.headersStatus!=="complete" && (input.headerPolicy!=="supplemental" || proof.reasons.some(r=>["unsupported_privacy_header","ambiguous_cookie","cookie_opt_out_unresolved"].includes(r))) && !qualification.processingSignals.includes("privacy_signal_invalid"))qualification.processingSignals.push("privacy_signal_invalid");
+
+ let reviewEvent: CaliforniaRejectRequestEvidence["reviewEvent"];
+ if (endpoint) {
+  if (!v2) return null;
+  qualification.activity = "unresolved";
+  qualification.basis = "endpoint_or_identity_unresolved";
+  if (endpoint === "openai_event_post" && input.body?.trim() && proof.bodySha256) reviewEvent = {kind:endpoint,...(batchInspection && proof.bodyStatus==="complete" ? {batchInspection} : {})};
+  if (endpoint === "google_ccm_page_view") {
+   const pages = combined.getAll("dl"), events = combined.getAll("en");
+   const eventType = events.length === 1 ? events[0] : undefined;
+   if ((proof.bodyStatus === "complete" || proof.bodyStatus === "absent") &&
+       (eventType === "page_view" || eventType === "conversion" || eventType === "purchase")) {
+     const properties = combined.getAll("tid"), clicks = combined.getAll("gclid");
+     measurementFacts = {endpoint,eventType,
+       ...(properties.length === 1 && /^(?:AW-[0-9]{1,20}|G-[A-Z0-9]{4,60})$/.test(properties[0]!)
+         ? {propertyIdSha256:sha(properties[0]!)} : {}),
+       ...(clicks.length === 1 && isAdvertisingIdentityValue("gclid",clicks[0]!) ? {clickReferenceObserved:true} : {}),
+     };
+   }
+   if (pages.length === 1 && events.length === 1 && events[0] === "page_view" && URL.canParse(pages[0]!)) {
+    const page = new URL(pages[0]!);
+    page.hash = "";
+    if (page.protocol === "https:") reviewEvent = {kind:endpoint,documentSha256:sha(page.href)};
+   }
+  }
+ }
  return californiaRejectRequestEvidenceSchema.parse({contractVersion:v2?"california_reject_request.v2":"california_reject_request.v1",
   requestId:input.requestId,startedAtMs:input.startedAtMs,origin:url.origin,path:url.pathname,method:input.method,
   urlSha256:sha(input.url),httpStatus:input.httpStatus??null,
   payload:v2?(proof.bodyStatus==="absent"?"no_body":proof.bodyStatus==="complete"?"inspected_body":"uninspected_body"):input.hasBody?"uninspected_body":"no_body",
-  ...(v2?{proof}:{}),...(propertyBinding?{propertyBinding}:{}),entity,qualification});
+  ...(measurementFacts?{measurementFacts}:{}),...(reviewEvent?{reviewEvent}:{}),...(v2?{proof}:{}),...(propertyBinding?{propertyBinding}:{}),entity,qualification});
 }
 
 /** Prefer a successful unrestricted proof for each entity, then fill spare

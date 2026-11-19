@@ -6,7 +6,14 @@ try{
  await page.goto(pathToFileURL(file).href,{waitUntil:'load',timeout:60000});await page.waitForFunction(()=>window.__auditDashboard?.days?.length>0,{timeout:60000});
  const totalNoGoRow=page.locator('#daily tr[data-table-id="outcome.no_go_total"]');
  assert.equal(await totalNoGoRow.count(),1);
- assert.equal(await totalNoGoRow.evaluate(row=>row.previousElementSibling.textContent),'No-go reasons');
+ assert.equal(await totalNoGoRow.evaluate(row=>document.getElementById(row.parentElement.getAttribute('aria-labelledby'))?.textContent),'No-go reasons');
+ const noGoToggle=page.getByRole('button',{name:'No-go reasons',exact:true});
+ assert.equal(await noGoToggle.getAttribute('aria-expanded'),'false');
+ assert.equal(await totalNoGoRow.isVisible(),false);
+ assert.deepEqual(await page.locator('#daily .measure-group-toggle[aria-expanded="false"]').allTextContents(),['No-go reasons']);
+ await noGoToggle.press('Enter');
+ assert.equal(await noGoToggle.getAttribute('aria-expanded'),'true');
+ assert.equal(await totalNoGoRow.isVisible(),true);
  const verifyDailyNoGoTotal=async()=>{
   const expected=await page.evaluate(()=>{
    const audit=window.__auditDashboard;
@@ -248,6 +255,24 @@ try{
  assert.equal(await chartPanel.evaluate(panel=>panel.open),false);
  checks.collapsedChart=true;
  assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),await page.evaluate(()=>window.__auditDashboard.data.tableEntries.length));
+ const groups=await page.evaluate(()=>[...new Set(window.__auditDashboard.data.tableEntries.map(entry=>entry.group))]);
+ const toggles=page.locator('#daily .measure-group-toggle');
+ assert.deepEqual(await toggles.allTextContents(),groups);
+ assert.equal(await toggles.evaluateAll(buttons=>buttons.every(button=>
+  button.getAttribute('aria-expanded')==='true'&&!document.getElementById(button.getAttribute('aria-controls')).hidden)),true);
+ const optOutToggle=page.getByRole('button',{name:'Opt-out',exact:true});
+ const optOutRows=page.locator('#'+await optOutToggle.getAttribute('aria-controls'));
+ await optOutToggle.focus();await optOutToggle.press('Enter');
+ assert.equal(await optOutToggle.getAttribute('aria-expanded'),'false');
+ assert.equal(await optOutRows.isVisible(),false);
+ assert.equal(await totalNoGoRow.isVisible(),true);
+ await page.selectOption('#group','Opt-out');
+ assert.deepEqual(await toggles.allTextContents(),['Opt-out']);
+ assert.equal(await optOutRows.isVisible(),false);
+ await optOutToggle.click();
+ assert.equal(await optOutRows.isVisible(),true);
+ await page.selectOption('#group','all');
+ checks.measureGroupDisclosure=true;
  assert.equal(await page.evaluate(()=>{
   const data=window.__auditDashboard.data;
   return ['retainedReports','optOutExtracts','privacyFormReceipts'].every(key=>!(key in data))&&
@@ -258,10 +283,15 @@ try{
  const tableEntries=measureCatalog.tableEntries;
  const displayedEntries=await page.evaluate(()=>window.__auditDashboard.data.tableEntries);
  const gpcQuestions=await page.evaluate(()=>window.__auditDashboard.data.gpcQuestions);
- assert.equal(gpcQuestions.length,4);
- assert.deepEqual(tableEntries.filter(e=>e.group==='GPC').map(e=>e.id),gpcQuestions.map(q=>q.primaryMetric));
+ assert.equal(gpcQuestions.length,5);
+ const choiceGroup='Accept, Reject, Options & GPC',gpcIds=gpcQuestions.map(q=>q.primaryMetric);
+ const combinedChoiceRows=tableEntries.filter(entry=>entry.group===choiceGroup);
+ assert.deepEqual(combinedChoiceRows.slice(-gpcIds.length).map(entry=>entry.id),gpcIds);
+ assert.equal(tableEntries.find(entry=>entry.id==='cmp_provider')?.group,'Consent & CMP');
+ assert.ok(!tableEntries.some(entry=>['CMP','GPC','Accept & Reject','Controls'].includes(entry.group)));
+ assert.equal(groups[groups.indexOf(choiceGroup)+1],'Opt-out');
  assert.ok(tableEntries.find(e=>e.id==='detail.gpc.cmp_receipt').details.some(e=>e.id==='detail.gpc.response'));
- assert.deepEqual(gpcQuestions.map(q=>q.title),['GPC signal delivered','Activity under GPC (all)','GPC acknowledgment coverage','California-qualified activity under GPC']);
+ assert.deepEqual(gpcQuestions.map(q=>q.primaryMetric),['gpc_delivery','detail.gpc.cmp_receipt','detail.gpc.stage1','detail.gpc.stage2','detail.gpc.stage3']);
  assert.equal(await page.evaluate(ids=>window.__auditDashboard.days.every(day=>ids.every(id=>day.metrics[id].denominator===day.reportable)),gpcQuestions.map(q=>q.primaryMetric)),true);
  const meanings=page.locator('#daily tbody tr[data-table-id] > td:first-child > .metric-meaning');
  assert.equal(await meanings.count(),displayedEntries.length);
@@ -325,47 +355,20 @@ try{
   assert.equal(fraction,(allReturned?denominator:0)+'/'+denominator);
  }
  checks.gpcReadbackHeadline=true;
- assert.match(await page.locator('[data-table-id="detail.gpc.session_collection"] > td:first-child > .metric-meaning').textContent(),/sale\/sharing role is unresolved.*Script downloads alone do not count/);
- const collectionDays=await page.evaluate(()=>window.__auditDashboard.days.map(({metrics})=>{
-  const v=metrics['detail.gpc.session_collection'];
-  return {denominator:v.denominator,positive:v.counts.positive_retained??0,sampled:v.counts.no_positive_retained_in_sample??0};
- }));
- const collectionCells=await page.locator('[data-table-id="detail.gpc.session_collection"] > td').evaluateAll(items=>items.slice(1).map(cell=>({
-  coverage:cell.querySelector('[data-gpc-collection-coverage]')?.textContent??null,
-  headline:cell.querySelector(':scope > .value')?.textContent,
-  fraction:cell.querySelector('[data-headline] .state-line-value')?.textContent??null,
- })));
- for(const [index,{denominator,positive,sampled}] of collectionDays.entries()){
-  const {coverage,headline,fraction}=collectionCells[index];
-  const covered=positive+sampled,unavailable=denominator-covered;
-  assert.equal(coverage,denominator?covered+'/'+denominator+' visits with collection evidence'+(unavailable?' · '+unavailable+' unavailable':''):null);
-  if(!covered)continue;
-  const rate=100*positive/denominator;
-  assert.equal(headline,(Number.isInteger(rate)?String(rate):rate.toFixed(1))+'%');
-  assert.equal(fraction,positive+'/'+denominator);
- }
- checks.gpcCollectionCoverage=true;
- assert.match(await page.locator('[data-table-id="detail.gpc.california_collection"] > td:first-child > .metric-meaning').textContent(),/narrower subset.*identifier syncing or audience collection/);
- const californiaDays=await page.evaluate(()=>window.__auditDashboard.days.map(({metrics})=>{
-  const v=metrics['detail.gpc.california_collection'];
-  return {denominator:v.denominator,recorded:v.counts.recorded??0,notRecorded:v.counts.not_recorded??0};
- }));
- const californiaCells=await page.locator('[data-table-id="detail.gpc.california_collection"] > td').evaluateAll(items=>items.slice(1).map(cell=>({
-  headline:cell.querySelector(':scope > .value')?.textContent,
-  fraction:cell.querySelector('[data-headline] .state-line-value')?.textContent??null,
- })));
- for(const [index,{denominator,recorded,notRecorded}] of californiaDays.entries()){
-  const {headline,fraction}=californiaCells[index];
-  if(!denominator||recorded+notRecorded===0){
-   assert.equal(headline,'—%');
-   assert.equal(fraction,null);
-   continue;
+ for(const path of ['reject','gpc'])for(const level of [1,2,3]){
+  const id='detail.'+path+'.stage'+level;
+  const results=await page.evaluate(id=>window.__auditDashboard.days.map(day=>({positive:day.metrics[id].numerator,total:day.reportable})),id);
+  for(const [index,{positive,total}] of results.entries()){
+   if(!total)continue;
+   const cell=page.locator('[data-table-id="'+id+'"] > td').nth(index+1);
+   const rate=100*positive/total;
+   assert.equal(await cell.locator(':scope > .value').textContent(),(Number.isInteger(rate)?rate:rate.toFixed(1))+'%');
+   assert.equal(await cell.locator('[data-headline] .state-line-value').textContent(),positive+'/'+total);
   }
-  const rate=100*recorded/denominator;
-  assert.equal(headline,(Number.isInteger(rate)?String(rate):rate.toFixed(1))+'%');
-  assert.equal(fraction,recorded+'/'+denominator);
  }
- checks.gpcCaliforniaHeadline=true;
+ for(const id of ['detail.reject.activity_all','detail.reject.verdict','detail.gpc.session_collection','detail.gpc.california_collection'])
+  assert.equal(await page.locator('[data-table-id="'+id+'"]').count(),0);
+ checks.gpcCollectionCoverage=checks.gpcCaliforniaHeadline=true;
  const prominenceRow='[data-table-id="customer_cmp_check.prominence"]';
  const validComparisonRow=page.locator(prominenceRow+' + [data-table-id="customer_cmp_check.prominence_valid_comparison"]');
  if(tableEntries.some(entry=>entry.id==='customer_cmp_check.prominence')){
@@ -498,7 +501,7 @@ try{
  });
  for(const {actual,expected,id,state,date} of observedOutcomes)assert.equal(actual,expected,id+' '+state+' '+date);
  checks.observedOutcomeBreakdown=true;
- const choiceRows=tableEntries.filter(entry=>entry.group==='Accept & Reject');
+ const choiceRows=combinedChoiceRows.filter(entry=>!gpcIds.includes(entry.id));
  for(const id of ['sealed.checklist.public_collection_surfaces','sealed.detail.sealed.form_destinations',
   'sealed.checklist.preference_withdrawal_control','customer_cmp_check.found_not_declared',
   'checklist.consent_optional_defaults_on','sealed.checklist.consent_optional_defaults_on']){
@@ -507,19 +510,21 @@ try{
  const combinedActivity='customer_cmp_check.implementation';
  if(measureCatalog.entries.some(entry=>entry.id===combinedActivity)){
   assert.equal(await page.locator('[data-table-id="'+combinedActivity+'"]').count(),0);
-  const rejectActivity=page.locator('[data-table-id="detail.reject.activity_all"]');
+  const rejectActivity=page.locator('[data-table-id="detail.reject.stage1"]');
   assert.ok(await rejectActivity.locator('.supporting-evidence [data-supporting-id="'+combinedActivity+'"]').count()>0);
-  assert.ok(tableEntries.find(entry=>entry.id==='detail.reject.activity_all').details.some(entry=>entry.id==='customer_cmp_check.consent_record')||
+  assert.ok(tableEntries.find(entry=>entry.id==='detail.reject.stage1').details.some(entry=>entry.id==='customer_cmp_check.consent_record')||
    !measureCatalog.entries.some(entry=>entry.id==='customer_cmp_check.consent_record'));
  }
- assert.equal(await page.evaluate(ids=>window.__auditDashboard.days.every(day=>ids.every(id=>day.metrics[id].denominator===day.reportable)),choiceRows.map(entry=>entry.id)),true);
+ assert.equal(await page.evaluate(ids=>window.__auditDashboard.days.every(day=>ids.every(id=>day.metrics[id].denominator===day.reportable)),choiceRows.filter(entry=>entry.id!=='control.options').map(entry=>entry.id)),true);
  assert.deepEqual(choiceRows.map(entry=>[entry.id,entry.label]),[
   ['control.accept','Accept control presence'],
   ['click.accept','Accept click completed'],['detail.accept.activity_all','After Accept non-essential activity (all)'],
   ['registration.accept','Accept choice confirmed'],['detail.accept.verdict','After Accept non-essential activity (confirmed)'],
   ['control.reject','Reject control presence'],
-  ['click.reject','Reject click completed'],['detail.reject.activity_all','After Reject non-essential activity (all)'],
-  ['registration.reject','Reject choice confirmed'],['detail.reject.verdict','After Reject non-essential activity (confirmed)'],
+  ['click.reject','Reject click completed'],
+  ['registration.reject','Reject recorded by consent platform'],
+  ...['Classified non-essential cookie or service presence','Verified collection','Collection meeting full California evidence requirements'].map((label,i)=>['detail.reject.stage'+(i+1),'Reject stage '+(i+1)+' · '+label]),
+  ['control.options','Options control presence'],
  ]);
  for(const action of ['accept','reject']){
   const sample=await page.evaluate(action=>{
@@ -546,6 +551,7 @@ try{
   };
   assert.equal(await metricCell('click.'+action,sample.index).locator(':scope > .value').textContent(),percentage(sample.completed,sample.eligible));
   assert.equal(await metricCell('registration.'+action,sample.index).locator(':scope > .value').textContent(),percentage(sample.confirmed,sample.eligible));
+  if(action==='reject')continue;
   assert.match(await page.locator('[data-table-id="detail.'+action+'.verdict"] td').first().textContent(),/All readable reportable scans/);
   const activity=await page.evaluate(({action,index})=>{
    const day=window.__auditDashboard.days[index];
@@ -596,7 +602,7 @@ try{
  checks.choiceStagePresentation=true;
  assert.equal(displayedEntries.length,await page.locator('#daily tbody tr[data-table-id]').count());
  const canonicalReject='sealed.choice_finding.california_post_reject_collection';
- const rejectCoverage=tableEntries.find(entry=>entry.id==='detail.reject.verdict');
+ const rejectCoverage=tableEntries.find(entry=>entry.id==='detail.reject.stage3');
  if(measureCatalog.entries.some(entry=>entry.id===canonicalReject)){
   assert.ok(rejectCoverage?.details.some(detail=>detail.id===canonicalReject));
   assert.equal(await page.locator('[data-table-id="'+canonicalReject+'"]').count(),0);
@@ -1005,10 +1011,11 @@ try{
  const regions=await page.locator('#region option').evaluateAll(opts=>opts.map(o=>o.value));if(regions.length>1){await page.selectOption('#region',regions[1]);await assertDataHealth();assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.region===document.getElementById('region').value)),true);const content=await page.evaluate(()=>window.__auditDashboard.engine.stateCsv(window.__auditDashboard.days,window.__auditDashboard.data.csvMetrics));const wait=page.waitForEvent('download');await page.locator('#csv').click();const dl=await wait,temp=path.join(root,'filtered.csv');await dl.saveAs(temp);assert.equal(await fs.readFile(temp,'utf8'),content);await fs.unlink(temp);await page.selectOption('#region','all');}
  const providers=await page.locator('#cmp option').evaluateAll(opts=>opts.map(o=>o.value));if(providers.length>1){await page.selectOption('#cmp',providers[1]);assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.states.cmp_provider===document.getElementById('cmp').value)),true);await page.selectOption('#cmp','all');}
  await page.selectOption('#origin','selection');assert.equal(await page.evaluate(()=>window.__auditDashboard.currentRows().every(r=>r.originProof==='production_id_selection_only'&&r.reportable===false)),true);await page.selectOption('#origin','all');
- await page.selectOption('#group','Controls');assert.equal(await page.locator('#daily tbody tr[data-table-id]').count(),2);checks.filters=true;
+ await page.selectOption('#group','Opt-out');checks.filters=true;
  assert.equal(await page.locator('[data-table-id="control.privacyOptOut"]').count(),0);
  assert.equal(await page.locator('#metric option[value="metric:control.privacyOptOut"]').count(),0);
  const retainedOptOut=page.locator('[data-table-id="sealed.control.privacyOptOut"]');
+ assert.equal(await retainedOptOut.count(),1);
  assert.match(await retainedOptOut.textContent(),/Opt-out control presence/);
  const positive=await page.evaluate(()=>window.__auditDashboard.days.reduce((n,d)=>n+(d.metrics['sealed.control.privacyOptOut'].counts.observed??0),0));
  if(positive>0)assert.match(await retainedOptOut.textContent(),/observed:/);
@@ -1099,8 +1106,8 @@ try{
   assert.match(rejectionPreview,/sample limit/);assert.ok(rejectionPreview.includes('a'.repeat(64)));
  }
  checks.optOutRejectionDetails=true;
- await page.selectOption('#group','Accept & Reject');
- assert.deepEqual(await page.locator('#daily tbody tr[data-table-id]').evaluateAll(rows=>rows.map(row=>row.dataset.tableId)),choiceRows.map(entry=>entry.id));
+ await page.selectOption('#group',choiceGroup);
+ assert.deepEqual(await page.locator('#daily tbody tr[data-table-id]').evaluateAll(rows=>rows.map(row=>row.dataset.tableId)),combinedChoiceRows.map(entry=>entry.id));
  const icon=page.locator('[data-chart-id="control.reject"]');await icon.click();await page.waitForSelector('#chartPopover:not([hidden])');assert.match(await page.locator('#chartPopoverTitle').textContent(),/presence/);assert.ok(await page.locator('#contract').textContent());await page.screenshot({path:path.join(root,'desktop-chart.png'),fullPage:true});await page.keyboard.press('Escape');
  await page.setViewportSize({width:390,height:844});await icon.click();const rect=await page.locator('#chartPopover').boundingBox();assert.ok(rect&&rect.x>=0&&rect.x+rect.width<=391&&rect.y>=0&&rect.y+rect.height<=845);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1),true);assert.deepEqual(await wrappingStates(),[]);await page.screenshot({path:path.join(root,'mobile-chart.png'),fullPage:true});checks.mobile=true;
  assert.deepEqual(errors,[]);assert.equal(externalRequests,0);

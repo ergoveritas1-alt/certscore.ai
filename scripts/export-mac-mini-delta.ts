@@ -12,6 +12,7 @@ if(!root||extra.length||(mode!==undefined&&mode!=='--recover'&&mode!=='--plan'))
 const recovering=mode==='--recover';
 const marker='MACMINI_DELTA_IDS';
 const b=JSON.parse(readFileSync(root+'/begin.json','utf8'));
+b.includeVisitStages = true;
 const plannedPending:string[]=b.pendingRefreshIds??[];
 let pending=plannedPending;
 const privacyFormRequested = b.includePrivacyFormReceipts === true;
@@ -63,6 +64,7 @@ async function main(){
   if(JSON.stringify(original)!==JSON.stringify(plannedPending))throw Error('Recovery planned IDs changed');
   pending=transport.pendingRefreshIds??plannedPending;
   if(!Array.isArray(pending)||JSON.stringify(pending)!==JSON.stringify(plannedPending.slice(0,pending.length)))throw Error('Recovery selected IDs changed');
+  b.includeVisitStages=transport.visitStagesProjected===true;
   navigationBlock=transport.navigationBlockProjected===true;
   comparisonMetadata=transport.comparisonMetadataProjected===true;
   policyReceipt=transport.policyReceiptProjected===true;
@@ -88,7 +90,7 @@ async function main(){
   pending=plan.pendingRefreshIds;
   ({sql,operations,policyReceipt,controlAccessibility}=selected);
   const containerName=verifyContainer(sql);
-  writeFileSync(transportFile,JSON.stringify({choiceAuditVersion:CHOICE_AUDIT_VERSION,pendingTargetCount:pending.length,plannedPendingIds:plannedPending,pendingRefreshIds:pending,deferredPendingIds:plan.deferredPendingIds,comparisonMetadataProjected:true,navigationBlockProjected:true,
+  writeFileSync(transportFile,JSON.stringify({choiceAuditVersion:CHOICE_AUDIT_VERSION,pendingTargetCount:pending.length,plannedPendingIds:plannedPending,pendingRefreshIds:pending,deferredPendingIds:plan.deferredPendingIds,comparisonMetadataProjected:true,navigationBlockProjected:true,visitStagesProjected:true,
    operationsEvidenceProjected:operations||policyReceipt,operationsEvidenceScope:'policy_provenance_only',
    policyReceiptProjected:policyReceipt,operationsEvidenceTransport:policyReceipt?'bounded_policy_receipt_column':'choice_summary',
    operationsOmissionReason:operations||policyReceipt?null:'ecs_launch_override_limit',
@@ -111,6 +113,7 @@ async function main(){
  }else saveOutput(outputFile,output);
  const rows=output.split(/\r?\n/).filter(l=>l.startsWith('{')).map(l=>JSON.parse(l));
  if(rows.length>5000||new Set(rows.map(r=>r.scanId)).size!==rows.length||rows.some(r=>r.cohort_total!==rows.length||r.isMacMini!==true||(!pending.includes(r.scanId)&&Date.parse(r.created_at)<Date.parse(b.overlapStartUtc))||Date.parse(r.created_at)>=Date.parse(b.windowEndUtc)))throw Error('Incomplete, duplicate or out-of-scope ID inventory');
+ if(b.includeVisitStages&&rows.some(r=>!Object.hasOwn(r,"auditVisitStages")))throw Error("Missing visit-stage column");
  assertCurrentPriorityExtraction(rows,forwardCoverageDiagnostics,rejectActivityReceipt);
  if(navigationBlock&&rows.some(row=>!Object.hasOwn(row,'auditNavigationBlock')))throw Error('Daily query omitted navigation block diagnostics');
  if(comparisonMetadata&&rows.some(row=>!Object.hasOwn(row,'auditComparison')))throw Error('Daily query omitted comparison metadata');
@@ -122,6 +125,7 @@ async function main(){
   for(const row of rows)row.policyReceipt=auditPolicyProvenanceSchema.safeParse(row.policyReceipt).data??null;
  }
  const payload={version:'certscore.mac-mini-direct-id-inventory.v1',readOnly:true,choiceAuditVersion:CHOICE_AUDIT_VERSION,scope:'Original-creator-verified Mac mini scan IDs in bounded recent window; not full production inventory',start:b.overlapStartUtc,end:b.windowEndUtc,pendingRefreshIds:pending,plannedPendingIds:plannedPending,deferredPendingIds:plannedPending.slice(pending.length),querySha256:createHash('sha256').update(sql).digest('hex'),
+  ...(b.includeVisitStages?{visitStagesProjected:true}:{}),
   ...(forwardCoverageDiagnostics?{forwardCoverageDiagnosticsProjected:true}:{}),
   ...(rejectActivityReceipt?{rejectActivityReceiptProjected:true}:{}),rows};
  const stored={...payload,policyProvenanceOmissionReason:undefined as string|undefined,controlAccessibilityOmissionReason:undefined as string|undefined};

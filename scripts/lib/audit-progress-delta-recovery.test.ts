@@ -7,6 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
+import { priorityEvidenceFromRecord, priorityEvidenceStates } from './audit-progress-priority-evidence';
 
 const exec = promisify(execFile);
 
@@ -15,22 +16,49 @@ for (const forwardCoverageDiagnostics of [false,true]) test(`daily export resume
   try {
     const start = '2026-11-06T00:00:00Z';
     const end = '2026-11-08T00:00:00Z';
+    const scanId = '11111111-1111-4111-8111-111111111111';
+    const hash = 'a'.repeat(64);
+    const priorityEvidence = priorityEvidenceFromRecord({
+      runtimeArtifacts: {
+        postAcceptEvidenceProjection: { execution: { clickCompleted: false } },
+        postRefusalEvidenceProjection: {
+          contractVersion: 'certscore.post_refusal_report_projection.v1',
+          packetSha256: hash,
+          execution: {
+            policyVersion: 'choice_path_execution.v1', status: 'limited',
+            clickCompleted: true, observationCompleted: false, consentConfirmed: true,
+          },
+          retainedActionTiming: { actionDispatchedAtMs: 100, observationEndedAtMs: 8200 },
+          refusalRegisteredAtMs: 150, observationWindowMs: 8000,
+          actionControlProof: { action: 'reject', authorizedTargetSha256: hash, observedAtMs: 90 },
+          terminalDecisionEvidence: {
+            policyVersion: 'bounded_registered_terminal_consent_decision.v1',
+            action: 'reject', authorizedTargetSha256: hash,
+            readStartedAtMs: 7850, readCompletedAtMs: 7860,
+            trustArcReloadReadback: { preReloadReadAtMs: 170, reloadCommittedAtMs: 700 },
+            evidence: {
+              policyVersion: 'semantic_consent_registration.v2', basis: 'verified_state',
+              decision: 'denied', observedStateSha256: hash, observedAtMs: 7860,
+              timestampBasis: 'verified_state_observed',
+            },
+          },
+        },
+      },
+    });
     const row = {
-      scanId: '11111111-1111-4111-8111-111111111111',
+      scanId,
       created_at: '2026-11-07T01:00:00Z',
       status: 'completed',
       isMacMini: true,
       cohort_total: 1,
-      choice_audit: forwardCoverageDiagnostics ? {
+      choice_audit: {
         version: 'certscore.audit-choice-summary.v2',
-        priorityEvidence: {
-          version:'certscore.audit-priority-evidence.v1',accept:null,reject:null,cmp:null,
-          coverage:['no_completed_click','source_missing','source_missing'],transport:'included',
-          acceptPath:'target_navigation_failed',
-        },
-      } : { version: 'certscore.audit-choice-summary.v2', availability: 'size_bound' },
+        priorityEvidence: forwardCoverageDiagnostics
+          ? { ...priorityEvidence, acceptPath: 'target_navigation_failed' }
+          : priorityEvidence,
+      },
       auditComparison: null,
-      auditNavigationBlock: null,
+      auditNavigationBlock: null, auditVisitStages:null,
       ...(forwardCoverageDiagnostics?{auditRejectActivity:[2,'11111111-1111-4111-8111-111111111111','d'.repeat(64),'cookie_snapshot']}:{ }),
       caReject: null,
       technicalCounts: null,
@@ -140,7 +168,12 @@ switch (call) {
       writeFileSync(beginFile,JSON.stringify(begin));
     }
     await exec(process.execPath, [...command, '--recover'], { env });
-    assert.equal(readFileSync(inventory, 'utf8'), first);
+    const recovered = readFileSync(inventory, 'utf8');
+    assert.equal(recovered, first);
+    const recoveredPriority = JSON.parse(recovered).rows[0].choice_audit.priorityEvidence;
+    assert.deepEqual(priorityEvidenceStates(recoveredPriority, scanId)['sealed.terminal.audit_reject'], {
+      value: 'verified', scope: 'bounded_registered_terminal_consent_decision.v1',
+    });
     assert.deepEqual(readFileSync(calls, 'utf8').trim().split('\n'), [
       'ecs run-task', 'ecs describe-tasks', 'ecs describe-tasks', 'ecs describe-task-definition',
       'logs filter-log-events', 'ecs describe-tasks', 'ecs describe-task-definition', 'logs filter-log-events',

@@ -19,7 +19,7 @@ test("evidence details exposes the retained request and its decision context", (
   assert.match(html, /Open observed URL/);
   assert.match(html, /Consent: pre_consent/);
   assert.match(html, /Event: request_7/);
-  assert.match(html, /Observed: 482 ms/);
+  assert.match(html, /Observed: 0\.482 s/);
 });
 
 test("RegulatoryChecklistActiveTrace renders a concise end-user result explanation", () => {
@@ -66,7 +66,7 @@ test("RegulatoryChecklistActiveTrace renders a concise end-user result explanati
   assert.doesNotMatch(html, /after evaluating the retained gate values and evidence/);
   assert.match(html, /Basis/);
   assert.match(html, /Evidence used/);
-  assert.match(html, /x_vendor \(ads\.vendor\.example\) advertising, present in a check performed before consent, first seen at 0\.482s/);
+  assert.match(html, /x_vendor \(ads\.vendor\.example\) advertising, present in a check performed before consent, first seen at 0\.482 s/);
   assert.match(html, /advertising/);
   assert.match(html, /x_vendor/);
   assert.doesNotMatch(html, /Scan started/);
@@ -128,7 +128,7 @@ test("RegulatoryChecklistActiveTrace shows first-observed timing for embedded ve
   );
 
   assert.match(html, /Why this result/);
-  assert.match(html, /Embedded 3rd party content observed: youtube\.com; first observed 0.928s after scan start/);
+  assert.match(html, /Embedded 3rd party content observed: youtube\.com; first observed 0\.928 s after scan start/);
   assert.match(html, /Concrete 3rd party embedded content was retained before consent/);
 });
 
@@ -188,7 +188,7 @@ test("RegulatoryChecklistEvidenceDetails renders plain-language evidence with th
 
   assert.match(html, /Cloudflare Web Analytics/);
   assert.match(html, /observed before consent/);
-  assert.match(html, /first observed 0\.482s after scan start/);
+  assert.match(html, /first observed 0\.482 s after scan start/);
   assert.match(html, /Full evidence JSON/);
   assert.match(html, /preConsent/);
   assert.match(html, /firstSeenMs/);
@@ -310,10 +310,10 @@ test("RegulatoryChecklistEvidenceDetails prefers smoking-gun event timing over g
   );
 
   assert.match(html, /TapAd_TS/);
-  assert.match(html, /2.72s/);
+  assert.match(html, /2\.716 s/);
   assert.match(html, /advertising/);
   assert.match(html, /present in a check performed before consent/);
-  assert.match(html, /first seen at 2.72s/);
+  assert.match(html, /first seen at 2\.716 s/);
   assert.match(html, /Full evidence JSON/);
   assert.match(html, /timestampMs/);
   assert.match(html, /cookiePurpose/);
@@ -344,7 +344,7 @@ test("RegulatoryChecklistEvidenceDetails shows each projected cookie first-obser
     })
   );
 
-  assert.match(html, /_ga_CANARY \(ergoveritas\.com\) non-essential, present in a check performed before consent, first seen at 2.63s\./);
+  assert.match(html, /_ga_CANARY \(ergoveritas\.com\) non-essential, present in a check performed before consent, first seen at 2\.625 s\./);
   assert.match(html, /Full evidence JSON/);
   assert.match(html, /&quot;firstObservedMs&quot;:2625/);
 });
@@ -369,7 +369,7 @@ test("RegulatoryChecklistEvidenceDetails renders compact session replay retained
   );
 
   assert.match(html, /Microsoft Clarity/);
-  assert.match(html, /first observed 2\.41s after scan start/);
+  assert.match(html, /first observed 2\.41 s after scan start/);
   assert.match(html, /consentStates/);
   assert.match(html, /post_accept/);
   assert.match(html, /firstSeenMs/);

@@ -1,3 +1,4 @@
+import { formatReportSeconds, formatRetainedReportTiming } from "../../lib/scans/report-time";
 import { readAfterRejectScoringAssessment } from "../../lib/scans/after-reject-scoring-contract";
 import {documentChoiceDetails} from './report-document-choice-details';
 import { reportRequestInventory } from "./report-request-inventory";
@@ -143,22 +144,22 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
 
   const a = sections.consent;
   if (cmp) {
-    if (cmp.audit.experience?.summary) a.push(...layout.text(cmp.audit.experience.summary));
+    if (cmp.audit.experience?.summary) a.push(...layout.text(formatRetainedReportTiming(cmp.audit.experience.summary)));
     if(cmp.audit.experience?.availability) a.push(layout.heading("Why detailed CMP checks are unavailable"),...layout.text(describeCmpAuditAvailability(cmp.audit.experience.availability)));
     a.push(layout.heading("CMP identity and consent choices"), ...layout.text(`Provider: ${cmp.audit.experience?.provider ?? cmp.provider ?? "Not retained"}. Consent experience: ${cmp.audit.experience?.title ?? "Consent choices"}.${cmp.audit.inspectionSupport ? ` Preference inspection: ${label(cmp.audit.inspectionSupport.state)}.` : ""}`, 9));
-    a.push(layout.heading("CMP audit matrix"), ...pdfEvidenceTable("cmp-matrix", ["Criterion", "Result", "Evidence"], cmp.audit.rows.map(row => [row.label, row.status, row.detail ?? ""]), [190, 80, 242]));
+    a.push(layout.heading("CMP audit matrix"), ...pdfEvidenceTable("cmp-matrix", ["Criterion", "Result", "Evidence"], cmp.audit.rows.map(row => [row.label, row.status, formatRetainedReportTiming(row.detail ?? "")]), [190, 80, 242]));
     for (const row of cmp.audit.rows) {
       const support = row.supportingEvidence;
       if (!support) continue;
       const inventory = support.inventory;
       if (inventory && Object.keys(inventory).length > 0 && Object.keys(inventory).every(key => ["consentStorage", "choiceActivity", "expiries"].includes(key)) && !support.prominence && !support.cookieComparison && !support.requests?.length) continue;
-      a.push(layout.heading(row.label), ...layout.text(`Result: ${reportStatusLabel(row.status)}. ${row.detail ?? ""}`));
+      a.push(layout.heading(row.label), ...layout.text(`Result: ${reportStatusLabel(row.status)}. ${formatRetainedReportTiming(row.detail ?? "")}`));
       if (support?.prominence) {
         const geometry = support.prominence;
         a.push(...pdfEvidenceTable(`cmp-geometry-${row.id}`, ["Control", "Bounds: x, y, width, height", "Fill contrast / outer emphasis"], [
             ["Accept", geometry.accept.bounds.join(", "), `${geometry.accept.fillContrast}; ${geometry.accept.outerEmphasisFraction}`],
             ["Reject", geometry.reject.bounds.join(", "), `${geometry.reject.fillContrast}; ${geometry.reject.outerEmphasisFraction}`],
-          ], [90, 242, 180]), ...layout.text(`Capture skew: ${geometry.captureSkewMs} ms.`, 8));
+          ], [90, 242, 180]), ...layout.text(`Capture skew: ${formatReportSeconds(geometry.captureSkewMs)}.`, 8));
       }
       if (inventory?.categories?.length) a.push(...chart("Captured category settings", distribution(inventory.categories.map(item => setting(item.checked)))),
         ...pdfEvidenceTable(`cmp-categories-${row.id}`, ["Category", "Captured setting"], inventory.categories.map(item => [item.name, setting(item.checked)])));
@@ -167,11 +168,11 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
       for (const disclosure of inventory?.serviceDisclosures ?? []) a.push(...layout.text(`Named-service disclosure: ${disclosure.excerpt}`, 9));
       if (inventory?.declarations?.length) a.push(...pdfEvidenceTable(`cmp-declarations-${row.id}`, ["Cookie / pattern", "CMP-stated purpose", "CMP-stated retention / observed expiry"], inventory.declarations.map(item => [item.name,
         `${item.purpose || "Not captured"}${item.inferredPurpose ? ` | Inferred separately: ${item.inferredPurpose.category}; ${item.inferredPurpose.basis}` : ""}`,
-        `${item.duration || "Not captured"}${item.observedExpiry ? ` | Observed ${item.observedExpiry.visit}: ${new Date(item.observedExpiry.expiresAtEpochSeconds * 1000).toISOString()}; ${Math.round(item.observedExpiry.remainingSeconds / 86400 * 10) / 10} days remaining` : ""}`]), [128, 192, 192]));
+        `${formatRetainedReportTiming(item.duration || "Not captured")}${item.observedExpiry ? ` | Observed ${item.observedExpiry.visit}: ${new Date(item.observedExpiry.expiresAtEpochSeconds * 1000).toISOString()}; ${Math.round(item.observedExpiry.remainingSeconds / 86400 * 10) / 10} days remaining` : ""}`]), [128, 192, 192]));
       if (inventory?.cookies?.length) a.push(...pdfEvidenceTable(`cmp-cookie-matches-${row.id}`, ["Observed cookie", "CMP comparison", "Capture"], inventory.cookies.map(item => [item.name,
         item.matchedPattern ? `Matched: ${item.matchedPattern}` : item.possibleTemplateMatch ? `Possible template only: ${item.possibleTemplateMatch.pattern}` : "No matched declaration retained",
         `${item.observedIn.map(label).join(", ")}${item.observedExpiry ? `; expires ${new Date(item.observedExpiry.expiresAtEpochSeconds * 1000).toISOString()}` : ""}`]), [160, 192, 160]));
-      if (support?.requests?.length) a.push(...pdfEvidenceTable(`cmp-requests-${row.id}`, ["Vendor / purpose", "Request", "After Reject"], support.requests.map(item => [`${item.vendor}; ${item.category}`, `${item.hostname}${item.path}`, `+${item.msAfterReject} ms`]), [145, 257, 110]));
+      if (support?.requests?.length) a.push(...pdfEvidenceTable(`cmp-requests-${row.id}`, ["Vendor / purpose", "Request", "After Reject"], support.requests.map(item => [`${item.vendor}; ${item.category}`, `${item.hostname}${item.path}`, `+${formatReportSeconds(item.msAfterReject)}`]), [145, 257, 110]));
       if (support?.cookieComparison) {
         const c = support.cookieComparison;
         a.push(...pdfEvidenceTable(`cmp-comparison-${row.id}`, ["Comparison fact", "Retained value"], [["Declared patterns", String(c.declarationPatternCount)], ["Observed cookie names", String(c.observedCookieNameCount)], ["Unmatched names", `${c.unmatchedNameCount}: ${c.unmatchedNames.join(", ")}`], ["Possible template names (unverified)", value(c.possibleTemplateNameCount)], ["Omitted After Accept cookies", value(c.omittedAfterAcceptCookieCount)], ["Declaration inventory complete", value(c.declarationInventoryComplete)], ["All unmatched names only after Accept", value(c.allUnmatchedOnlyAfterAccept)]]));
@@ -182,7 +183,7 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
   if (assessment && controls) {
     a.push(layout.heading("First-layer control evidence"), ...pdfEvidenceTable("control-evidence", ["Intent / label", "Layer / visibility / actionable", "Timing"], assessment.evidence.filter((item, index, all) => all.findIndex(candidate => candidate.intent === item.intent && candidate.label === item.label) === index).map(item => [
       `${label(item.intent)}: ${value(item.label)}`, `${label(item.layer)}; visible ${value(item.visible)}; actionable ${value(item.actionable)}; ${[item.presentationType,item.placementType].filter(part => part && part !== "unknown").map(label).join("; ") || "Presentation not classified"}; locale ${value(item.locale)}`,
-      `${item.observedAtMs} ms after page start`,
+      `${formatReportSeconds(item.observedAtMs)} after page start`,
     ]), [180, 242, 90]));
   }
 
@@ -195,10 +196,10 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
   if (trace) {
     const d = sections.forms;
     d.push(layout.heading("Form events and destinations"));
-    for (const event of trace.trace.events) d.push(...pdfEvidenceTable(`form-event-${event.evidenceRef}`, ["Event", "Declared destination", "Fields"], [[`${event.kind} at ${event.observedAtMs} ms; form ${event.formIndex + 1}`, event.actionUrl, event.fields.map(field => `${field.name}: ${field.category}; personal ${value(field.personal)}`).join("; ")]], [130, 180, 202]));
+    for (const event of trace.trace.events) d.push(...pdfEvidenceTable(`form-event-${event.evidenceRef}`, ["Event", "Declared destination", "Fields"], [[`${event.kind} at ${formatReportSeconds(event.observedAtMs)}; form ${event.formIndex + 1}`, event.actionUrl, event.fields.map(field => `${field.name}: ${field.category}; personal ${value(field.personal)}`).join("; ")]], [130, 180, 202]));
     d.push(...pdfEvidenceTable("form-destination-requests", ["Request / recipient", "Relationship", "Timing"], trace.trace.requests.map(request => [
       `${request.method} ${request.url}; ${request.party}`, `${label(request.status)}; ${request.relation === "exact_field_value_match" ? "Exact field-value match" : "Timing association only"}; outside declared destination: ${value(request.outsideDeclaredDestination)}`,
-      `${request.observedAtMs} ms`,
+      `${formatReportSeconds(request.observedAtMs)}`,
     ]), [190, 160, 162]));
   }
   if (cms) {
@@ -226,7 +227,7 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
     if (item.topic === "policy") continue;
     const destination = sections[item.topic ?? "policy"];
     if (!item.facts.length && !item.subchecks.length) continue;
-    destination.push(layout.heading(`Evidence: ${item.label}`), ...layout.text(`${reportStatusLabel(item.status)}. ${item.explanation}`, 9));
+    destination.push(layout.heading(`Evidence: ${item.label}`), ...layout.text(`${reportStatusLabel(item.status)}. ${formatRetainedReportTiming(item.explanation)}`, 9));
     const publicFacts = item.facts.filter(fact => !/hash|artifact|contractVersion|evidenceRef|discoveryMethod/i.test(fact.label));
     if (publicFacts.length) destination.push(...pdfEvidenceTable(`checklist-facts-${item.id}`, ["Evidence", "Detail"], publicFacts.map(fact => [label(fact.label), fact.value]), [165, 347]));
     if (item.subchecks.length) destination.push(...pdfEvidenceTable(`checklist-subchecks-${item.id}`, ["Check", "Status", "Evidence / note"], item.subchecks.map(check => [check.label, check.status, `${check.note}; ${check.evidenceRefs.join(", ")}`]), [180, 110, 222]));
@@ -247,7 +248,7 @@ export function pdfChoicePathEvidence(report: CanonicalReportExport, layout: Lay
         const window = windows.find(item => item.action === action);
         const execution = executions[action];
         return [label(action), execution ? `${execution.clickCompleted ? "Click completed" : "Click incomplete"}; ${execution.consentConfirmed ? "decision confirmed" : "decision unconfirmed"}` : "Not captured",
-          window ? `${window.windowMs / 1000} s` : "Not captured",
+          window ? `${formatReportSeconds(window.windowMs)}` : "Not captured",
           window ? `${window.requestCount} total; ${window.nonEssentialRequestCount} non-essential; ${window.requests.length} detailed records` : "Not captured",
           records.filter(record => record.visit.toLowerCase() === action).map(record => `${record.name}: ${record.change}`).join("; ") || "Not captured"];
       }), [48, 115, 70, 139, 140]));
@@ -256,7 +257,7 @@ export function pdfChoicePathEvidence(report: CanonicalReportExport, layout: Lay
     ...layout.text("Initial registration and terminal verification are separate stored assessments. Unknown is not failure; decision verification does not establish downstream effectiveness.",9));
   lines.push(...layout.text("Zero requests means none were observed in that bounded session; it is not a vendor-by-vendor pass or proof of future behavior. Different window lengths are not directly comparable rates. Instrumented request/write events and consent-cookie snapshots are separate measurements.", 9));
   const requests = windows.flatMap(window => window.requests.map(request => [label(window.action), `${request.vendor}; ${label(request.purpose)}`,
-    `${request.hostname}${request.path}`, `+${request.msAfterClick} ms ${window.clockOrigin === "action_click" ? "after click" : window.clockOrigin === "consent_confirmation" ? "after confirmation" : "from saved session anchor"}; ${request.nonEssential ? "Non-essential" : "Other activity"}`]));
+    `${request.hostname}${request.path}`, `+${formatReportSeconds(request.msAfterClick)} ${window.clockOrigin === "action_click" ? "after click" : window.clockOrigin === "consent_confirmation" ? "after confirmation" : "from saved session anchor"}; ${request.nonEssential ? "Non-essential" : "Other activity"}`]));
   if (requests.length) lines.push(...pdfEvidenceTable("choice-path-requests", ["Choice", "Service / purpose", "Observed request", "Timing / classification"], requests, [48, 125, 205, 134]));
   const snapshotRows = new Map<string, NonNullable<NonNullable<ReturnType<typeof readAfterRejectScoringAssessment>>["entityEvidence"]>["observations"][number]>();
   for (const finding of report.projection.unifiedFindings) {
@@ -267,7 +268,7 @@ export function pdfChoicePathEvidence(report: CanonicalReportExport, layout: Lay
     lines.push(layout.heading("Post-Reject cookie snapshots"),
       ...layout.text("Cookie snapshots are sampled separately from the request window. Presence and sample time do not establish a write time or active use.", 9),
       ...pdfEvidenceTable("post-reject-cookie-snapshots", ["Cookie / domain", "Service / purpose", "Snapshot after Reject click"], [...snapshotRows.values()].map(row => [
-        `${row.name}${row.hostname ? `; ${row.hostname}` : ""}`, `${row.vendor ?? row.entity ?? "Unidentified"}; ${label(row.purpose)}`, `+${row.msAfterClick} ms`,
+        `${row.name}${row.hostname ? `; ${row.hostname}` : ""}`, `${row.vendor ?? row.entity ?? "Unidentified"}; ${label(row.purpose)}`, `+${formatReportSeconds(row.msAfterClick)}`,
       ]), [200, 180, 132]));
   }
   if (windows.some(window => window.requests.length < window.requestCount)) lines.push(...layout.text("Detailed request rows are a bounded sample; the summary totals include additional observed events.", 9));
@@ -276,12 +277,12 @@ export function pdfChoicePathEvidence(report: CanonicalReportExport, layout: Lay
   }
   const timing = report.appendix.evidenceDossier?.rejectTiming;
   if (timing) lines.push(...layout.text(timing.inFlightExclusionVerified ? `Confirmed-refusal evidence: ${timing.networkRequestCount} eligible network requests and ${timing.storageWriteCount} storage writes. In-flight request chains were excluded.${timing.registrationTimeIsUpperBound ? " Confirmation time is the observed upper bound." : ""}` : "Confirmed-refusal timing was not established in this export. The click-session observations and separate cookie snapshots above remain usable.", 9));
-  if (timing?.inFlightExclusionVerified) for (const request of timing.networkRequests ?? []) lines.push(...layout.text(`${request.vendor ?? "Service"}: ${request.url} started ${request.millisecondsAfterConfirmation} ms after the observed refusal confirmation.`, 9));
+  if (timing?.inFlightExclusionVerified) for (const request of timing.networkRequests ?? []) lines.push(...layout.text(`${request.vendor ?? "Service"}: ${request.url} started ${formatReportSeconds(request.millisecondsAfterConfirmation)} after the observed refusal confirmation.`, 9));
   const pageEvents = pdfTimingEvents(report);
   const rejectEvents = pdfRejectTimingEvents(report);
   if (pageEvents.length || rejectEvents.length) lines.push(...pdfEvidenceTable("choice-path-timing", ["Visit", "Time origin", "Observed event sequence"], [
-    ...(pageEvents.length ? [["Initial page", "Page start", pageEvents.map(event => `${(event.milliseconds / 1000).toFixed(2)} s: ${event.label}`).join(" -> ")]] : []),
-    ...(rejectEvents.length ? [["Reject session", "Refusal confirmation", rejectEvents.map(event => `+${event.milliseconds} ms: ${event.label}`).join(" -> ")]] : []),
+    ...(pageEvents.length ? [["Initial page", "Page start", pageEvents.map(event => `${formatReportSeconds(event.milliseconds)}: ${event.label}`).join(" -> ")]] : []),
+    ...(rejectEvents.length ? [["Reject session", "Refusal confirmation", rejectEvents.map(event => `+${formatReportSeconds(event.milliseconds)}: ${event.label}`).join(" -> ")]] : []),
   ], [80, 110, 322]));
   const expiryRows = cmpRows.filter(row => row.supportingEvidence?.inventory?.expiries?.length);
   for (const row of expiryRows) {

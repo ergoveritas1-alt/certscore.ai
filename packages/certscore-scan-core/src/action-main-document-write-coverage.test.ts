@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { actionMainDocumentWriteCoverageSchema } from "@certscore/contracts";
 import { buildActionWriteCoverage, readActionWriteCapture, type WriteProbeMetadata } from "./action-main-document-write-coverage.js";
+import { installPostRefusalStorageWriteProbe } from "./post-refusal-storage-write-probe.js";
 const metadata: WriteProbeMetadata = { observedLifetimeCount: 2, ringEvictedCount: 0, readbackOmittedCount: 0,
   cookieHookHealthy: true, storageHookHealthy: true, documentUrl: "https://example.com/", documentTimeOriginMs: 10 };
 const input = { metadata, targetUrl: "https://example.com/", windowStartedAtMs: 100, windowEndedAtMs: 200,
@@ -39,15 +40,23 @@ test("both producer probes count writes before ring eviction and terminal readba
   const { readFileSync } = await import("node:fs");
   const { runInNewContext } = await import("node:vm");
   for (const action of ["accept", "refusal"]) {
-    const source = readFileSync(new URL(`./post-${action}-observer.ts`, import.meta.url), "utf8");
-    const start = source.indexOf("async function installStorageWriteProbe");
-    const script = source.slice(start).match(/content: `([\s\S]*?)`/)[1];
     class FakeStorage { setItem(_key: string, _value: string) {} }
     class FakeDocument {}
     Object.defineProperty(FakeDocument.prototype, "cookie", { configurable: true, get() { return ""; }, set(_value) {} });
     const context = { window: {} as Record<string, unknown>, Storage: FakeStorage, Document: FakeDocument,
       location: { href: "https://example.com/" }, performance: { timeOrigin: 10, now: () => 100 } };
-    runInNewContext(script, context);
+    if (action === "refusal") {
+      const page = { addInitScript: async ({ content }: { content: string }) => {
+        runInNewContext(content, context);
+      } };
+      await installPostRefusalStorageWriteProbe(page as never);
+    } else {
+      const source = readFileSync(new URL("./post-accept-observer.ts", import.meta.url), "utf8");
+      const start = source.indexOf("async function installStorageWriteProbe");
+      const inlineScript = source.slice(start).match(/content: `([\s\S]*?)`/)?.[1];
+      assert.ok(inlineScript, "the Accept producer declares an inline write probe");
+      runInNewContext(inlineScript, context);
+    }
     const storage = new FakeStorage();
     for (let i = 0; i < 200; i++) storage.setItem(`key${i}`, "value");
     const reader = context.window[action === "accept" ? "__certscoreReadPostAcceptWrites" : "__certscoreReadPostRefusalWrites"] as (() => unknown[]) & { coverage: () => WriteProbeMetadata };

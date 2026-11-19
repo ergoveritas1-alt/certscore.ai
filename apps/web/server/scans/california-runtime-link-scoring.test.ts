@@ -100,7 +100,9 @@ test("three-point non-discrimination treatment and qualified collection remain i
 
 test("analytics-only collection, restricted processing, failed or unverified GPC cannot supply the runtime basis",()=>{
   const f=fixture([ANALYTICS_URL]),r=canonical(project(f),f.bundle.gpcResponseAssessment);
-  assert.equal(r.points,0);assert.equal(r.score.deductions.find(d=>d.findingId==="california_collection_review")?.points,7);
+  assert.equal(r.points,0);
+  assert.equal(r.score.deductions.find(d=>d.findingId==="california_collection_review")?.points,7,
+    "verified analytics collection qualifies for review while the full runtime basis remains unsupported");
   for(const mutate of [
     (f:ReturnType<typeof fixture>)=>{f.bundle.policySurfaceInspection!.privacyChoiceInspection!.coverage="limited";},
     (f:ReturnType<typeof fixture>)=>{const a=f.bundle.gpcResponseAssessment!;if(a.contractVersion==="certscore.gpc-response-assessment.v3")a.observation.delivery.httpHeaderRetained=false;},

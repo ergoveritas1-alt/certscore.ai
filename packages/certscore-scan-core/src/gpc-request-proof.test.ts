@@ -167,3 +167,38 @@ test('supported body activity remains factual when processing declarations preve
   }
  }
 });
+
+test('both choice lanes retain matching kinds and hashed routing without promoting measurement to qualified purpose', async () => {
+ const {captureCaliforniaRejectRequest} = await import('./california-reject-request');
+ const openai = 'https://bzr.openai.com/v1/sdk/events?pid=fixture_pixel';
+ const google = 'https://pagead2.googlesyndication.com/ccm/collect?en=page_view&dl=https://fixture.test/&tid=AW-123456&gclid=fixture_click';
+ const body = JSON.stringify({events:[{type:'order_created',opt_out:true}],oppref:'fixture_click',user:{in:{em:hem}}});
+ const examples = [
+  {url:openai,body,expected:{endpoint:'openai_event_post',pixelIdSha256:sha('fixture_pixel'),
+    events:[{index:0,eventType:'order_created',clickReferenceObserved:true,hashedContactObserved:true,optOut:true}]}},
+  {url:google,body:null,expected:{endpoint:'google_ccm_page_view',eventType:'page_view',propertyIdSha256:sha('AW-123456'),clickReferenceObserved:true}},
+ ];
+ for (const example of examples) {
+  const e=event(1,example.url),session=fixture(e),capture=createGpcRequestProofCapture(()=>150);
+  const inputHeaders={'content-type':'application/json','sec-gpc':'1'};
+  capture.reserve(e,session.mainDocument!.documentToken,request(example.body))!(inputHeaders);
+  capture.response(e.eventId,200);
+  session.requestProofCapture=capture.finish();
+  assert.ok(gpcObservationSessionSchema.safeParse(session).success);
+  const reject=captureCaliforniaRejectRequest({url:example.url,method:'POST',requestId:'r1',startedAtMs:100,
+    httpStatus:200,body:example.body,hasBody:example.body!==null,headers:inputHeaders});
+  for (const fact of [reject,session.requestProofCapture.rows[0]?.proof]) {
+   assert.deepEqual(fact?.measurementFacts,example.expected);
+   assert.equal(isQualifyingSaleSharingRequest(fact!.qualification),false);
+   for (const raw of ['fixture_pixel','fixture_click','AW-123456',hem]) assert.ok(!JSON.stringify(fact).includes(raw));
+  }
+ }
+ const inspect=(payload:string,route=openai)=>captureCaliforniaRejectRequest({url:route,method:'POST',requestId:'r1',startedAtMs:100,
+   httpStatus:202,body:payload,hasBody:true,headers:{'content-type':'application/json'}});
+ const batch=inspect(JSON.stringify({events:[{type:'page_viewed'},{type:'lead_created',oppref:'fixture_click'}],user:{in:{em:hem}}}));
+ assert.deepEqual(batch?.measurementFacts,{endpoint:'openai_event_post',pixelIdSha256:sha('fixture_pixel'),
+   events:[{index:0,eventType:'page_viewed'},{index:1,eventType:'lead_created',clickReferenceObserved:true}]});
+ for(const payload of ['{"events":[],"events":[{"type":"page_viewed"}]}',JSON.stringify({events:[{type:'diagnostic'}]}),
+   JSON.stringify({events:Array(9).fill({type:'lead_created'})}),body+' '.repeat(32768)]) assert.equal(inspect(payload)?.measurementFacts,undefined);
+ assert.equal(inspect(body,openai+'&pid=second')?.measurementFacts,undefined);
+});

@@ -4,6 +4,7 @@ import { terminalConsentDecisionSchema, terminalConsentDecisionBound,
 type VerifiedState = {
   stateHash: string;
   observedAtEpochMs?: number;
+  trustArcReloadReadback?: TerminalConsentDecision["trustArcReloadReadback"];
   tcfPurposeEvidence?: ConsentDecisionEvidence["tcfPurposeEvidence"];
   tcfApiSource?: ConsentDecisionEvidence["tcfApiSource"];
   oneTrustGroupEvidence?: ConsentDecisionEvidence["oneTrustGroupEvidence"];
@@ -19,13 +20,14 @@ export function terminalConsentDecisionRead(input: {
   action: "accept" | "reject"; authorizedTargetSha256?: string; parentScanStartedAtMs: number;
   dispatchedAtEpochMs: number; observationWindowMs: number; signal?: AbortSignal;
   registeredAtEpochMs?: number; resultDeadlineAtMs?: number;
+  readDeadlineAtMs?: number;
   targetStillAuthorized: () => boolean; read: () => Promise<VerifiedState | undefined>;
 }) {
   let terminal: TerminalConsentDecision | undefined;
   let started = false;
   let discarded = false;
   const anchor = input.registeredAtEpochMs ?? input.dispatchedAtEpochMs;
-  const deadline = anchor + input.observationWindowMs;
+  const deadline = Math.min(anchor + input.observationWindowMs, input.readDeadlineAtMs ?? Infinity);
   const allowedDeadline = Math.min(deadline, input.resultDeadlineAtMs ?? Infinity);
   const relative = (epoch: number) => Math.max(0, Math.round(epoch - input.parentScanStartedAtMs));
   const allowed = () => {
@@ -49,6 +51,7 @@ export function terminalConsentDecisionRead(input: {
           action: input.action,
           authorizedTargetSha256: input.authorizedTargetSha256,
           readStartedAtMs, readCompletedAtMs: relative(now),
+          ...(state.trustArcReloadReadback ? { trustArcReloadReadback: state.trustArcReloadReadback } : {}),
           evidence: { policyVersion: "semantic_consent_registration.v2",
             decision: input.action === "accept" ? "granted" : "denied", basis: "verified_state",
             observedStateSha256: state.stateHash, observedAtMs: relative(state.observedAtEpochMs ?? now),

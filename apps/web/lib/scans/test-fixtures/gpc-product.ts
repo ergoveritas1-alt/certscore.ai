@@ -7,7 +7,7 @@ import { buildGpcProductionAssessment } from "../../../../../packages/certscore-
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { gpcImpactRequestSetHash } from "../../../../../packages/certscore-scan-core/src/gpc-impact-capture";
 
-export function gpcProductFixture(options: {scanId?: string; urls?: string[]; contradiction?: boolean; priorCmpState?: boolean;
+export function gpcProductFixture(options: {scanId?: string; urls?: string[]; matchedWindowMs?: number; contradiction?: boolean; priorCmpState?: boolean;
   notReady?: "synchronous_ping_unavailable" | "cmp_status_not_loaded" | "signal_status_not_ready" | "both";
   apiUnavailable?: boolean;
   baselineReadbackIncomplete?: boolean} = {}) {
@@ -21,9 +21,18 @@ export function gpcProductFixture(options: {scanId?: string; urls?: string[]; co
     g.networkResponseEvents = g.networkEvents.slice(1).map(e => ({...e,eventId:`response-${e.eventId}`,eventType:"network_response",responseUrl:e.requestUrl,status:204})) as never;
     session.requests = g.networkEvents.map(e => ({eventId:e.eventId,timestampMs:e.timestampMs,urlSha256:fixtureHash(e.requestUrl),secGpc:"1"}));
     session.requestsObserved = g.networkEvents.length;
-    for (const w of g.gpcImpactCapture!.windows) {
-      const events = g.networkEvents.filter(e => e.timestampMs >= 1 && e.timestampMs < 1+w.durationMs);
-      w.requestCount = events.length;w.requestSetSha256 = gpcImpactRequestSetHash(events);
+  }
+  for (const bundle of [pair.baseline, g]) {
+    if (options.matchedWindowMs === undefined && (bundle !== g || !options.urls?.length)) continue;
+    const capture = bundle.gpcImpactCapture!;
+    if (options.matchedWindowMs !== undefined) {
+      capture.windows = [{ ...capture.windows.at(-1)!, durationMs: options.matchedWindowMs }];
+    }
+    for (const window of capture.windows) {
+      const startMs = capture.document!.committedAtMs;
+      const events = bundle.networkEvents.filter(event => event.timestampMs >= startMs && event.timestampMs < startMs + window.durationMs);
+      window.requestCount = events.length;
+      window.requestSetSha256 = gpcImpactRequestSetHash(events);
     }
   }
   if (options.priorCmpState) semantic.stateTransitions = [{observedAtMs:100,status:"observed",state:semantic.usca!,stateSha256:semantic.stateSha256}];

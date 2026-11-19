@@ -76,7 +76,7 @@ test("pre-consent storage rationale includes the retained first-observed time", 
   });
 
   assert.match(rationale, /7 non-essential cookie or browser-storage items were observed before consent/i);
-  assert.match(rationale, /First observed at 2\.63s after scan start/i);
+  assert.match(rationale, /First observed at 2\.63 s after scan start/i);
   assert.doesNotMatch(rationale, /First-seen times reflect the pre-consent check/i);
 });
 

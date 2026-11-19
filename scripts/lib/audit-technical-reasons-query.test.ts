@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {technicalCountsSql,fitAuditDeltaQuery,REJECT_ACTIVITY_RECEIPT_SQL,assertCurrentPriorityExtraction} from './audit-delta-query';
 import {choiceAuditSqlForTransport} from './audit-progress-choice';
+import {jsonbBytes,priorityEvidenceFromRecord,priorityEvidenceStates} from './audit-progress-priority-evidence';
 test('actual bounded SQL preserves zero counts and distinguishes missing, verification, binding and schema blockers',()=>{
  const root=mkdtempSync(path.join(tmpdir(),'technical-reasons-pg-')),env={...process.env};
  for(const k of Object.keys(env))if(k.startsWith('PG'))delete env[k];
@@ -43,6 +44,42 @@ test('actual bounded SQL preserves zero counts and distinguishes missing, verifi
   assert.equal(acceptRows[0].acceptPath,'control_unresolved');
   assert.equal(acceptRows[0].accept,null);
   assert.deepEqual(acceptRows.slice(1).map(row=>row.acceptPath),Array(8).fill(null));
+  const reloadProjection = {
+   contractVersion: 'certscore.post_refusal_report_projection.v1',
+   packetSha256: hash,
+   execution: {policyVersion: 'choice_path_execution.v1',status: 'limited',clickCompleted:true,
+    observationCompleted:false,consentConfirmed:true},
+   retainedActionTiming: {actionDispatchedAtMs: 100, observationEndedAtMs: 8200},
+   refusalRegisteredAtMs: 150, observationWindowMs: 8000,
+   actionControlProof: {action:'reject',authorizedTargetSha256:hash,observedAtMs:90},
+   terminalDecisionEvidence: {
+    policyVersion: 'bounded_registered_terminal_consent_decision.v1', action:'reject', authorizedTargetSha256:hash,
+    readStartedAtMs:7850, readCompletedAtMs:7860,
+    trustArcReloadReadback:{preReloadReadAtMs:170,reloadCommittedAtMs:700},
+    evidence:{policyVersion:'semantic_consent_registration.v2',basis:'verified_state',decision:'denied',
+      observedStateSha256:hash,observedAtMs:7860,timestampBasis:'verified_state_observed'},
+   },
+  };
+  const lateProjection=structuredClone(reloadProjection);
+  lateProjection.terminalDecisionEvidence.readCompletedAtMs=8101;
+  const reversedProjection=structuredClone(reloadProjection);
+  reversedProjection.terminalDecisionEvidence.trustArcReloadReadback.preReloadReadAtMs=701;
+  const reloadRecords=[reloadProjection,lateProjection,reversedProjection].map(postRefusalEvidenceProjection=>({
+   scan:{id},events,runtimeArtifacts:{postRefusalEvidenceProjection},
+  }));
+  const reloadSql=`select ${choiceAuditSqlForTransport(false,true,true)}
+   from (values ${reloadRecords.map(value=>`('${JSON.stringify(value)}'::jsonb,'ready',false)`).join(',')})
+   p(report_projection_payload,report_projection_status,canary), (select '${id}'::uuid id) s,
+   lateral (select p.canary "isCanary") o, (select null::jsonb value) a;`;
+  const reloadRows=run('psql',['-X','-h',root,'-p','54396','-U','fixture','-d','postgres','-Atq','-v','ON_ERROR_STOP=1'],reloadSql).trim().split('\n');
+  assert.equal(reloadRows.length,3);
+  for (const [index,line] of reloadRows.entries()) {
+   const value=JSON.parse(line);
+   assert.ok(jsonbBytes(value)<=8192);
+   assert.deepEqual(value.priorityEvidence,{...priorityEvidenceFromRecord(reloadRecords[index]),acceptPath:null});
+   assert.equal(priorityEvidenceStates(value.priorityEvidence,id)['sealed.terminal.audit_reject']?.value,
+    index===0?'verified':'unverified');
+  }
   const activity=[1,id,hash,'request'];
   const snapshot=[2,id,hash,'cookie_snapshot'];
   const allActivity=[2,id,hash,'request_and_storage_write_and_cookie_snapshot'];

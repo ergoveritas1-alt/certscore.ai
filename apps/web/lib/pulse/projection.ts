@@ -1,3 +1,4 @@
+import {californiaVisitStages} from "../scans/california-visit-stages";
 import {buildCustomerConsentEvidence} from '../api-v2/customer-consent-evidence';
 import { hasTerminalReportPublicationFailure, reportPublicationResultState, terminalReportPublicationError } from "../../server/scans/report-publication-read-state";
 import { projectScanPostureScores } from "../api-v2/posture-scores";
@@ -1918,6 +1919,7 @@ function buildEvidenceArtifact(input: {
 
   return {
     type: "certscore_pulse_evidence",
+    ...(scanRecord.scan.id ? { californiaVisitStages: californiaVisitStages(scanRecord.scan.id, runtimeArtifacts) } : {}),
     customerConsentEvidence: buildCustomerConsentEvidence(scanRecord),
     meta: {
       ...(asRecord(input.base.meta) ?? {}),

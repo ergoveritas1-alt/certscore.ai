@@ -144,7 +144,7 @@ test("canonical checklist concerns promote a production-projectable post-Reject 
   ]);
   assert.match(findings[0]?.remediation ?? "", /confirmed Reject suppresses optional tracker requests/i);
   assert.equal(findings[0]?.label, "HubSpot activity after Reject");
-  assert.equal(findings[0]?.shortSummary, "6 non-essential HubSpot requests were observed 56–774 ms after confirmed Reject.");
+  assert.equal(findings[0]?.shortSummary, "6 non-essential HubSpot requests were observed 0.056–0.774 s after confirmed Reject.");
   assert.equal(findings[0]?.severity, "high");
 });
 

@@ -1,3 +1,4 @@
+import { formatReportSeconds, formatRetainedReportTiming } from "../../lib/scans/report-time";
 import { reportBrandDisplayName } from "../../lib/scans/report-brand-display-name";
 import {documentGpcDetails,readDocumentGpc} from './report-document-choice-details';
 import { describeGpcCmpStateComparison, describeGpcGuidance, readBoundGpcCmpStateComparison } from "@certscore/contracts";
@@ -214,13 +215,13 @@ function yesNo(value: unknown) {
 
 function formatTiming(value: unknown) {
   return typeof value === "number" && Number.isFinite(value)
-    ? `${(value / 1_000).toFixed(value < 10_000 ? 2 : 1)}s after scan start`
+    ? `${formatReportSeconds(value)} after scan start`
     : "Timing not retained";
 }
 
 function formatDuration(value: unknown) {
   return typeof value === "number" && Number.isFinite(value)
-    ? `${(value / 1_000).toFixed(1)} seconds`
+    ? formatReportSeconds(value)
     : "Not available";
 }
 
@@ -349,7 +350,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       ...(gpcInventory.captureCoverage?.status === "limited" ? wrappedLines(`Partial retained capture; ${gpcInventory.captureCoverage.omittedNodes} graph records omitted. Counts describe this visit.`) : []),
       ...pdfEvidenceTable("gpc-resource-inventory", ["Resource", "Service / purpose", "Count / first seen"],gpcInventory.inventory.resources.map(row=>[
         row.name, `${row.context.identity?.product ?? row.context.identity?.vendor ?? "Unidentified"}; ${row.purposes.join(", ")}`,
-        `${row.eventCount}; ${row.occurrence.firstSeenMs === null ? "Not timed" : `+${row.occurrence.firstSeenMs} ms`}`,
+        `${row.eventCount}; ${row.occurrence.firstSeenMs === null ? "Not timed" : `+${formatReportSeconds(row.occurrence.firstSeenMs)}`}`,
       ]),[270,142,100]));
   }
 
@@ -357,14 +358,14 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
   if (gpc) {
     const facts = describeGpcObservedFacts(gpc.observation);
     for (const fact of facts) lines.push(...wrappedLines(`${fact.label}: ${fact.value}`));
-    if (gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
+    if (gpc.activityComparison) lines.push(...wrappedLines(formatRetainedReportTiming(describeGpcActivityComparison(gpc.activityComparison))));
     const cmpStateComparison = readBoundGpcCmpStateComparison(gpc.cmpStateComparison, gpc, report.scan.id);
-    if (cmpStateComparison) lines.push(...wrappedLines(describeGpcCmpStateComparison(cmpStateComparison), {gapBefore: 6, gapAfter: 5}));
-    if (gpc.guidance) for (const text of describeGpcGuidance(gpc.guidance)) lines.push(...wrappedLines(text, {gapBefore: 5, gapAfter: 5}));
+    if (cmpStateComparison) lines.push(...wrappedLines(formatRetainedReportTiming(describeGpcCmpStateComparison(cmpStateComparison)), {gapBefore: 6, gapAfter: 5}));
+    if (gpc.guidance) for (const text of describeGpcGuidance(gpc.guidance)) lines.push(...wrappedLines(formatRetainedReportTiming(text), {gapBefore: 5, gapAfter: 5}));
     if (gpc.comparison.comparable && gpc.status !== "indeterminate") {
       lines.push(...wrappedLines(hasNoQualifiedGpcActivity(gpc)
         ? "GPC comparison: No qualifying tracking activity observed in either completed matched visit."
-        : `Comparison: ${gpc.status.replaceAll("_", " ")}. ${gpcReaderSummary(gpc.summary)}`, { size: facts.length ? 9 : 10 }));
+        : `Comparison: ${gpc.status.replaceAll("_", " ")}. ${formatRetainedReportTiming(gpcReaderSummary(gpc.summary))}`, { size: facts.length ? 9 : 10 }));
     }
     lines.push(...pdfEvidenceTable("gpc-retained-scopes", ["Retained measurement", "Value"], documentGpcDetails(report), [256,256]),
       ...wrappedLines("Paired request counts, CMP snapshots and the full visit use separate windows. An early zero does not replace later positive collection. Differences do not establish GPC causation, honoring or a legal result.", {size:9}));
@@ -380,8 +381,8 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       ...wrappedLines(`${f.scope}. Additional pages: Not assessed for consent, CMP, policy, GDPR transparency or transport.`),
       ...(report.reviewFocus === "gdpr_eprivacy" ? wrappedLines(`${f.scoreScope} (overall, GDPR/ePrivacy-weighted): ${f.score?.value ?? "Unavailable"}/100. ${f.score?.scope ?? "Scored evidence unavailable."}`) : []),
       ...wrappedLines(`${f.condition} ${f.countingScope}`),
-      ...wrappedLines(`Max pages including homepage: ${state.requested.maxPages}; requested concurrency: ${state.requested.concurrency}; wait between starts: ${state.requested.waitSeconds}s; region: ${state.region}.`),
-      ...wrappedLines(`Effective concurrency: ${state.effective.concurrency}; effective wait: ${state.effective.waitSeconds}s. Status: ${state.status}; stop reason: ${state.stopReason??"In progress"}.`),
+      ...wrappedLines(`Max pages including homepage: ${state.requested.maxPages}; requested concurrency: ${state.requested.concurrency}; wait between starts: ${formatReportSeconds(state.requested.waitSeconds * 1_000)}; region: ${state.region}.`),
+      ...wrappedLines(`Effective concurrency: ${state.effective.concurrency}; effective wait: ${formatReportSeconds(state.effective.waitSeconds * 1_000)}. Status: ${state.status}; stop reason: ${state.stopReason??"In progress"}.`),
       ...(state.robotsRestriction ? wrappedLines(state.robotsRestriction) : []),
       ...wrappedLines(`Coverage: ${counts.completed} completed; ${counts.partial} partial; ${counts.blockedFailed} blocked/failed; ${counts.pending} pending; ${counts.excluded} excluded/unvisited.`),
       ...wrappedLines(`Across observed pages: ${totals.services} distinct services; ${totals.cookies} distinct cookies; ${totals.requestEvents} request events; ${totals.embedInstances} embed instances. Additional services: ${totals.additionalServices??"Homepage comparison unavailable"}.`),
@@ -403,7 +404,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       ...wrappedLines(`${initialRequests.metric!.value} request events; ${initialRequests.totalResources} distinct request resources before a choice. ${initialRequests.metric!.overview?.identifiedServices ?? "Unavailable"} identified ${initialRequests.metric!.overview?.identifiedServices === 1 ? "service" : "services"} in the initial-page resource inventory.`),
       ...pdfEvidenceTable("initial-request-inventory", ["Request resource", "Vendor / classification", "Events / first seen"], initialRequests.rows.map(row => [
         `${row.method ? `${row.method} ` : ""}${row.resource}`, `${row.vendor ?? "Unidentified"}; ${row.classification}`,
-        `${row.eventCount} events; ${row.firstSeenMs === null ? "Timing unavailable" : `+${row.firstSeenMs} ms`}`,
+        `${row.eventCount} events; ${row.firstSeenMs === null ? "Timing unavailable" : `+${formatReportSeconds(row.firstSeenMs)}`}`,
       ]), [270, 142, 100]));
     if (initialRequests.omittedResources) lines.push(...wrappedLines(`${initialRequests.omittedResources} additional resource rows are available in the online inventory.`, { size: 9 }));
   }
@@ -1114,7 +1115,7 @@ function timelineCommands(events: Array<{ label: string; milliseconds: number }>
     const position = x + slot * (index + 0.5);
     const labelX = x + slot * index;
     commands.push(`0.04 0.47 0.64 rg ${position - 2} ${baseline - 2} 4 4 re f`);
-    commands.push(`BT /F2 7 Tf 0.12 0.18 0.27 rg ${labelX} ${baseline - 14} Td (${pdfString(relative ? `+${event.milliseconds} ms` : `${(event.milliseconds / 1000).toFixed(2)} s`)}) Tj ET`);
+    commands.push(`BT /F2 7 Tf 0.12 0.18 0.27 rg ${labelX} ${baseline - 14} Td (${pdfString(`${relative ? "+" : ""}${formatReportSeconds(event.milliseconds)}`)}) Tj ET`);
     commands.push(`BT /F1 7 Tf 0.25 0.31 0.39 rg ${labelX} ${baseline - 25} Td (${pdfString(event.label)}) Tj ET`);
   });
   return commands;

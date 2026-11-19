@@ -1,12 +1,16 @@
+import { observeTrustArcReload } from "./trustarc-terminal-reload.js";
+import { installPostRefusalStorageWriteProbe } from "./post-refusal-storage-write-probe.js";
+import { installTrustArcSourceCapture, type TrustArcResponseCapture } from "./trustarc-source-capture.js";
+import { TRUSTARC_REJECT_COOKIE_DOMAINS, readTrustArcRejectReceipt, usesTrustArcUnderscoreReceipt, type TrustArcRejectReceipt } from "./trustarc-reject-receipt.js";
 import { choiceRequestRole } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
 import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
 import {readWithinActionBoundary} from "./action-operation-boundary.js";
 import { createConsentActionFrameBinding } from "./consent-action-frame-binding.js";
 import type { CookieYesLegacyBaseline } from "./cookieyes-legacy-consent-state.js";
-import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies} from './consent-receipt-capture.js';
+import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies,retainTrustArcReceiptCookies} from './consent-receipt-capture.js';
 import { isComplianzControl } from "./complianz-consent-state.js";
-import { CMP_PASSIVE_EVENT_INIT_SCRIPT, installCmpPassiveDiagnostics } from "./cmp-passive-diagnostics.js";
+import { installCmpPassiveDiagnostics } from "./cmp-passive-diagnostics.js";
 import { installOneTrustSdkSourceCapture } from "./onetrust-sdk-source.js";
 import {captureCaliforniaRejectRequest,californiaProofRecipient,prioritizeCaliforniaRequests} from "./california-reject-request.js";
 import { measurementCookieCandidates, measurementInspectionBudget, type MeasurementCookieCandidate } from "./measurement-capture.js";
@@ -253,6 +257,8 @@ export interface PostRefusalObserverInput {
   }) => void;
   /** Input attempt committed; notification runs after the dispatch call settles. */
   onActionDispatchCommitted?: (event: { type: "action_dispatched"; atMs: number }) => void;
+  /** Internal scanner artifact sink. Source bytes never enter the Reject packet. */
+  onTrustArcResponseCapture?: (capture: TrustArcResponseCapture) => void;
   outDir?: string;
   /** Local calibration aid; never changes resolver eligibility or evidence. */
   retainResolverDiagnostics?: boolean;
@@ -482,6 +488,7 @@ export async function runPostRefusalObserver(
   let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
   let receiptCapture: ReturnType<typeof installConsentReceiptCapture> | undefined;
   let passiveCmpCapture: ReturnType<typeof installCmpPassiveDiagnostics> | undefined;
+  let trustArcSourceCapture: ReturnType<typeof installTrustArcSourceCapture>;
   let oneTrustSdkCapture: ReturnType<typeof installOneTrustSdkSourceCapture> | undefined;
   let originDomStorageCapture: Awaited<ReturnType<typeof installActionDomStorageCapture>> | undefined;
   let actionDiscovery: ConsentActionDiscovery | undefined;
@@ -506,6 +513,27 @@ export async function runPostRefusalObserver(
   const captureCoverage = { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 };
   let sourceDocumentChanged = false;
   let sourcePendingAtEnd = 0;
+  let trustArcRejectReceipt: TrustArcRejectReceipt | undefined;
+  let trustArcReload: ReturnType<typeof observeTrustArcReload> | undefined;
+  const finishTrustArcSourceCapture = () => {
+    const capture = trustArcSourceCapture?.finish();
+    const receipt = trustArcRejectReceipt;
+    trustArcRejectReceipt = undefined;
+    if (!interactionDiagnostics.navigation.finalUrlAuthorized) return;
+    const sources = capture && capture.documentUrl === page?.url() && !sourceDocumentChanged ? capture : undefined;
+    if (receipt && interactionDiagnostics.click.outcome === "completed" && actionControlProof?.authorizedTargetSha256) {
+      input.onTrustArcResponseCapture?.({
+        ...sources, contractVersion: "trustarc_response_capture.v1", scanId: input.scanId,
+        documentUrl: receipt.documentUrl, observedUntilEpochMs: sources?.observedUntilEpochMs ?? receipt.readAtEpochMs,
+        assets: sources?.assets ?? [],
+        rejectReceipt: {
+          actionTargetSha256: actionControlProof.authorizedTargetSha256,
+          stateSha256: receipt.stateHash, dispatchAtEpochMs: receipt.dispatchAtEpochMs,
+          readAtEpochMs: receipt.readAtEpochMs, writes: receipt.writes,
+        },
+      });
+    } else if (sources) input.onTrustArcResponseCapture?.(sources);
+  };
   let sourceHookInstalledAtMs: number | undefined;
   const interactionDiagnostics: PostRefusalInteractionDiagnostics = {
     resolver: {
@@ -551,7 +579,13 @@ export async function runPostRefusalObserver(
     postRefusalTcfState?: PostRefusalTcfState;
     observations?: PostRefusalObservation[];
   }): Promise<PostRefusalEvidencePacket> => {
+    if (terminalDecisionEvidence?.trustArcReloadReadback && (baseSignal?.aborted || !trustArcReload?.stillBound() ||
+        fields.registration.status !== "confirmed" || captureCoverage.requestsDroppedAfterAction !== 0)) {
+      terminalDecisionEvidence = undefined;
+      confirmationDiagnostic.terminal("discarded");
+    }
     cancellation();
+    finishTrustArcSourceCapture();
     const completedAtMs = Date.now();
     if (fields.registration.actionDispatchedAtMs !== undefined && interactionDiagnostics.navigation.finalUrlAuthorized && interactionDiagnostics.navigation.documentCommitted) {
       interactionDiagnostics.postClickNavigation = receiptCapture?.navigationEvidence(interactionDiagnostics.click.outcome, actionControlProof?.authorizedTargetSha256, completedAtMs);
@@ -706,15 +740,20 @@ export async function runPostRefusalObserver(
     oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
     await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
     originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl, undefined, {
-      onSession: session => oneTrustSdkCapture?.bindNativeSession(session, {
-        deadlineAtEpochMs: resultBudgetDeadlineAtMs, signal: effectiveSignal,
-      }),
+      onSession: session => {
+        oneTrustSdkCapture?.bindNativeSession(session, {
+          deadlineAtEpochMs: resultBudgetDeadlineAtMs, signal: effectiveSignal,
+        });
+        if (input.onTrustArcResponseCapture) trustArcSourceCapture = installTrustArcSourceCapture(session, {
+          requestedUrl: input.url, scanId: input.scanId, signal: effectiveSignal, resultDeadlineAtMs: resultBudgetDeadlineAtMs,
+        });
+      },
     });
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
       ...input.runtimeGraph, captureId: input.scanId, scenario: "post_reject", startedAt: new Date(parentScanStartedAtMs).toISOString(),
     });
     actionDiscovery = await installConsentActionDiscovery(page);
-    await installStorageWriteProbe(page);
+    await installPostRefusalStorageWriteProbe(page);
 
     });
 
@@ -807,7 +846,7 @@ export async function runPostRefusalObserver(
         if (selection.evicted) activeRequestIds.delete(selection.evicted.requestId);
         if (!selection.retained) return;
       } else bucket.push(captured);
-      const caRecipient=actionDispatched?californiaProofRecipient(request.url()):null;
+      const caRecipient=actionDispatched?californiaProofRecipient(request.url(),request.method()):null;
       if (request.method() !== "OPTIONS" && measurementBudget.available(actionDispatched,caRecipient?.entityId)) {
         try {
           const {body,hasBody} = readPostRefusalRequestBody(request);
@@ -1577,6 +1616,10 @@ export async function runPostRefusalObserver(
     sourceFrameBinding.setElement(boundControlElement, resultBudgetDeadlineAtMs);
     if (originDomStorageCapture && !originDomStorageCapture.bindAuthorizedTarget(observationTargetUrl))
       limitations.push("origin_storage_authorized_target_binding_limited");
+    if (!selectedRecipe.controlFrameUrl && actionControlProof?.cmpId === "TrustArc" &&
+        observationWindowMs === 8_000 && usesTrustArcUnderscoreReceipt(page.url())) {
+      trustArcReload = observeTrustArcReload(page, context);
+    }
     let actionDispatchedAtEpochMs = Date.now();
     let actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     let clickError: unknown;
@@ -1622,6 +1665,7 @@ export async function runPostRefusalObserver(
           cancelledBeforeInput ? "abort_requested_before_action" : "dispatch_guard_failed_before_action"),
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs)});
     }
+    const trustArcReadAllowed = () => actionControlProof?.cmpId === "TrustArc" && !sourceDocumentChanged;
     const confirmationStartedAtMs = Date.now();
     const confirmedState = await sourceFrameBinding.read(confirmationTimeoutMs, confirmationBudgetMs => waitForRefusalConfirmation(
       context!,
@@ -1642,6 +1686,13 @@ export async function runPostRefusalObserver(
       { pass: () => confirmationDiagnostic.pass(false), reason: confirmationDiagnostic.reason },
       selectedRecipe!.controlFrameUrl,
       boundControlDispatch,
+      trustArcReadAllowed,
+      receipt => {
+        if (usesTrustArcUnderscoreReceipt(receipt.documentUrl)) {
+          trustArcRejectReceipt = receipt;
+          trustArcReload?.arm(receipt);
+        }
+      },
     )).catch(() => undefined);
     if (confirmedState) confirmationDiagnostic.reason("verified_decision");
     timing.confirmationMs = Math.max(0, Date.now() - confirmationStartedAtMs);
@@ -1674,7 +1725,7 @@ export async function runPostRefusalObserver(
       targetStillAuthorized: () => targetStillAuthorized() && (registeredAtEpochMs === undefined ||
         !sourceDocumentChanged && sourceFrameBinding.current),
       read: () => sourceFrameBinding.read(0, () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined,
-        {pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl, boundControlDispatch)) });
+        {pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason}, selectedRecipe!.controlFrameUrl, boundControlDispatch, trustArcReadAllowed)) });
     if (!confirmedState) {
       const captureStartedAtMs = Date.now();
       const terminalRead = createTerminalRead();
@@ -1686,6 +1737,7 @@ export async function runPostRefusalObserver(
       // Freeze before terminal diagnostics/storage reads, as in the confirmed path.
       const observationEndedAtEpochMs = Date.now();
       networkObservationClosed = true;
+      finishTrustArcSourceCapture();
       originDomStorageCapture?.finish();
       timing.observationMs = Math.max(0, Date.now() - captureStartedAtMs);
       if (stopReason !== "window_elapsed") limitations.push(`after_action_capture:${stopReason}`);
@@ -1831,6 +1883,22 @@ export async function runPostRefusalObserver(
     const registeredTerminal = productionProjectable && interactionDiagnostics.click.outcome === "completed" &&
       (boundControlDispatch || input.interactionAuthorization.kind === "loopback") && !selectedRecipe.controlFrameUrl
       ? createTerminalRead(confirmedRefusalRegisteredAtEpochMs) : undefined;
+    const registeredReloadTerminal = registeredTerminal && trustArcReload &&
+      trustArcRejectReceipt?.stateHash === confirmedState.stateHash
+      ? terminalConsentDecisionRead({
+          onOutcome: confirmationDiagnostic.terminal,
+          action: "reject", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256, parentScanStartedAtMs,
+          dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
+          registeredAtEpochMs: confirmedRefusalRegisteredAtEpochMs,
+          readDeadlineAtMs: actionDispatchedAtEpochMs + observationWindowMs,
+          resultDeadlineAtMs: resultBudgetDeadlineAtMs, signal: baseSignal,
+          targetStillAuthorized: () => trustArcReload!.stillBound(),
+          read: () => {
+            confirmationDiagnostic.pass(true);
+            return trustArcReload!.read(time => elapsed(parentScanStartedAtMs, time));
+          },
+        })
+      : undefined;
     let tcfDataAfterRefusal = await readTcfData(page).catch(() => undefined);
     let tcfDataObservedAtEpochMs = tcfDataAfterRefusal ? Date.now() : undefined;
     let tcfGrantEvidence = tcfPurposeGrantEvidence(tcfDataAfterRefusal);
@@ -1842,13 +1910,17 @@ export async function runPostRefusalObserver(
         }
       : await waitForPostRefusalObservation({
           page,
-          onObservationTick: registeredTerminal?.tick,
+          onObservationTick: () => {
+            if (registeredReloadTerminal && trustArcReload?.reloaded) registeredReloadTerminal.tick();
+            else registeredTerminal?.tick();
+          },
           getCapturedRequests: retainedRequests,
           parentScanStartedAtMs,
           refusalRegisteredAtEpochMs: confirmedRefusalRegisteredAtEpochMs,
           targetUrl: observationTargetUrl,
           observationWindowMs,
         });
+    finishTrustArcSourceCapture();
     timing.observationExitReason = observationResult.reason;
     // Request/write capture is already active while semantic readback runs.
     // Measure the registered observation from its anchor, not the later poll.
@@ -1856,6 +1928,13 @@ export async function runPostRefusalObserver(
     if (timing.observationExitReason !== "window_elapsed") {
       limitations.push(`observation_early_exit:${timing.observationExitReason}`);
     }
+    if (observationResult.reason === "window_elapsed" && captureCoverage.requestsDroppedAfterAction === 0) {
+      terminalDecisionEvidence = registeredReloadTerminal?.retained(undefined, {
+        action: "reject", dispatchedAtMs: actionDispatchedAtMs, startedAtMs: refusalRegisteredAtMs,
+        requiredWindowMs: observationWindowMs, endedAtMs: elapsed(parentScanStartedAtMs),
+      });
+      if (terminalDecisionEvidence) confirmationDiagnostic.terminalReason("verified_decision");
+    } else registeredReloadTerminal?.discard();
     if (cancellation()) limitations.push("abort_requested_after_confirmed_action_observation_not_truncated");
 
     if (observationResult.tcfData) {
@@ -1975,7 +2054,7 @@ export async function runPostRefusalObserver(
     });
 
     const terminalStorage = storageCollectionDiagnostics.postAction;
-    if (registeredTerminal && observationResult.reason === "window_elapsed" &&
+    if (!terminalDecisionEvidence && registeredTerminal && observationResult.reason === "window_elapsed" &&
       timing.observationMs >= observationWindowMs && captureCoverage.requestsDroppedAfterAction === 0 &&
       postActionCapturedAtMs >= refusalRegisteredAtMs + observationWindowMs && terminalStorage &&
       [terminalStorage.cookies, terminalStorage.localStorage, terminalStorage.sessionStorage].every(channel => channel.status !== "failed")) {
@@ -1984,7 +2063,7 @@ export async function runPostRefusalObserver(
         requiredWindowMs: observationWindowMs, endedAtMs: elapsed(parentScanStartedAtMs, observationEndedAtEpochMs),
       });
       if (terminalDecisionEvidence) confirmationDiagnostic.terminalReason("verified_decision");
-    } else {
+    } else if (!terminalDecisionEvidence) {
       registeredTerminal?.discard();
     }
     return await finalize({
@@ -2028,11 +2107,13 @@ export async function runPostRefusalObserver(
     return await finalize({resolverFound:false, resolverReason:"observer_browser_operation_boundary_exhausted",
       registration:unconfirmedRegistration("aborted","observer_browser_operation_boundary_exhausted")});
   } finally {
+    trustArcReload?.dispose();
     sourceFrameBinding.dispose();
     if (budgetTimer) clearTimeout(budgetTimer);
     budgetController.signal.removeEventListener("abort", closeBudgetExpiredContext);
 
     finishOptionalRuntimeGraph(graphCapture, "post_reject", "action_capture_closed");
+    trustArcSourceCapture?.finish();
     originDomStorageCapture?.finish();
     void boundControlElement?.dispose().catch(() => undefined);
     actionDiscovery?.dispose();
@@ -2624,61 +2705,6 @@ function vendorFor(input: {
   }).observation;
 }
 
-async function installStorageWriteProbe(page: Page): Promise<void> {
-  await page.addInitScript({ content: `(() => {
-    const records = [];
-    const hookInstalledAtMs = performance.timeOrigin + performance.now();
-    let nextSequence = 0;
-    let installedCookieSetter;
-    let installedStorageSetter;
-    const retain = (record) => {
-      records.push({ ...record, sequence: ++nextSequence });
-      if (records.length > 192) records.splice(0, records.length - 192);
-    };
-    Object.defineProperty(window, "__certscoreReadPostRefusalWrites", {
-      configurable: false,
-      enumerable: false,
-      value: Object.assign(() => records.slice(-96).map((record) => ({ ...record })), { coverage: () => ({
-        observedLifetimeCount: nextSequence, ringEvictedCount: Math.max(0, nextSequence - 192),
-        readbackOmittedCount: Math.max(0, records.length - 96),
-        storageHookHealthy: Storage.prototype.setItem === installedStorageSetter,
-        cookieHookHealthy: !!installedCookieSetter && Object.getOwnPropertyDescriptor(Document.prototype, "cookie")?.set === installedCookieSetter,
-        documentUrl: location.href, documentTimeOriginMs: performance.timeOrigin, hookInstalledAtMs,
-      }) }),
-      writable: false,
-    });
-    const originalSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = installedStorageSetter = function(key, value) {
-      let storageType = "local_storage";
-      try { storageType = this === window.sessionStorage ? "session_storage" : "local_storage"; } catch (_) {}
-      const result = originalSetItem.call(this, key, value);
-      retain({ storageType, name: String(key).slice(0, 180), value: String(value).length <= 2048 ? String(value) : undefined, observedAtEpochMs: performance.timeOrigin + performance.now() });
-      return result;
-    };
-    const cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
-    if (cookieDescriptor && cookieDescriptor.get && cookieDescriptor.set && cookieDescriptor.configurable) {
-      Object.defineProperty(Document.prototype, "cookie", {
-        configurable: true,
-        enumerable: cookieDescriptor.enumerable,
-        get: cookieDescriptor.get,
-        set: installedCookieSetter = function(value) {
-          const name = String(value).split("=", 1)[0].trim().slice(0, 180);
-          const result = cookieDescriptor.set.call(this, value);
-          const cookieValue = String(value).slice(String(value).indexOf("=") + 1).split(";", 1)[0];
-          const attributes = String(value).split(";").slice(1).map((attribute) => attribute.trim());
-          const maxAge = attributes.find((attribute) => attribute.toLowerCase().startsWith("max-age="))?.slice(8);
-          const expires = attributes.find((attribute) => attribute.toLowerCase().startsWith("expires="))?.slice(8);
-          const deletion = maxAge !== undefined ? Number(maxAge) <= 0 : expires !== undefined && Date.parse(expires) <= Date.now();
-          retain({ storageType: "cookie", name, deletion, value: cookieValue.length <= 2048 ? cookieValue : undefined,
-            cookieAssignment: String(value).length <= 4096 ? String(value) : undefined,
-            documentUrl: location.href.length <= 2048 ? location.href : undefined,
-            observedAtEpochMs: performance.timeOrigin + performance.now() });
-          return result;
-        },
-      });
-    }
-  })();` + CMP_PASSIVE_EVENT_INIT_SCRIPT });
-}
 
 async function readStorageWrites(page: Page | Frame): Promise<InstrumentedStorageWrite[]> {
   return page.evaluate(() => {
@@ -2781,7 +2807,9 @@ async function dispatchRejectControl(
   onBeforeDispatch?.();
   assertDispatchAllowed?.();
   onDispatch?.();
-  await boundControl.click({ timeout: 2_000 });
+  // Start the existing readback after dispatch, before this CMP's delayed reload.
+  const noWaitAfter = !recipe.controlFrameUrl && proof?.cmpId === "TrustArc" && page.url() === "https://trustarc.com/";
+  await boundControl.click({ timeout: 2_000, ...(noWaitAfter ? { noWaitAfter } : {}) });
 }
 
 async function captureRecipeRuntimeUrls(
@@ -3650,6 +3678,8 @@ async function waitForRefusalConfirmation(
   diagnostics?: { pass: () => void; reason: (reason: ConsentConfirmationReason) => void },
   controlFrameUrl?: string,
   boundStorageScope = false,
+  trustArcReadAllowed?: () => boolean,
+  onTrustArcReceipt?: (receipt: TrustArcRejectReceipt) => void,
 ): Promise<RefusalConfirmationState | undefined> {
   let osanoReceiptAttempted = false;
   const boundScope = exactSelectorScope(page, controlFrameUrl);
@@ -3878,7 +3908,17 @@ async function waitForRefusalConfirmation(
         return {stateHash: hashValue(current.canonicalState), witnessType: "cmp_api_state", key: "cookie_information",
           expectedState: "all_configurable_purposes_denied_after_reject"};
       }
-      if (confirmation.cookieName === "OptanonConsent" && baseline.oneTrustBaseline?.status === "verified") {
+      if (confirmation.cookieName === "notice_gdpr_prefs" && !controlFrameUrl &&
+          TRUSTARC_REJECT_COOKIE_DOMAINS.has(page.url()) && trustArcReadAllowed?.()) {
+        const receipt = await readTrustArcRejectReceipt(context, page, actionDispatchedAtEpochMs);
+        // Initial reads must finish inside the existing confirmation deadline.
+        // The terminal reader independently enforces the action-window deadline.
+        if (receipt && !signal?.aborted && trustArcReadAllowed() &&
+            (timeoutMs === 0 || Date.now() <= deadlineAtMs)) {
+          onTrustArcReceipt?.(receipt);
+          decoded = receipt;
+        }
+      } else if (confirmation.cookieName === "OptanonConsent" && baseline.oneTrustBaseline?.status === "verified") {
         decoded = await verifiedChangedOneTrustDecision({context, scope: semanticScope, cookieName: confirmation.cookieName,
           actionAt: actionDispatchedAtEpochMs, oneTrustBaseline: baseline.oneTrustBaseline, onDiagnostic: diagnostics?.reason});
       } else {
@@ -4270,7 +4310,8 @@ async function cmpCookieState(
   if (!boundedName) return undefined;
   const token=receiptCaptureToken(context);
   const cookies=await (existingCookies ?? context.cookies());
-  retainReceiptCookies(token,cookies,boundedName);
+  if (boundedName === "notice_gdpr_prefs") retainTrustArcReceiptCookies(token, cookies);
+  else retainReceiptCookies(token, cookies, boundedName);
   const states = cookies
     .filter((cookie) => matchesCanonicalCmpCookieName(cookie.name, boundedName))
     .map((cookie) => ({

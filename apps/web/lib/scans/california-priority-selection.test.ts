@@ -129,7 +129,7 @@ test("sparse California results list collection as review while the sole disclos
   const actual=buildRegulatoryAssessmentHighlights(r.rows,"ccpa_cpra",{kind:"page"},{score:score.score});
   assert.deepEqual(actual.topIssues.map(f=>f.id),["california_collection_review"]);
   const copy=`${actual.highlights.text} ${actual.highlights.expanded?.text??""}`;
-  assert.match(actual.highlights.text,/^“Collection under privacy-choice conditions”/);
+  assert.match(actual.highlights.text,/^“Non-essential activity under GPC”/);
   assert.doesNotMatch(copy,/non-discrimination/i);
   assert.match(copy,/purpose is unresolved|purpose.*remains unresolved/);
   assert.match(copy,/non-personalized ads declared/);

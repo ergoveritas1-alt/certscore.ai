@@ -1,4 +1,5 @@
 "use client";
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import { trackFullSiteCompletion } from "../../lib/analytics/scan-conversions";
 import { ReportInventorySummary } from "../scans/report-inventory-summary";
 import { useFullSiteReportContinuity } from "./full-site-report-continuity";
@@ -69,11 +70,7 @@ const units = {
   embed: "Embeds",
 };
 const duration = (ms: number | null | undefined) =>
-  ms === null || ms === undefined
-    ? "Unavailable"
-    : ms < 60000
-      ? `${(ms / 1000).toFixed(1)}s`
-      : `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+  typeof ms === "number" && Number.isFinite(ms) ? formatReportSeconds(ms) : "—";
 const timestamp = (value: string | null | undefined) =>
   value
     ? new Intl.DateTimeFormat(undefined, {
@@ -385,7 +382,7 @@ export function FullSiteWorkspace({
             Coverage & timing ·{" "}
             {duration(
               Number.isFinite(startTime) && timingEnd !== null
-                ? Math.max(0, Math.floor((timingEnd - startTime) / 1000) * 1000)
+                ? Math.max(0, timingEnd - startTime)
                 : null,
             )}
           </summary>
@@ -403,12 +400,12 @@ export function FullSiteWorkspace({
                   ["Stop reason", state?.stopReason === "max_pages" ? "Page limit reached" : state?.stopReason?.replaceAll("_", " ") ?? (running ? "In progress" : "Not stopped")],
                   ["Worker limit", state?.effective.concurrency ?? requested.concurrency],
                   ["Peak workers", state?.peakWorkers ?? "Unavailable"],
-                  ["Start interval", `${state?.effective.waitSeconds ?? requested.waitSeconds}s`],
+                  ["Start interval", `${formatReportSeconds((state?.effective.waitSeconds ?? requested.waitSeconds) * 1_000)}`],
                 ] },
                 { title: "Timing", rows: [
                   ["Starting-page audit", duration(state?.homepageDurationMs)],
                   ["Resource crawl", duration(data?.timing.crawlStartedAt && timingEnd !== null
-                    ? Math.max(0, Math.floor((timingEnd - Date.parse(data.timing.crawlStartedAt)) / 1000) * 1000) : null)],
+                    ? Math.max(0, timingEnd - Date.parse(data.timing.crawlStartedAt)) : null)],
                   ["Median page", duration(s?.timing.medianPageMs)],
                   ["Slowest page", duration(s?.timing.slowestPageMs)],
                   ["Page samples", s?.timing.sampleCount ?? 0],
@@ -501,7 +498,7 @@ export function FullSiteWorkspace({
           state.effective.waitSeconds !== requested.waitSeconds) ? (
           <p className="text-sm text-sky-800">
             Effective shared restrictions: at most {state.effective.concurrency}{" "}
-            active page workers; at least {state.effective.waitSeconds}s between
+            active page workers; at least {formatReportSeconds(state.effective.waitSeconds * 1_000)} between
             starts. Backoff and starting-page audits may pause dispatch.
           </p>
         ) : null}

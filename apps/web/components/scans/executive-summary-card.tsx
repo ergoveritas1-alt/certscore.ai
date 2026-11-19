@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import { EvidenceJumpLink } from "./evidence-jump-link";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import type { ChoicePathExecution } from "@certscore/contracts";
@@ -520,7 +521,7 @@ function buildPreConsentTrackingCardCopy(finding: CertScoreFinding): ExecutiveFi
   const firstTrackerTimestampMs = finding.evidenceDetails?.timing?.firstThirdPartyTrackingRequestMs;
   const representativeVendors = getRepresentativeVendorNames(finding);
   const vendorText = representativeVendors.length > 0 ? formatInlineList(representativeVendors) : null;
-  const timestampText = typeof firstTrackerTimestampMs === "number" ? `${firstTrackerTimestampMs}ms` : null;
+  const timestampText = typeof firstTrackerTimestampMs === "number" ? `${formatReportSeconds(firstTrackerTimestampMs)}` : null;
   const observedSignal =
     vendorText && timestampText
       ? `${vendorText} appeared before recorded consent; first classified signal at ${timestampText} after page load.`
@@ -1349,7 +1350,7 @@ function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotic
 
 function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: string | null; durationMs?: number | null; coverageLimitation?: string | null }) {
   const durationLabel = typeof input.durationMs === "number" && Number.isFinite(input.durationMs)
-    ? `${(input.durationMs / 1000).toFixed(1)}s observed`
+    ? `${formatReportSeconds(input.durationMs)} observed`
     : "Duration unavailable";
   const rows = [
     ["Requested host", input.requestedHost ?? "Unavailable"],
@@ -2305,8 +2306,7 @@ function getCompactRejectPathPresentation(state: ExecutiveRejectPathProjection["
 }
 
 function formatRejectObservationWindow(observationWindowMs: number) {
-  const seconds = observationWindowMs / 1000;
-  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)}s maximum`;
+  return `${formatReportSeconds(observationWindowMs)} maximum`;
 }
 
 function formatRejectResolverMethod(resolverMethod: string) {
@@ -2540,12 +2540,7 @@ function ExecutiveSignalSnapshotPane(input: {
 }
 
 function formatTimelineOffset(ms: number) {
-  const safeMs = Math.max(0, Math.round(ms));
-  if (safeMs < 1000) {
-    return `${safeMs}ms`;
-  }
-  const seconds = safeMs / 1000;
-  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)}s`;
+  return formatReportSeconds(Math.max(0, ms));
 }
 
 function getTimelineToneClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") {
@@ -2571,8 +2566,7 @@ function getTimelineTimeBadgeClasses(tone: ExecutiveTimelineEvent["tone"] = "sla
 }
 
 function formatTimelineSecondBadge(ms: number) {
-  const seconds = Math.max(0, ms) / 1000;
-  return `${seconds < 1 ? seconds.toFixed(2) : seconds.toFixed(1)}s`;
+  return formatReportSeconds(Math.max(0, ms));
 }
 
 function getTimelineShortLabel(label: string) {

@@ -85,6 +85,11 @@ export const gpcBoundedObservationSchema = z.object({
   sessionSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   documentUrlSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   positiveEvidence: z.object({ policyVersion: z.literal("gpc_positive_evidence.v1"), representativeDocument: z.boolean() }).strict().optional(),
+  presenceEvidence: z.array(z.object({
+    evidenceId:z.string().min(1).max(160), entityId:z.string().regex(/^ent_[a-f0-9]{12}$/), entity:z.string().min(1).max(200),
+    purpose:z.enum(["analytics","advertising","marketing","session_replay","personalization","tag_management","consent_management","infrastructure","security"]), presenceBasis:z.enum(["service_request","cookie_snapshot"]),
+    msFromAnchor:count, processingSignals:z.array(z.string().max(80)).max(12),
+  }).strict()).max(32).optional(),
   delivery: z.object({ httpHeaderRetained: z.boolean(), mainNavigatorReadbackRetained: z.boolean(), fullContextVerified: z.boolean() }).strict(),
   semanticProbe: z.enum(["observed", "unsupported", "unavailable", "not_ready", "invalid", "incomplete"]),
   // Latest explicit bit in the bounded listener history, at the event's own time.
@@ -118,7 +123,7 @@ export const gpcBoundedObservationSchema = z.object({
         evidenceId: z.string().min(1).max(160), entityId: z.string().regex(/^ent_[a-f0-9]{12}$/),
         label: z.string().min(1).max(200), observedAtMs: count,
         purpose: z.enum(["analytics", "advertising", "marketing", "session_replay"]),
-        measurement: z.literal("google_ccm_document_page_view").optional(),
+        measurement: z.enum(["google_ccm_document_page_view","openai_pixel_measurement"]).optional(),
         httpStatus: z.number().int().min(200).max(399),
         qualification: saleSharingRequestQualificationSchema,
       }).strict()).max(32),
@@ -168,11 +173,17 @@ export const gpcBoundedObservationSchema = z.object({
       : readiness.cmpStatusLoaded === null || readiness.signalStatusReady === null ||
         readiness.cmpStatusLoaded && readiness.signalStatusReady)))
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Availability diagnostics require a bound, timed observation with matching probe status and consistent readiness facts."});
+  if (o.presenceEvidence?.some(row => !o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 ||
+    !o.positiveEvidence?.representativeDocument || !o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained ||
+    o.requests.documentCommittedAtMs === null || row.msFromAnchor < o.requests.documentCommittedAtMs ||
+    (o.requests.throughMs === null || row.msFromAnchor > o.requests.throughMs)) ||
+    new Set(o.presenceEvidence?.map(row=>row.evidenceId)).size !== (o.presenceEvidence?.length ?? 0))
+    ctx.addIssue({code:"custom",message:"Presence evidence requires a bound GPC observation and distinct evidence references."});
   const review = o.requests.collectionReview;
   if (review && (new Set(review.rows.map(r => r.evidenceId)).size !== review.rows.length ||
     review.rows.length > o.requests.collectionCount || review.rows.some(r =>
       (r.measurement && (review.policyVersion !== "gpc_collection_review.v2-google-page-view" ||
-        r.entityId !== "ent_7509263a9ab6" || r.purpose !== "advertising" || r.httpStatus >= 300)) ||
+        r.entityId !== (r.measurement === "openai_pixel_measurement" ? "ent_1a007e52f2d1" : "ent_7509263a9ab6") || r.purpose !== "advertising" || r.httpStatus >= 300)) ||
       !o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 || (!o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained) ||
       !o.positiveEvidence?.representativeDocument || o.requests.fromMs === null || o.requests.throughMs === null ||
       r.observedAtMs < Math.max(o.requests.fromMs, o.requests.documentCommittedAtMs ?? 0) || r.observedAtMs > o.requests.throughMs)))

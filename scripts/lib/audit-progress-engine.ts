@@ -54,11 +54,12 @@ export function progressEngine(verifiedRejectPresenceIds: readonly string[] = []
           }
           return captured;
         };
-        const selected=noGoTotal?chosen:noGoReason?noGos:chosen.filter(r=>funnel?r.reportable:eligible(r,m.id)),groups:any={};
+        const visitStage=/^detail\.(reject|gpc)\.stage[123]$/.test(m.id);
+        const selected=noGoTotal?chosen:noGoReason?noGos:chosen.filter(r=>funnel||visitStage?r.reportable:eligible(r,m.id)),groups:any={};
         // The audit mapping uses the same exact public reason field across retained export versions.
         for(const r of selected){
           const sample=activity?activityState(r):undefined;
-          const s=noGoTotal?'retained_attempt_outcome/v1':noGoReason?'retained_public_no_go_reason/v1':
+          const s=visitStage?'california.visit-stages.v1':noGoTotal?'retained_attempt_outcome/v1':noGoReason?'retained_public_no_go_reason/v1':
             source(r,sample?.key??m.id)+(sample?.scope??'');
           (groups[s]??=[]).push(r);
         }
@@ -87,7 +88,7 @@ export function progressEngine(verifiedRejectPresenceIds: readonly string[] = []
           }
           const n=m.success.reduce((n:number,k:string)=>n+(counts[k]??0),0);
           return {source:s,counts,numerator:n,denominator:rs.length,
-            ...(activity?{activityCoverage:{completedClicks,classifiedCompletedClicks,observedCompletedClicks}}:{}),rate:rs.length&&m.success.length&&s!=='mixed_sources'&&!s.startsWith('unavailable')&&(counts.unavailable??0)!==rs.length?100*n/rs.length:null};
+            ...(activity?{activityCoverage:{completedClicks,classifiedCompletedClicks,observedCompletedClicks}}:{}),rate:rs.length&&m.success.length&&s!=='mixed_sources'&&!s.startsWith('unavailable')&&(visitStage||(counts.unavailable??0)!==rs.length)?100*n/rs.length:null};
         };
         const keys=Object.keys(groups),v:any=tally(selected,keys.length===1?keys[0]!:'mixed_sources');v.series={};
         for(const [s,rs]of Object.entries(groups)){const sub=tally(rs as any[],s);compare(sub,previous?.metrics[m.id]?.series[s],!base.completeDay||!previous?.completeDay);v.series[s]=sub;}

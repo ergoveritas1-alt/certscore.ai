@@ -33,7 +33,7 @@ test("fonts first cannot supply tracking attribution or timing, while later Pixe
   const tracking = row("pre_consent_third_party_tracking", "Tracking", { trackingRequestTiming: timing, firstObservedMs: 5010,
     representativeRequests: [font], evidenceHighlights: ["first seen 5.01s"] });
   const rationale = deriveGdprEprivacyCoverageChecklistRowRationale(tracking);
-  assert.match(rationale, /Meta Pixel at 7.07s/);
+  assert.match(rationale, /Meta Pixel at 7\.07 s/);
   assert.doesNotMatch(rationale, /5.01|Google Fonts/);
   assert.equal(timing.requests[0]?.requestUrl, "https://www.facebook.com/tr/?redacted=1");
   assert.equal(timing.requests[0]?.runtimePhase, "pre_consent");

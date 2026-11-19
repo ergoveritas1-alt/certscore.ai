@@ -549,6 +549,29 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
   }
 });
 
+function validateTrustArcReloadReadback(source: {
+  terminalDecisionEvidence?: z.infer<typeof terminalConsentDecisionSchema>;
+  decisionEvidence?: z.infer<typeof consentDecisionEvidenceSchema>;
+  interactionDiagnostics?: z.infer<typeof postRefusalInteractionDiagnosticsSchema>;
+  actionControlProof?: { cmpId?: string; frameIdentitySha256?: string; authorizedTargetSha256?: string };
+}, dispatchedAtMs: number | undefined, context: z.RefinementCtx) {
+  const terminal = source.terminalDecisionEvidence;
+  const reload = terminal?.trustArcReloadReadback;
+  if (!reload) return;
+  const navigation = source.interactionDiagnostics?.postClickNavigation;
+  const initial = source.decisionEvidence;
+  if (dispatchedAtMs === undefined || navigation?.scope !== "main_frame" ||
+      navigation.outcome !== "main_frame_navigated" ||
+      navigation.elapsedAfterClickMs === undefined ||
+      Math.abs(dispatchedAtMs + navigation.elapsedAfterClickMs - reload.reloadCommittedAtMs) > 1 ||
+      source.actionControlProof?.cmpId !== "TrustArc" ||
+      source.actionControlProof.frameIdentitySha256 !== source.actionControlProof.authorizedTargetSha256 ||
+      initial?.basis !== "verified_state" || initial.decision !== "denied" ||
+      initial.observedStateSha256 !== terminal?.evidence.observedStateSha256) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["terminalDecisionEvidence"], message: "TrustArc readback must bind to the same recorded Reject and main-document reload." });
+  }
+}
+
 const postRefusalEvidencePacketBaseSchema = z.object({
   consentReceiptCapture: consentReceiptCaptureSchema.optional(),
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
@@ -628,20 +651,24 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["timing", "observationEndedAtMs"], message: "Observation end must retain the action and result clock binding." });
   const terminalWindow = packet.terminalDecisionEvidence?.policyVersion === "bounded_registered_terminal_consent_decision.v1" &&
     packet.refusalRegistration.status === "confirmed" && packet.interactionDiagnostics?.click.outcome === "completed" &&
-    packet.productionProjectable && !packet.cancellation.requested && packet.captureCoverage?.requestsDroppedAfterAction === 0 &&
+    packet.productionProjectable && (!packet.cancellation.requested || packet.terminalDecisionEvidence.trustArcReloadReadback) &&
+    packet.captureCoverage?.requestsDroppedAfterAction === 0 &&
     packet.timing.observationExitReason === "window_elapsed" && packet.timing.observationMs >= packet.observationWindowMs &&
     packet.refusalRegistration.actionDispatchedAtMs !== undefined && packet.refusalRegistration.refusalRegisteredAtMs !== undefined &&
     packet.timing.observationEndedAtMs !== undefined && packet.timing.observationEndedAtMs <= packet.timing.readyAtMs &&
-    packet.storage.postActionCapturedAtMs !== undefined &&
-    packet.storage.postActionCapturedAtMs >= packet.refusalRegistration.refusalRegisteredAtMs + packet.observationWindowMs &&
-    packet.storage.collectionDiagnostics?.postAction &&
-    (["cookies", "localStorage", "sessionStorage"] as const).every(channel =>
-      packet.storage.collectionDiagnostics!.postAction![channel].status !== "failed")
+    (packet.terminalDecisionEvidence.trustArcReloadReadback
+      ? ["https://www.mobvista.com/en", "https://trustarc.com/"].includes(packet.targetUrl)
+      : packet.storage.postActionCapturedAtMs !== undefined &&
+        packet.storage.postActionCapturedAtMs >= packet.refusalRegistration.refusalRegisteredAtMs + packet.observationWindowMs &&
+        packet.storage.collectionDiagnostics?.postAction &&
+        (["cookies", "localStorage", "sessionStorage"] as const).every(channel =>
+          packet.storage.collectionDiagnostics!.postAction![channel].status !== "failed"))
     ? { action: "reject" as const, dispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs,
       startedAtMs: packet.refusalRegistration.refusalRegisteredAtMs, requiredWindowMs: packet.observationWindowMs,
       endedAtMs: packet.timing.observationEndedAtMs }
     : undefined;
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context, terminalWindow);
+  validateTrustArcReloadReadback(packet, packet.refusalRegistration.actionDispatchedAtMs, context);
   validateConsentReceiptCapture(packet.consentReceiptCapture,{artifactVersion:packet.artifactVersion,scanId:packet.scanId,action:'reject',
     targetSha256:packet.actionControlProof?.authorizedTargetSha256,frameIdentitySha256:packet.actionControlProof?.frameIdentitySha256,
     dispatchedAtMs:packet.refusalRegistration.actionDispatchedAtMs,readyAtMs:packet.timing.readyAtMs,completedAt:packet.completedAt,
@@ -1421,6 +1448,7 @@ export const postRefusalReportProjectionSchema = z.object({
     (projection.registeredObservationCompletion.termination === "evidence_satisfied" && projection.observationCount === 0)
   )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["registeredObservationCompletion"], message: "Registered completion must retain its action, registration and observation binding." });
   validateTerminalConsentDecision(projection.terminalDecisionEvidence, projection.afterActionCapture, projection.actionControlProof, "reject", context, registeredTerminalWindow(projection));
+  validateTrustArcReloadReadback(projection, projection.retainedActionTiming?.actionDispatchedAtMs, context);
   validateChoicePathExecution(projection.execution, projection, "reject", context);
   validateRetainedActionTiming(projection.retainedActionTiming, projection, "reject", context);
   validateAfterActionProjection(projection.afterActionCapture, context, {

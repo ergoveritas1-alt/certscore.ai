@@ -5269,7 +5269,7 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
       )
   },
   {findingId:"california_collection_review",policyPageType:null,
-    rationale:"Source-bound collection under privacy-choice conditions warrants purpose review.",
+    rationale:"Retained activity under privacy-choice conditions warrants purpose review.",
     matchesLegacySource:(packet)=>packet.sourceRefs.some(ref=>ref.kind==="signal"&&ref.source==="runtime_artifact_signal"&&ref.key==="privacy.california_collection_review")},
   {findingId:"california_post_reject_collection",policyPageType:null,
     rationale:"Verified advertising collection after a scope-appropriate Reject click.",
@@ -5948,7 +5948,7 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Review third-party cookie controls so reject meaningfully reduces non-essential cookie activity after the interaction completes.",
     whyThisMatters: "Persistent third-party cookies after reject can signal that consent controls are not enforcing the promised outcome."
   },
-  california_collection_review: {suggestedFix:"Review effective vendor settings, processing arrangements, sale/sharing purposes and privacy-choice enforcement.",whyThisMatters:"Observed collection under privacy-choice conditions warrants investigation when recipient purpose remains unresolved. It does not establish a legal violation."},
+  california_collection_review: {suggestedFix:"Review effective vendor settings, processing arrangements, sale/sharing purposes and privacy-choice enforcement.",whyThisMatters:"Observed activity under privacy-choice conditions warrants investigation when recipient purpose remains unresolved. It does not establish a legal violation."},
   california_post_reject_collection: {suggestedFix:"Review the recorded advertising recipients and enforce the visitor’s cookie-tracking rejection across those integrations.",whyThisMatters:"Advertising collection after a cookie-tracking rejection can indicate privacy-choice enforcement risk; recipient processing and legal applicability remain unverified."},
   gpp_propagation_inconsistency: {
     suggestedFix: "Review the CMP section inventory and ad adapters so applicable GPP payloads reach the recorded recipients consistently.",
@@ -6992,7 +6992,9 @@ function createInitialUnifiedFindingPacket(
     review.disclosureChoiceAssessment?.policyVersion===CALIFORNIA_COMBINED_OPT_OUT_POLICY ? californiaPrivacyReviewCopy(definition.id,review):undefined;
   return {
     unifiedFindingId: definition.id,
-    title: combinedCopy?.title ?? (candidate.normalizedConcern?.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL
+    title: definition.id === "california_collection_review" && candidate.normalizedConcern?.originKey === "privacy.california_collection_review"
+      ? candidate.title
+      : combinedCopy?.title ?? (candidate.normalizedConcern?.originKey === PRIVACY_CHOICE_PRESENCE_SIGNAL
       ? readSaleSharingLinkPresence(candidate.normalizedConcern.evidenceBundle.rawEvidence?.consentControlAssessment)?.title ?? PRIVACY_CHOICE_PRESENCE_TITLE
       : definition.id === "post_refusal_non_essential_activity" || definition.id === "post_reject_click_tracking" && isRejectPresencePolicy(scoring?.policyVersion)
       ? afterRejectScoringNarrative(readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment))?.title ?? definition.label

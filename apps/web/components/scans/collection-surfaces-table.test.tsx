@@ -23,7 +23,7 @@ test("missing, withheld, and unsafe snapshot URLs never become usable links", ()
     assert.doesNotMatch(html, /View form:|javascript:/);
   }
   const limited = renderToStaticMarkup(<CollectionSurfacesTable rows={[]} pagesWithoutInventory={2} limitedPages={1} />);
-  assert.match(limited, /form coverage is incomplete/); assert.doesNotMatch(limited, /No forms were observed/);
+  assert.equal(limited, "");
 });
 
 test("key columns sort both ways without mutating input or sorting field counts as text", () => {
@@ -67,9 +67,10 @@ test("retained toggle state and field warnings display without treating legacy m
  assert.match(html,/Checkboxes \/ toggles/);assert.match(html,/Preselected marketing opt-in/);assert.match(html,/>On</);assert.match(html,/Not captured/);
 });
 
-test("complete zero-form inventory renders only a single line", () => {
+test("finished reports omit the empty forms section", () => {
   const html = renderToStaticMarkup(<CollectionSurfacesTable rows={[]} />);
-  assert.match(html, /Forms: no forms observed on the scanned pages/);
+  assert.equal(html, "");
+  assert.equal(renderToStaticMarkup(<CollectionSurfacesTable afterAcceptLimited rows={[]} />), "");
   assert.doesNotMatch(html, /<table|<h2|Expand a form|0 forms/);
 });
 

@@ -1,3 +1,4 @@
+import { formatReportSeconds, formatRetainedReportTiming } from "../../lib/scans/report-time";
 import React from "react";
 import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
 import { getCorrectionGuidance } from "../../lib/scans/checklist-correction-guidance";
@@ -127,8 +128,7 @@ function formatHumanTimeMs(value: unknown) {
 }
 
 function formatElapsedSeconds(value: number) {
-  const seconds = Math.max(0, value) / 1000;
-  return `${seconds.toPrecision(3)}s`;
+  return formatReportSeconds(Math.max(0, value));
 }
 
 function getFirstNumberFromKeys(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -653,7 +653,7 @@ function cleanEvidenceRef(value: string) {
 }
 
 function cleanCustomerEvidenceText(value: string) {
-  return value
+  return formatRetainedReportTiming(value
     .replace(/firstSeenMs\s*:\s*(\d+(?:\.\d+)?)/gi, (_match, milliseconds: string) => `first observed ${formatElapsedSeconds(Number(milliseconds))} after scan start`)
     .replace(/preConsent\s*:\s*true/gi, "observed before consent")
     .replace(/^statusBasis\s*:\s*/i, "")
@@ -669,7 +669,7 @@ function cleanCustomerEvidenceText(value: string) {
     .replace(/^runtimeVendorRequestUrlCoherence\s*:/i, "Vendor/request comparison:")
     .replace(/^([A-Za-z][A-Za-z0-9_]*)(\s*:)/, (_match, label: string, separator: string) => `${humanizeTraceToken(label)}${separator}`)
     .replace(/\s+/g, " ")
-    .trim();
+    .trim());
 }
 
 function getFriendlyEvidenceRows(
@@ -1017,7 +1017,7 @@ export function RegulatoryChecklistEvidenceDetails(input: RegulatoryChecklistEvi
                 getString(item.purpose) ? `Purpose: ${getString(item.purpose)}` : null,
                 getString(item.eventId) ? `Event: ${getString(item.eventId)}` : null,
                 getString(item.sourceModule) ? `Source: ${getString(item.sourceModule)}` : null,
-                getNumber(item.timestampMs) !== null ? `Observed: ${getNumber(item.timestampMs)} ms` : null,
+                getNumber(item.timestampMs) !== null ? `Observed: ${formatReportSeconds(getNumber(item.timestampMs)!)}` : null,
               ].filter((value): value is string => Boolean(value));
               return <p className="mb-1 break-all" key={`${index}:${url ?? "item"}`}>
                 {url && /^https?:\/\//i.test(url) ? <a className="font-medium text-sky-700 underline" href={url} target="_blank" rel="noreferrer">Open observed URL</a> : `Retained item ${index + 1}`}

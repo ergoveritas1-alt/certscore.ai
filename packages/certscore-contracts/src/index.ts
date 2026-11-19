@@ -3671,6 +3671,12 @@ const bundleField6: z.ZodType<z.output<typeof normalizedVendorObservationSchema>
 const canonicalModuleRunSchema: z.ZodType<z.output<typeof scanModuleRunSchema>, z.ZodTypeDef, z.input<typeof scanModuleRunSchema>> = scanModuleRunSchema;
 const canonicalLaneRunSchema: z.ZodType<z.output<typeof scanLaneRunSchema>, z.ZodTypeDef, z.input<typeof scanLaneRunSchema>> = scanLaneRunSchema;
 const canonicalGpcNavigationRecoverySchema: z.ZodType<z.output<typeof gpcNavigationRecoverySchema>, z.ZodTypeDef, z.input<typeof gpcNavigationRecoverySchema>> = gpcNavigationRecoverySchema;
+const canonicalRuntimeCoverageSchema: z.ZodType<z.output<typeof runtimeCoverageSummarySchema>, z.ZodTypeDef, z.input<typeof runtimeCoverageSummarySchema>> = runtimeCoverageSummarySchema;
+const canonicalScanEvidenceLaneAssessmentSchema: z.ZodType<z.output<typeof scanEvidenceLaneAssessmentSchema>, z.ZodTypeDef, z.input<typeof scanEvidenceLaneAssessmentSchema>> = scanEvidenceLaneAssessmentSchema;
+const canonicalVisualAccessReviewSchema: z.ZodType<z.output<typeof visualAccessReviewSchema>, z.ZodTypeDef, z.input<typeof visualAccessReviewSchema>> = visualAccessReviewSchema;
+const canonicalCollectionSurfaceInventorySchema: z.ZodType<z.output<typeof collectionSurfaceInventorySchema>, z.ZodTypeDef, z.input<typeof collectionSurfaceInventorySchema>> = collectionSurfaceInventorySchema;
+const canonicalFormDestinationTraceSchema: z.ZodType<z.output<typeof formDestinationTraceSchema>, z.ZodTypeDef, z.input<typeof formDestinationTraceSchema>> = formDestinationTraceSchema;
+const canonicalCollectionSurfaceSnapshotSchema: z.ZodType<z.output<typeof collectionSurfaceSnapshotSchema>, z.ZodTypeDef, z.input<typeof collectionSurfaceSnapshotSchema>> = collectionSurfaceSnapshotSchema;
 const canonicalEvidenceBundleObjectSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
@@ -3717,9 +3723,9 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   iframeEvents: z.array(iframeEventSchema),
   consentUiObservations: z.array(canonicalConsentUiObservationSchema),
   collectionSurfaceObservations: z.array(collectionSurfaceObservationSchema).default([]),
-  collectionSurfaceInventory: collectionSurfaceInventorySchema.optional(),
-  formDestinationTrace: formDestinationTraceSchema.optional(),
-  collectionSurfaceSnapshots: z.array(collectionSurfaceSnapshotSchema).max(MAX_COLLECTION_SURFACE_FORMS).optional(),
+  collectionSurfaceInventory: canonicalCollectionSurfaceInventorySchema.optional(),
+  formDestinationTrace: canonicalFormDestinationTraceSchema.optional(),
+  collectionSurfaceSnapshots: z.array(canonicalCollectionSurfaceSnapshotSchema).max(MAX_COLLECTION_SURFACE_FORMS).optional(),
   consentInteractionEvents: z.array(consentInteractionEventSchema).default([]),
   consentFlowObservations: z.array(bundleField2).default([]),
   consentActionCandidates: z.array(consentActionCandidateSchema).default([]),
@@ -3735,16 +3741,16 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   normalizedVendorObservations: z.array(bundleField6),
   observedJourneys: z.array(bundleField4).default([]),
   derivedRuntimeSignals: bundleField1,
-  runtimeCoverage: runtimeCoverageSummarySchema.optional(),
+  runtimeCoverage: canonicalRuntimeCoverageSchema.optional(),
   consentSurfaceInspection: canonicalConsentInspectionSchema.optional(),
   policySurfaceInspection: canonicalPolicyInspectionSchema.optional(),
   visualCapture: visualCaptureSummarySchema.optional(),
   scanNoGoAssessment: scanNoGoAssessmentSchema.optional(),
   scan_no_go_assessment: scanNoGoAssessmentSchema.optional(),
-  scanEvidenceLaneAssessment: scanEvidenceLaneAssessmentSchema.optional(),
-  scan_evidence_lane_assessment: scanEvidenceLaneAssessmentSchema.optional(),
-  visualAccessReview: visualAccessReviewSchema.optional(),
-  visual_access_review: visualAccessReviewSchema.optional(),
+  scanEvidenceLaneAssessment: canonicalScanEvidenceLaneAssessmentSchema.optional(),
+  scan_evidence_lane_assessment: canonicalScanEvidenceLaneAssessmentSchema.optional(),
+  visualAccessReview: canonicalVisualAccessReviewSchema.optional(),
+  visual_access_review: canonicalVisualAccessReviewSchema.optional(),
   artifactRefs: z.array(artifactRefSchema),
   scannerBuildProvenance: scannerBuildProvenanceSchema.optional(),
   scannerVersion: z.string(),

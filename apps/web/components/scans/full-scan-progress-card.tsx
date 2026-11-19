@@ -1,5 +1,6 @@
 "use client";
 
+import { formatReportSeconds } from "../../lib/scans/report-time";
 import {
   SCAN_EXECUTION_STAGES,
   type ScannerExecutionSummary
@@ -159,17 +160,7 @@ function formatDurationMs(value: number | null | undefined, nowMs?: number, star
     return "—";
   }
 
-  if (durationMs < 1_000) {
-    return `${Math.round(durationMs)} ms`;
-  }
-
-  if (durationMs < 60_000) {
-    return `${(durationMs / 1_000).toFixed(1)} s`;
-  }
-
-  const minutes = Math.floor(durationMs / 60_000);
-  const seconds = Math.round((durationMs % 60_000) / 1_000);
-  return `${minutes}m ${seconds}s`;
+  return formatReportSeconds(durationMs);
 }
 
 function formatAttemptLabel(value: number | null | undefined) {

@@ -31,7 +31,12 @@ function ClassificationSignal({ count, review = false }: { count: number; review
   </span>;
 }
 
-function hasTileDetails(tile: ConsentTrackingTile, canNavigate: boolean) {
+function showsPartialInventory(tile: ConsentTrackingTile) {
+  return tile.id === "before" && tile.state === "partial" && tile.count === null;
+}
+
+function canExpandTile(tile: ConsentTrackingTile, canNavigate: boolean) {
+  if (!showsPartialInventory(tile) && (tile.count === null || tile.count <= 0)) return false;
   return Boolean(tile.gpcWindow || tile.notes?.length || tile.facts?.length || tile.services?.length ||
     tile.metrics?.some(metric => metric.value != null || Object.values(metric.counts ?? {}).some(value => value != null)) ||
     tile.evidence === "forms" || tile.evidence === "privacy" || (tile.evidence && canNavigate));
@@ -101,7 +106,7 @@ export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: Consent
   const [selected, setSelected] = useState<string | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
   const navigation = useReportInventoryNavigation();
-  const active = tiles.find(tile => tile.id === selected && hasTileDetails(tile, Boolean(navigation)));
+  const active = tiles.find(tile => tile.id === selected && canExpandTile(tile, Boolean(navigation)));
   const phase = active?.evidence === "forms" || active?.evidence === "privacy" ? undefined : active?.evidence;
 
   return <section aria-labelledby={`${id}-title`} data-consent-tracking-summary className="rounded-xl border border-slate-200 bg-white"
@@ -113,9 +118,9 @@ export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: Consent
     <div data-consent-tracking-grid className={`grid grid-cols-1 gap-px overflow-hidden bg-slate-200 min-[360px]:grid-cols-2 sm:grid-cols-3 ${active ? "" : "rounded-b-xl"}`}>
       {tiles.map(tile => {
         const open = active?.id === tile.id;
-        const expandable = hasTileDetails(tile, Boolean(navigation));
+        const expandable = canExpandTile(tile, Boolean(navigation));
         const counts = tile.count !== null ? tile.breakdown : undefined;
-        const partialBaseline = tile.id === "before" && tile.state === "partial" && tile.count === null;
+        const partialBaseline = showsPartialInventory(tile);
         const retainedNonEssential = partialBaseline ? tile.metrics?.flatMap(metric => {
           const count = metric.counts?.nonEssential;
           return count && count > 0 ? [`${format(count)} ${metric.label.toLowerCase()}`] : [];
@@ -124,10 +129,7 @@ export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: Consent
         const content = <>
           <span className="flex items-center justify-between gap-1.5 text-xs font-semibold leading-4 text-slate-700">
             <span>{tile.label}</span>
-            <span className="flex shrink-0 items-center gap-1.5">
-              {tile.choiceUnconfirmed && tile.state === "recorded" ? <span className="rounded bg-slate-100 px-1 text-[9px] font-medium text-slate-600">Unconfirmed</span> : null}
-              {expandable ? <DisclosureChevron className={open ? "rotate-180 text-sky-700" : "text-slate-500"} /> : null}
-            </span>
+            {expandable ? <DisclosureChevron className={`shrink-0 ${open ? "rotate-180 text-sky-700" : "text-slate-500"}`} /> : null}
           </span>
           <span className="mt-1 flex min-h-7 items-baseline gap-1.5">
             {partialBaseline ? <span className="text-sm font-medium leading-7 text-slate-700">Partial inventory</span>
@@ -163,7 +165,6 @@ export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: Consent
           gpc: active.count === null ? undefined : active.breakdown,
         }} /> : <h4 className="text-sm font-semibold text-slate-900">{active.label} <span className="ml-2 text-[11px] font-medium text-slate-600">{statusLabel[active.state]}</span></h4>}
         {active.id === "gpc" && active.state === "partial" ? <p>The count covers the resources retained from the GPC visit. Capture coverage was limited.</p> : null}
-        {active.id === "gpc" && active.count === null ? <p>The scan lacks enough verified resource evidence for a flagged-item count.</p> : null}
         {active.notes?.length ? <ul className="max-h-44 space-y-1 overflow-y-auto">{active.notes.map((note, index) => <li key={index} className="break-words">{note}</li>)}</ul> : null}
         {active.facts?.length ? <dl className="flex flex-wrap gap-x-5 gap-y-2">{active.facts.map(fact => <div key={fact.label}><dt className="font-medium text-slate-800">{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl> : null}
         {active.metrics?.length ? <div className="grid gap-x-4 gap-y-2 border-y border-slate-100 py-2 sm:grid-cols-3">{active.metrics.map(metric => <div key={metric.label} className="min-w-0">

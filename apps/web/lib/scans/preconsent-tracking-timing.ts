@@ -1,3 +1,4 @@
+import { formatReportSeconds } from "./report-time";
 import { z } from "zod";
 import { googleConsentModeAssessmentSchema } from "@certscore/contracts";
 import { readRetainedGoogleConsentMode } from "./google-consent-mode-assessment";
@@ -49,5 +50,5 @@ export function describePreconsentTrackingTiming(value: unknown) {
   const vendors = [...new Set(requests.map(request => request.vendorName))];
   const denied = requests.filter(request => request.googleConsentMode?.storageDeclaration === "denied");
   const context = denied.length ? ` ${denied.length} Google Analytics measurement request${denied.length === 1 ? "" : "s"} declared advertising and analytics storage consent denied. Request declarations and observed cookie use are separate evidence.` : "";
-  return `Tracking-classified requests were observed before consent: ${vendors.slice(0, 3).join(", ")}. The first retained qualifying request was ${first.vendorName} at ${(first.firstSeenMs / 1000).toPrecision(3)}s after scan start.${context}`;
+  return `Tracking-classified requests were observed before consent: ${vendors.slice(0, 3).join(", ")}. The first retained qualifying request was ${first.vendorName} at ${formatReportSeconds(first.firstSeenMs)} after scan start.${context}`;
 }

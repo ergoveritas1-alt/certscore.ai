@@ -24,9 +24,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/cmp-details.tsx",
-      "sha256": "913a2203234121fb41c14d533b94c76402791d2879b5fb8c703fb8d3b6f21f22",
-      "bytes": 24583,
-      "review": "Three-way reconciliation preserves integrated report/form fixes and adds owner-requested canonical output parity. Static source reviewed for generation binding and public evidence safety."
+      "sha256": "9c9b6ec8707d16c9801d9154aceb0ac8fd6e8170799e2140d675c0c17b00e6af",
+      "bytes": 24830,
+      "review": "Render duration values consistently in seconds and preserve the retained CMP source details."
     },
     {
       "file": "apps/web/components/scans/cms-security-evidence.tsx",
@@ -48,9 +48,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
-      "sha256": "6e6678f4a2747fcf83985b2b6c0feb9c9a9571be5e494e15382ef89c8b69f421",
-      "bytes": 114340,
-      "review": "Reviewed the canonical GPC comparison, distinct visit counts, posture selector and coverage disclosure in the shared report."
+      "sha256": "925a8f8c6cff6861f2a7c78f5ed34872c1dc559ce06e2d0f0ad98ce10390b279",
+      "bytes": 114221,
+      "review": "Render retained GPC service and request timing in seconds and preserve scope labels."
     },
     {
       "file": "apps/web/components/scans/site-integrity-evidence.tsx",
@@ -102,9 +102,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/lib/pulse/projection.ts",
-      "sha256": "b0a79d60db47779c636cdc60ceccdbd8190afcddab19b4787c6b0882d03911af",
-      "bytes": 118685,
-      "review": "Owner-approved local 8 KiB versioned customer-consent evidence projection from persisted snapshot only; no deployment, historical rewrite or capture."
+      "sha256": "b805320703aaa3c4b9401d616f7cd9af259f8160fc0093320c44a9ea12764851",
+      "bytes": 118880,
+      "review": "Project bounded visit-stage counts only when a scan identity is available."
     },
     {
       "file": "packages/certscore-sdk/src/client.ts",
@@ -150,15 +150,15 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/report-lab/shadow-report-data.ts",
-      "sha256": "0c7a70c63f96406cb3e8c0d6658759f392348ae578b6faf5656b2c540c68df9a",
-      "bytes": 39250,
-      "review": "Verified the optional browser guidance type from the deployed no-go model."
+      "sha256": "406af736570824682eb443e57b90cee1849b8ea55171f9c867c5f29cb027f938",
+      "bytes": 39265,
+      "review": "Use canonical retained inventory and coverage for scan-report evidence sections."
     },
     {
       "file": "scripts/lib/audit-progress-contracts.ts",
-      "sha256": "3c80f0f4418fc7c7c7e0c8bcbfd14f041bbe0663c2555862499f20e81a397f43",
-      "bytes": 28016,
-      "review": "Reviewed the after-Reject receipt fields, including cookie snapshot activity and explicit GPC readback source handling."
+      "sha256": "62f29c26022ae5088cb003535f6f07cb327284266e25c4776ede429a40f0dea1",
+      "bytes": 28469,
+      "review": "Bind cumulative Reject and GPC stages to their visit evidence and preserve stage coverage semantics."
     },
     {
       "file": "packages/certscore-contracts/src/site-metadata.ts",
@@ -192,9 +192,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/collection-surfaces-table.tsx",
-      "sha256": "9e9d6ee7f69e79d3b5621087a2a72b2401123df5753a4dd9d6ac7b50cbb803eb",
-      "bytes": 20384,
-      "review": "Field state is a displayed combination of disabled/readOnly; preserve both flags in logical contract."
+      "sha256": "174a2105b4c9675cd307ff5edb6a0fbc3f0671b0ed2ea0e39f01e16aec4c239c",
+      "bytes": 20447,
+      "review": "Render retained form timing with the report time formatter."
     },
     {
       "file": "packages/certscore-contracts/src/consent-action-stages.ts",
@@ -204,9 +204,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "packages/certscore-contracts/src/terminal-consent-decision.ts",
-      "sha256": "145f9c2d32844c9efca41abf5f0baf3d3a60b82886a9ef97d3ab2ddbde864b52",
-      "bytes": 4836,
-      "review": "Registered terminal evidence has a distinct policy and requires a matching completed window. Legacy dispatch-relative proof is unchanged."
+      "sha256": "35731413b3ebfa73408623321cb010684f0cb212542cc93840ae59ccbd463d72",
+      "bytes": 6901,
+      "review": "Bind the TrustArc reload readback to ordered pre-reload, reload and terminal timestamps."
     },
     {
       "file": "packages/certscore-contracts/src/gpc-cmp-state-comparison.ts",
@@ -246,9 +246,9 @@ export const MASTER_SOURCE_REVIEW={
     },
     {
       "file": "apps/web/components/scans/report-lab/timeline-report-model.ts",
-      "sha256": "e3b85ac776a40e65fdc02ba1fb1017a83aa736cabc50ca63268665e05d5aa200",
-      "bytes": 40961,
-      "review": "Reviewed the deployed no-go guidance and scan-bound GPC projection from retained runtime activity."
+      "sha256": "df029e2c597f348090ad085f4e94a732c170b165dbf766270483d6926304aa4b",
+      "bytes": 40462,
+      "review": "Render timeline labels in seconds using the retained event timestamps."
     }
   ]
 } as const;

@@ -1,3 +1,4 @@
+import {visitStagesSchema} from "../../apps/web/lib/scans/california-visit-stages";
 import {CMS_PROJECTION_UNAVAILABLE_REASONS} from "../../apps/web/server/scans/cms-security-projection";
 import {readAuditComparisonDelivery} from '../../packages/certscore-contracts/src/audit-comparison';
 import {auditNavigationBlockSchema} from '../../packages/certscore-contracts/src';
@@ -211,6 +212,8 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
     const archiveDiagnostics=input.forwardCoverageDiagnosticsProjected===true;
     if(archiveDiagnostics&&(!query?.includes("'cmsProjectionDiagnostic'")||!query.includes("'acceptPath'")))
       throw Error('Missing frozen daily query for forward CMS and Accept diagnostics');
+    if(input.visitStagesProjected===true&&(!query?.includes('end "auditVisitStages"')||input.rows.some((r:any)=>!Object.hasOwn(r,'auditVisitStages'))))
+      throw Error('Missing frozen visit-stage query or column');
     const rejectActivityProjected=input.rejectActivityReceiptProjected===true;
     if(rejectActivityProjected&&(!query?.includes('end "auditRejectActivity"')||
       input.rows.some((row:any)=>!Object.hasOwn(row,'auditRejectActivity'))))
@@ -240,6 +243,19 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
         const cmsReason=Array.isArray(extract.technicalCounts)&&specificCmsReason(extract.technicalCounts[1]);
         const archive=row.originProof==='mac_mini_archive';
         const creatorVerified=row.originProof==='original_credential_verified'&&row.originRequestId===extract.originalRequestId;
+        if(input.visitStagesProjected===true && direct && (creatorVerified || archive && archiveMatchesDiagnosticGeneration(row)) && extract.auditVisitStages!=null){
+          const receipt=visitStagesSchema.parse(extract.auditVisitStages);
+          if(receipt.scanId!==row.scanId)throw Error('Visit-stage receipt scan mismatch');
+          for(const [path,visit] of Object.entries({reject:receipt.reject,gpc:receipt.gpc})){
+            if(visit?.classifiedPresence)row.states['detail.'+path+'.stage1']='observed';
+            visit?.recipients.forEach((count,i)=>{
+              if(count===null)return;
+              const id='detail.'+path+'.stage'+(i+1),state=count>0||i===0&&visit.classifiedPresence?'observed':'not_observed_in_retained_evidence';
+              if(row.states[id]&&row.states[id]!=='unavailable'&&row.states[id]!==state)throw Error('Conflicting visit-stage evidence '+id);
+              row.states[id]=state;
+            });
+          }
+        }
         const rejectActivityEligible=rejectActivityProjected&&(archive||creatorVerified)&&row.states['click.reject']==='completed';
         const diagnosticBound=direct&&(creatorVerified||archiveDiagnostics&&archive&&
           (acceptReason||cmsReason)&&archiveMatchesDiagnosticGeneration(row));
@@ -261,6 +277,7 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
             activityReceipt?.[1]===row.scanId && activityReceipt[2]===observation.confirmation.sourcePacketSha256;
           const prior=rejectActivityReceipts.get(row.scanId);
           if(bound){
+            if(['request','storage_write','cookie_snapshot','request_and_storage_write','request_and_cookie_snapshot','storage_write_and_cookie_snapshot','request_and_storage_write_and_cookie_snapshot'].includes(activityReceipt[3]))row.states['detail.reject.stage1']='observed';
             const identity=JSON.stringify(activityReceipt);
             if(prior&&prior!==identity)throw Error('Conflicting generation-bound post-Reject activity receipt');
             rejectActivityReceipts.set(row.scanId,identity);
@@ -307,6 +324,14 @@ export function applyRetainedOptOutExtracts(rows:ProgressRow[],receipts:OptOutRe
           if(coverage){
             if(row.californiaRejectCoverage&&!isDeepStrictEqual(row.californiaRejectCoverage,coverage))throw Error('Conflicting generation-bound California Reject assessment');
             row.californiaRejectCoverage=coverage;
+            // The retained v7 assessment is already packet-, target- and click-bound by the frozen query.
+            if(coverage.policyVersion==='california-post-reject.v7-per-visit'&&!coverage.reasons.includes('reject_scope_unknown')&&
+              coverage.status!=='insufficient_evidence'&&(!row.states['detail.reject.stage3']||row.states['detail.reject.stage3']==='unavailable')&&
+              query?.includes("c->>'sourcePacketSha256'=b->>'packetSha256'")&&query.includes("c->>'targetSha256'=b#>>'{sourceIdentity,targetSha256}'")){
+              if(coverage.status==='qualified_collection'){
+                for(const stage of [1,2,3])row.states['detail.reject.stage'+stage]='observed';
+              }else row.states['detail.reject.stage3']='not_observed_in_retained_evidence';
+            }
           }
         }
         if([CHOICE_AUDIT_VERSION,LEGACY_CHOICE_AUDIT_VERSION].includes(extract.choice_audit?.version)){

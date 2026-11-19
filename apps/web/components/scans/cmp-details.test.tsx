@@ -183,7 +183,8 @@ test("inline CMP evidence renders comparison, both requests, every cookie name a
     const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" compact={compact} />);
     assert.match(html, /9\.462:1/); assert.match(html, /1\.000:1/);
     assert.match(html, /528 × 45/); assert.match(html, /528 × 49/);
-    assert.equal((html.match(/\+754 ms/g) ?? []).length, 2);
+    assert.equal((html.match(/\+0\.754 s/g) ?? []).length, 2);
+    assert.match(html, /captured 0\.137 s apart/);
     assert.match(html, /Requests after confirmed Reject · 2/);
     for (const column of ["Service", "Category", "After Reject", "Request"]) assert.ok(html.includes(`>${column}</th>`));
     assert.match(html, /js-eu1.hs-analytics.net/); assert.match(html, /\/analytics\/example.js/);
@@ -218,7 +219,7 @@ test("compact CMP tables retain all rows, exact matches and historical limitatio
   assert.match(html, />Off<\/td>/); assert.match(html, />On<\/td>/); assert.match(html, />Not captured<\/td>/);
   assert.match(html, /CMP services · 11/); assert.match(html, /Service 11/);
   assert.match(html, /Cookie details · 36/); assert.match(html, /cookie_35/);
-  assert.match(html, /CMP-stated retention/); assert.match(html, />&lt;100ms<\/td>/);
+  assert.match(html, /CMP-stated retention/); assert.match(html, />&lt;0\.1 s<\/td>/);
   assert.match(html, /text-emerald-700/); assert.match(html, /_ga_\*/); assert.match(html, /No match/);
   assert.match(html, /Before choice · After Accept/);
   assert.equal((html.match(/role="region"/g) ?? []).length, 5);

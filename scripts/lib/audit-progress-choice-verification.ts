@@ -1,3 +1,4 @@
+import {auditStageStates,STAGE_METRICS} from "./audit-visit-stages";
 /** Re-read immutable inputs; aggregation parity alone cannot detect incorrect row extraction. */
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';
@@ -35,7 +36,7 @@ export function rebuildChoiceEvidence(data:ChoiceInput){
   const exportRef=row.refs.find(r=>r.role==='hash_verified_bot_archive_export');
   if(exportRef&&row.reportable){
    const expected=extractExportRow(read(exportRef),exportRef);assert.equal(expected.scanId,row.scanId);
-   for(const [key,value]of Object.entries(expected.states))if(key.includes('gpc')){assert.equal(row.states[key],value,`GPC source state ${row.scanId}/${key}`);comparisons++;}
+   for(const [key,value]of Object.entries(expected.states))if(key.includes('gpc')&&!key.startsWith('detail.gpc.stage')){assert.equal(row.states[key],value,`GPC source state ${row.scanId}/${key}`);comparisons++;}
    for(const key of new Set([...Object.keys(expected.measurements??{}),...Object.keys(row.measurements??{})]))if(key.startsWith('gpc.')){
     assert.equal(row.measurements?.[key],expected.measurements?.[key],`GPC source quantity ${row.scanId}/${key}`);comparisons++;
    }
@@ -60,11 +61,15 @@ export function rebuildChoiceEvidence(data:ChoiceInput){
    exports++;
   }
   if(!row.reportable)continue;
+  const stages=data.metrics?.filter(m=>STAGE_METRICS.some(s=>s.id===m.id))??[];
+  const stageStates:Record<string,string>={};
+  if(stages.length&&exportRef)Object.assign(stageStates,auditStageStates(read(exportRef),row.scanId));
   if(ref){
    const input=read(ref),snapshot=ref.role==='checksum_verified_projection'?input:input.snapshot;
    assert.ok(!row.publicProjectionSourceHash||snapshot.report_projection_source_hash===row.publicProjectionSourceHash,'Choice source generation');
    const record=typeof snapshot.report_projection_payload==='string'?JSON.parse(snapshot.report_projection_payload):snapshot.report_projection_payload;
    assert.equal(record.scan.id,row.scanId,'Choice source scan identity');
+   if(stages.length)Object.assign(stageStates,auditStageStates(record,row.scanId));
    const originalCheck=record.canonicalReportProjection?.checklistRows?.find((entry:any)=>entry.id==='accessibility_consent_controls');
    row.controlAccessibilityCoverage=readControlAccessibilityDetail(originalCheck?.criticalEvidence?.retainedEvidence?.controlAccessibilityReceipt);
    const originalValues=[checklistEvidence(originalCheck),returnedState(originalCheck?.status)];
@@ -82,6 +87,8 @@ export function rebuildChoiceEvidence(data:ChoiceInput){
    const manifest=original('manifestUri'),bundle=original('scanArtifactUri');
    applyChoiceSummary(row,choiceSummaryFromRecord(record,{manifest,bundle,bundleSource}),`persisted_report_choice_summary/${row.projectionVersion}`);summaries++;
   }
+  if(row.states['sealed.detail.reject.post_click_activity']==='activity_observed'&&row.states['click.reject']==='completed')stageStates['detail.reject.stage1']='observed';
+  for(const {id} of stages)row.states[id]=stageStates[id]??'unavailable';
  }
  applyRetainedOptOutExtracts(proof,data.optOutExtracts);choiceMetricRegistry(proof);
  return {rows:proof,exports,summaries,comparisons};
@@ -90,7 +97,7 @@ export function verifyChoiceEvidence(data:ChoiceInput){
  const rebuilt=rebuildChoiceEvidence(data);
  for(let i=0;i<data.rows.length;i++)assert.deepEqual(data.rows[i]!.optOutRejection,rebuilt.rows[i]!.optOutRejection,`Opt-out rejection receipt ${data.rows[i]!.scanId}`);
  for(let i=0;i<data.rows.length;i++)assert.deepEqual(data.rows[i]!.controlAccessibilityCoverage,rebuilt.rows[i]!.controlAccessibilityCoverage,`Control coverage receipt ${data.rows[i]!.scanId}`);const proof=rebuilt.rows;let {exports,summaries,comparisons}=rebuilt;
- for(let i=0;i<proof.length;i++)for(const key of new Set([...Object.keys(proof[i]!.states),...Object.keys(data.rows[i]!.states)]))if(choiceKey(key)){
+ for(let i=0;i<proof.length;i++)for(const key of new Set([...Object.keys(proof[i]!.states),...Object.keys(data.rows[i]!.states)]))if(choiceKey(key)||STAGE_METRICS.some(m=>m.id===key)&&data.metrics?.some(m=>m.id===key)){
   // Missing and explicit unavailable are the same coverage state, never zero or success.
   assert.equal(data.rows[i]!.states[key]??'unavailable',proof[i]!.states[key]??'unavailable',`Choice source state ${proof[i]!.scanId}/${key}`);comparisons++;
   if((key.startsWith('sealed.operations.')||key==='sealed.priority_evidence.cmp'||key===ACCEPT_PATH_DIAGNOSTIC_KEY||key===REJECT_ACTIVITY_KEY)&&proof[i]!.states[key]){

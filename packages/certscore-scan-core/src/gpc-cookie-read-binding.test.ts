@@ -161,3 +161,19 @@ test("original cookie read proof survives normal compaction only in final unused
   assert.deepEqual(compactCanonicalEvidenceBundleForRetention(retained, tightCap), legacyAtTightCap,
     "headroom cannot be created by displacing a legacy event or changing a window");
 });
+
+test("only a signal-bound snapshot contributes classified GPC cookie presence", () => {
+  const {bundle,input}=gpcCookieReadFixture();
+  const snapshot=bundle.cookieSnapshots[0]!;
+  snapshot.cookies=[{name:"nmstat",domain:"example.test"},{name:"unknown_cookie",domain:"example.test"}];
+  snapshot.gpcReadBinding=buildGpcCookieReadBinding(input);
+  function readPresence() {
+    const bytes=Buffer.from(JSON.stringify(bundle));
+    const pointer={uri:"fixture-original",sizeBytes:bytes.length,sha256:createHash("sha256").update(bytes).digest("hex")};
+    return buildGpcProductionObservation({scanId:bundle.scanId,source:{bytes,pointer}}).presenceEvidence?.filter(r=>r.presenceBasis==="cookie_snapshot") ?? [];
+  }
+  assert.equal(readPresence().length,1);
+  assert.equal(readPresence()[0]?.msFromAnchor,input.completedAtMs);
+  delete snapshot.gpcReadBinding;
+  assert.deepEqual(readPresence(),[]);
+});
