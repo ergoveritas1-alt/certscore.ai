@@ -150,6 +150,28 @@ test("classifyConsentGeometryAccess does not treat ordinary Cloudflare Pages att
   assert.deepEqual(diagnostic.reasonCodes, []);
 });
 
+test("ordinary Rate limit navigation and documentation do not block a loaded page", () => {
+  const diagnostic = classifyConsentGeometryAccess({
+    httpStatus: 200,
+    title: "Search and API documentation",
+    bodyText: "Search Models API home speed Rate limit bug_report Raise issue help_outline FAQ. Manage Cookies.",
+  });
+  assert.equal(diagnostic.status, "loaded");
+  assert.deepEqual(diagnostic.reasonCodes, []);
+  assert.equal(classifyConsentGeometryAccess({ title: "Rate limit", bodyText: "Read about our API quotas." }).status, "loaded");
+});
+
+test("explicit throttling copy and an HTTP 429 independently establish an access limitation", () => {
+  for (const bodyText of ["Rate limit exceeded", "Your rate limit has been reached", "You have exceeded your rate limit", "Too many requests", "Request blocked"]) {
+    const diagnostic = classifyConsentGeometryAccess({ httpStatus: 200, bodyText });
+    assert.equal(diagnostic.status, "rate_limited_or_security_challenge", bodyText);
+    assert.ok(diagnostic.reasonCodes.includes("rate_limited"));
+  }
+  const diagnostic = classifyConsentGeometryAccess({ httpStatus: 429, title: "Rate limit" });
+  assert.equal(diagnostic.status, "rate_limited_or_security_challenge");
+  assert.ok(diagnostic.reasonCodes.includes("http_status_429"));
+});
+
 test("classifyConsentGeometryAccess marks navigation timeouts distinctly", () => {
   const diagnostic = classifyConsentGeometryAccess({
     errorMessage: "page.goto: Timeout 15000ms exceeded.",

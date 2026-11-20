@@ -1703,3 +1703,24 @@ test("all direct Pulse details suppress terminal and unpublished modern scores",
     assert.deepEqual(record, before);
   }
 });
+
+test("public evidence exports scoped opt-out observations only from the matching assessment", () => {
+  const a = structuredClone(dollarGeneral.assessment);
+  const date = "2026-10-29T11:25:42.000Z";
+  const footer = {label: "Your Privacy Choices", documentUrl: a.scan.finalUrl, evidenceRef: "policy-surface:footer"};
+  const pulse = (assessment: unknown) => buildPulseProjection({
+    detail: "evidence", format: "json", freshnessMode: "latest", pulseRequestId: "scoped-opt-out",
+    requestedUrl: "https://dollargeneral.com/", resolutionMode: "test", waitSeconds: 0,
+    scanRecord: pulseScanRecord({
+      scan: {id: a.scan.scanId, status: "completed", createdAt: date},
+      snapshot: {consentControlAssessment: assessment, certscore_overall: 70},
+      runtimeArtifacts: {firstLayerConsentChoices: {optOutSurfaces: {vendorRefusals: ["unbound"]}}},
+    }),
+  }) as Record<string, any>;
+  const evidence = pulse({...a, optOutFooterLinks: [footer]});
+  pulseResponseSchema.parse(evidence);
+  const first = evidence.consentSurfaceEvidence.firstLayerConsentChoices;
+  assert.deepEqual(first.optOutSurfaces, {version: "opt_out_surfaces.v1", bannerControls: [], footerLinks: [footer], vendorRefusals: []});
+  assert.equal(first.privacyOptOutControlObserved, false);
+  assert.equal(pulse(a).consentSurfaceEvidence.firstLayerConsentChoices.optOutSurfaces, undefined);
+});

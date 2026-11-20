@@ -1,4 +1,8 @@
+import {footerCaptureResolutionSchema} from "./consent-footer-opt-out-capture";
 import { cmpAuditAssessmentSchema, type CmpAuditAssessment } from "./cmp-audit-evidence";
+import { consentFooterOptOutObservationSchema, footerChoiceScopeForWitness } from "./consent-footer-opt-out";
+import { originalInitialOptOutSwitchesSchema } from "./initial-opt-out-switch";
+import { originalOneTrustSettingsEntranceSchema } from "./explicit-opt-out-control";
 import { californiaPrivacyReviewSchema } from "./california-privacy-review";
 import { saleSharingPresenceLinks, privacyChoicePresenceTitle } from "./privacy-choice-presence";
 import { CONTROL_INSPECTION_POLICY, CONTROL_INSPECTION_POLICIES, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
@@ -60,7 +64,10 @@ export const consentControlAssessmentControlResultSchema = z.object({
 export const consentControlAssessmentEvidenceSchema = z.object({
   initialSelection: initialConsentSelectionSchema.optional(),
   evidenceId: z.string().max(240),
-  intent: z.enum(["accept", "reject", "options", "privacy_opt_out", "save_preferences", "dismiss", "other"]),
+  intent: z.enum(["accept", "reject", "options", "privacy_opt_out", "vendor_refusal", "save_preferences", "dismiss", "other"]),
+  opensPreferenceCenter: z.literal(true).optional(),
+  initialSwitchScope: z.enum(["sale","sharing"]).optional(),
+  settingsEntranceSource: z.enum(["accessible_name", "same_banner_notice"]).optional(),
   controlVariant: z.enum(["reject_with_subscription", "reject_with_payment"]).nullable().default(null),
   label: z.string().max(120).nullable(),
   locale: z.string().max(16).nullable(),
@@ -94,6 +101,62 @@ const optOutGeometryEvidenceSchema = z.object({
   data: firstLayerOptOutGeometryDiagnosticSchema,
 }).strict();
 
+const footerInspectionSchema = z.union([
+  z.object({status: z.literal("unavailable"), reason: z.enum(["no_policy_run", "missing_bound_inspection"])}),
+  z.object({status: z.enum(["limited", "complete"]), documentUrl: z.string().min(1).max(500),
+    inspectionHash: z.string().regex(/^[a-f0-9]{64}$/)}),
+]);
+
+const optOutTimingSchema = z.object({
+  reason: z.enum(["recovery_inventory_different_document", "banner_partially_in_view", "choice_observed_after_inventory"]),
+  inventoryAtMs: z.number().int().nonnegative(),
+  screenshot: z.object({artifactId: z.string().min(1).max(240), capturedAtMs: z.number().int().nonnegative()}).optional(),
+  evidenceAtMs: z.number().int().nonnegative(),
+  evidenceRef: z.string().min(1).max(240),
+});
+
+// The first-layer inventory can come from a separate recovery browser. In that
+// case retain the original screenshot witness with the original footer loader.
+const footerOriginalVisitSchema = z.object({
+  screenshotRef: z.string().min(1).max(240),
+  screenshotAtMs: z.number().int().nonnegative(),
+  documentToken: z.string().min(1).max(160),
+  recoveryObservationRef: z.string().min(1).max(240),
+  recoveryToken: z.string().min(1).max(160),
+});
+
+const originalSwitchBindingSchema = z.object({
+  packet: originalInitialOptOutSwitchesSchema,
+  recovery: z.object({observationRef: z.string().min(1).max(240), documentToken: z.string().min(1).max(160)}).strict().optional(),
+}).strict();
+const originalSettingsBindingSchema = z.object({
+  packet: originalOneTrustSettingsEntranceSchema,
+  recovery: footerOriginalVisitSchema.optional(),
+}).strict();
+const ORIGINAL_SETTINGS_EVIDENCE_ID = "dom_text_pre_consent:onetrust-settings-entrance";
+
+const optOutPlacementCorrectionSchema = z.object({
+  label: z.string().min(1).max(120),
+  evidenceRef: z.string().min(1).max(240),
+  geometryCandidateId: z.string().min(1).max(240),
+  sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  documentUrl: z.string().url().max(500),
+  documentToken: z.string().min(1).max(160),
+  placement: z.enum(["outside_initial_banner", "persistent_site_navigation"]),
+}).strict();
+export type OptOutPlacementCorrection = z.infer<typeof optOutPlacementCorrectionSchema>;
+
+const optOutFooterLinkSchema = z.object({
+  placement: z.literal("document_end_strip").optional(),
+  choiceScope: z.enum(["ads_privacy", "state_privacy", "california_privacy", "sale_sharing_and_targeted_advertising",
+    "sale_and_targeted_advertising", "sale_sharing_and_sensitive_data"]).optional(),
+  destinationKind: z.literal("privacy_policy").optional(),
+  visibility: z.enum(["rendered_exposed", "covered"]).optional(),
+  label: z.string().min(1).max(120),
+  evidenceRef: z.string().min(1).max(240),
+  documentUrl: z.string().min(1).max(500),
+});
+
 export const consentControlAssessmentSchema = z.object({
   artifactType: z.literal("consent_control_assessment"),
   artifactVersion: consentControlAssessmentVersionSchema,
@@ -103,6 +166,15 @@ export const consentControlAssessmentSchema = z.object({
   // Independently versioned policy-lane assessment. Never changes A/R/O states,
   // their provenance hash, action authorization, or first-layer completeness.
   californiaPrivacyReview: californiaPrivacyReviewSchema.optional(),
+  sameVisitFooter: consentFooterOptOutObservationSchema.optional(),
+  sameVisitFooterCapture: footerCaptureResolutionSchema.optional(),
+  footerOriginalVisit: footerOriginalVisitSchema.optional(),
+  originalOptOutSwitches: originalSwitchBindingSchema.optional(),
+  originalOptOutSettings: originalSettingsBindingSchema.optional(),
+  optOutPlacementCorrections: z.array(optOutPlacementCorrectionSchema).max(24).optional(),
+  optOutFooterInspection: footerInspectionSchema.optional(),
+  optOutTimingLimitation: optOutTimingSchema.optional(),
+  optOutFooterLinks: z.array(optOutFooterLinkSchema).max(16).optional(),
   visualComparison: consentControlVisualComparisonSchema.optional(),
   assessmentStatus: consentControlAssessmentStatusSchema,
   scan: z.object({
@@ -167,6 +239,75 @@ export const consentControlAssessmentSchema = z.object({
       (assessment.coverage.captureDiagnostic?.geometryBinding !== "matched" ||
         assessment.coverage.captureDiagnostic.geometryObservedAtMs === null)) {
     context.addIssue({code: z.ZodIssueCode.custom, message: "Opt-out geometry requires a bound checkpoint."});
+  }
+  const nativeFooter = assessment.sameVisitFooter;
+  if (assessment.optOutPlacementCorrections?.some(row => assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
+      assessment.document.identityStatus !== "matched" || row.documentUrl !== assessment.scan.finalUrl ||
+      row.documentToken !== assessment.document.canonicalDocumentToken)) {
+    context.addIssue({code:"custom",path:["optOutPlacementCorrections"],message:"Opt-out placement must match the verified starting document."});
+  }
+  const settings = assessment.originalOptOutSettings;
+  const settingsRows = assessment.evidence.filter(row => row.evidenceId === ORIGINAL_SETTINGS_EVIDENCE_ID);
+  if (!settings ? settingsRows.length > 0 : assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
+      assessment.document.identityStatus !== "matched" || settings.packet.documentUrl !== assessment.scan.finalUrl ||
+      (settings.recovery ? settings.recovery.documentToken !== settings.packet.documentToken ||
+        settings.recovery.recoveryToken !== assessment.document.canonicalDocumentToken ||
+        settings.recovery.recoveryToken === settings.packet.documentToken : settings.packet.documentToken !== assessment.document.canonicalDocumentToken) ||
+      settingsRows.length !== 1 || settingsRows.some(row => row.documentToken !== settings.packet.documentToken ||
+        row.label !== settings.packet.label || row.observedAtMs !== settings.packet.observedAtMs || row.layer !== "first_layer" ||
+        row.intent !== "privacy_opt_out" || row.opensPreferenceCenter !== true || row.settingsEntranceSource !== "accessible_name" ||
+        row.visible !== true || row.actionable !== true)) {
+    context.addIssue({code: "custom", path: ["originalOptOutSettings"], message: "Starting-document settings evidence requires its bound packet."});
+  }
+  const switches = assessment.originalOptOutSwitches;
+  if (assessment.evidence.some(row => row.evidenceId.startsWith("dom_text_pre_consent:opt-out-switch:")) && !switches) {
+    context.addIssue({code: "custom", path: ["originalOptOutSwitches"], message: "Original switch rows require their starting-document packet."});
+  }
+  if (switches && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
+      assessment.document.identityStatus !== "matched" || switches.packet.documentUrl !== assessment.scan.finalUrl ||
+      (switches.recovery ? switches.packet.documentToken === switches.recovery.documentToken ||
+        switches.recovery.documentToken !== assessment.document.canonicalDocumentToken :
+        switches.packet.documentToken !== assessment.document.canonicalDocumentToken) ||
+      switches.packet.rows.some(row => !assessment.evidence.some(e => e.evidenceId === `dom_text_pre_consent:opt-out-switch:${row.scope}` &&
+        e.documentToken === switches.packet.documentToken && e.label === row.label && e.initialSwitchScope === row.scope &&
+        e.observedAtMs === switches.packet.observedAtMs && e.visible === true && e.actionable === true &&
+        e.layer === "first_layer" && e.intent === "privacy_opt_out")))) {
+    context.addIssue({code: "custom", path: ["originalOptOutSwitches"], message: "Original switch evidence must match the bound starting document."});
+  }
+  const original = assessment.footerOriginalVisit;
+  if (original && (!nativeFooter || original.documentToken !== nativeFooter.documentToken ||
+      original.recoveryToken !== assessment.document.canonicalDocumentToken || original.recoveryToken === original.documentToken)) {
+    context.addIssue({code: "custom", path: ["footerOriginalVisit"], message: "The original footer and recovery visit must have distinct, bound loaders."});
+  }
+  if (nativeFooter && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
+      assessment.document.identityStatus !== "matched" || (!original && nativeFooter.documentToken !== assessment.document.canonicalDocumentToken) ||
+      nativeFooter.documentUrl !== assessment.scan.finalUrl)) {
+    context.addIssue({code: "custom", path: ["sameVisitFooter"], message: "The footer checkpoint must match the consent document."});
+  }
+  for (const link of assessment.optOutFooterLinks ?? []) {
+    if (link.placement || link.choiceScope || link.destinationKind || link.visibility || link.evidenceRef.startsWith("dom_text_pre_consent:")) {
+      if (!link.visibility || !nativeFooter?.candidates.some(row =>
+        link.evidenceRef === nativeFooter.artifactId + ":" + row.evidenceId &&
+        link.label === row.label && link.visibility === row.visibility &&
+        Boolean(link.placement) === Boolean(row.placementWitness) &&
+        link.choiceScope === footerChoiceScopeForWitness(row.controlWitness) &&
+        Boolean(link.destinationKind) === (row.controlWitness === "named_privacy_policy_entrance"))) {
+        context.addIssue({code: "custom", path: ["optOutFooterLinks"], message: "Footer hit-test evidence must match its native control."});
+      }
+    }
+  }
+  const footerInspection = assessment.optOutFooterInspection;
+  if (footerInspection && footerInspection.status !== "unavailable" && (assessment.scan.noGo ||
+      assessment.document.identityStatus !== "matched" || footerInspection.documentUrl !== assessment.scan.finalUrl)) {
+    context.addIssue({code: "custom", path: ["optOutFooterInspection"], message: "Footer inspection requires the same usable starting document."});
+  }
+  if (assessment.optOutTimingLimitation && (assessment.controls.privacyOptOut.state === "not_observed" ||
+      assessment.controls.privacyOptOut.inspection?.status === "complete")) {
+    context.addIssue({code: "custom", path: ["optOutTimingLimitation"], message: "A timing-limited inspection cannot establish absence."});
+  }
+  if (assessment.optOutFooterLinks?.some(link => assessment.scan.noGo || assessment.document.identityStatus !== "matched" ||
+      link.documentUrl !== assessment.scan.finalUrl)) {
+    context.addIssue({code: "custom", path: ["optOutFooterLinks"], message: "Footer evidence must bind to the usable starting document."});
   }
   const california = assessment.californiaPrivacyReview;
   if (california && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
@@ -262,6 +403,9 @@ export type ConsentControlAssessmentCandidate = {
   initialSelection?: InitialConsentSelection;
   evidenceId?: string;
   intent?: ConsentControlAssessmentEvidence["intent"] | "unknown";
+  opensPreferenceCenter?: true;
+  initialSwitchScope?: "sale" | "sharing";
+  settingsEntranceSource?: "accessible_name" | "same_banner_notice";
   semanticRole?: "explicit_accept" | "ambiguous_acknowledgment" | "reject" | "necessary_only" | "preferences" | "dismiss" | "unknown";
   actionType?: "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "do_not_sell_share" | "other";
   controlVariant?: "reject_with_subscription" | "reject_with_payment" | null;
@@ -303,6 +447,15 @@ export type ConsentControlAssessmentGeometry = {
 };
 
 export type ConsentControlAssessmentInput = {
+  optOutPlacementCorrections?: OptOutPlacementCorrection[];
+  originalOptOutSwitches?: z.infer<typeof originalSwitchBindingSchema>;
+  originalOptOutSettings?: z.infer<typeof originalSettingsBindingSchema>;
+  footerOriginalVisit?: z.infer<typeof footerOriginalVisitSchema>;
+  sameVisitFooter?: z.infer<typeof consentFooterOptOutObservationSchema>;
+  sameVisitFooterCapture?: z.infer<typeof footerCaptureResolutionSchema>;
+  optOutFooterInspection?: z.infer<typeof footerInspectionSchema>;
+  optOutTimingLimitation?: z.infer<typeof optOutTimingSchema>;
+  optOutFooterLinks?: Array<z.infer<typeof optOutFooterLinkSchema>>;
   cmpAudit?: CmpAuditAssessment;
   visualEvidence?: z.infer<typeof consentControlVisualEvidenceSchema>;
   scan: {
@@ -343,7 +496,7 @@ export type ConsentControlAssessmentInput = {
   };
 };
 
-const PROJECTOR_VERSION = "2.2.4";
+const PROJECTOR_VERSION = "2.2.38";
 const DEFAULT_REQUIRED_CHANNELS: ConsentControlAssessmentChannel[] = ["dom_inventory", "geometry"];
 
 function unique<T>(values: T[]) {
@@ -388,6 +541,9 @@ function isPaidDeclineVariant(value: ConsentControlAssessmentCandidate["controlV
 }
 
 function candidateIntent(candidate: ConsentControlAssessmentCandidate): ConsentControlAssessmentEvidence["intent"] | null {
+  if (candidate.actionType === "do_not_sell_share" && candidate.label?.trim().toLowerCase() === "abmelden") return null;
+  if (candidate.actionType === "do_not_sell_share" &&
+      candidate.classifierReasonCodes?.includes("vendor_specific_privacy_opt_out")) return "vendor_refusal";
   if (candidate.intent && candidate.intent !== "unknown") return candidate.intent;
   if (candidate.actionType === "accept_all" || candidate.semanticRole === "explicit_accept") return "accept";
   if (isPaidDeclineVariant(candidate.controlVariant)) return "reject";
@@ -434,6 +590,9 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
     ...(candidate.initialSelection ? { initialSelection: candidate.initialSelection } : {}),
     evidenceId,
     intent,
+    ...(candidate.initialSwitchScope && source === "geometry" && candidate.role === "switch" && intent === "privacy_opt_out" ? {initialSwitchScope:candidate.initialSwitchScope} : {}),
+    ...(candidate.opensPreferenceCenter && intent === "privacy_opt_out" ? {opensPreferenceCenter: true as const,
+      ...(candidate.settingsEntranceSource ? {settingsEntranceSource: candidate.settingsEntranceSource} : {})} : {}),
     controlVariant: candidate.controlVariant ?? null,
     label: boundedText(candidate.label, 120),
     locale: candidate.locale ?? null,
@@ -568,17 +727,49 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const bundleEvidence = observations.flatMap((observation) => observation.controls
     .map((candidate) => eligibleCandidate(candidate, observation.observedAtMs, observation.documentId ?? canonicalId, "bundle"))
     .filter((candidate): candidate is ConsentControlAssessmentEvidence => candidate !== null));
-  const geometryEvidence = input.geometry?.assessmentStatus === "complete"
-    ? (input.geometry.candidates ?? []).map((candidate) => eligibleCandidate(candidate, input.geometry?.observedAtMs ?? 0, input.geometry?.documentId ?? canonicalId, "geometry")).filter((candidate): candidate is ConsentControlAssessmentEvidence => candidate !== null)
-    : [];
-  const evidence = [...bundleEvidence, ...geometryEvidence]
+  // A label conflict can limit the whole inventory even when one source-verified
+  // settings entrance has its own conclusive geometry. Preserve all absence gates.
+  const geometryEvidence = (input.geometry?.candidates ?? [])
+    .filter(candidate => input.geometry?.assessmentStatus === "complete" ||
+      (input.geometry?.assessmentStatus === "incomplete" && inspectionDocumentBound &&
+       (candidate.opensPreferenceCenter === true || candidate.initialSwitchScope && candidate.role === "switch") && candidate.intent === "privacy_opt_out" &&
+       candidate.documentToken === canonicalDocumentToken))
+    .map(candidate => eligibleCandidate(candidate, input.geometry?.observedAtMs ?? 0, input.geometry?.documentId ?? canonicalId, "geometry"))
+    .filter((candidate): candidate is ConsentControlAssessmentEvidence => candidate !== null);
+  const originalOptOutSwitches = !noGo && documentStatus === "matched" ? input.originalOptOutSwitches : undefined;
+  const originalOptOutSettings = !noGo && documentStatus === "matched" ? input.originalOptOutSettings : undefined;
+  const optOutPlacementCorrections = !noGo && documentStatus === "matched" && input.optOutPlacementCorrections?.length
+    ? input.optOutPlacementCorrections : undefined;
+  const originalSettingsEvidence: ConsentControlAssessmentEvidence[] = originalOptOutSettings ? [{
+    evidenceId: ORIGINAL_SETTINGS_EVIDENCE_ID, intent: "privacy_opt_out", controlVariant: null,
+    label: originalOptOutSettings.packet.label, locale: "en", layer: "first_layer", visible: true, actionable: true,
+    observedAtMs: originalOptOutSettings.packet.observedAtMs, documentId: canonicalId,
+    documentToken: originalOptOutSettings.packet.documentToken, opensPreferenceCenter: true,
+    settingsEntranceSource: "accessible_name", presentationType: "dedicated_button", placementType: "action_cluster",
+    channels: ["dom_snapshot", "geometry"], artifactRefs: ["dom_text_pre_consent"], classifier: null,
+  }] : [];
+  const originalSwitchEvidence: ConsentControlAssessmentEvidence[] =
+    (originalOptOutSwitches?.packet.rows ?? []).map(row => ({
+      evidenceId: `dom_text_pre_consent:opt-out-switch:${row.scope}`, intent: "privacy_opt_out", controlVariant: null,
+      label: row.label, locale: "en", layer: "first_layer", visible: true, actionable: true,
+      observedAtMs: originalOptOutSwitches!.packet.observedAtMs, documentId: canonicalId,
+      documentToken: originalOptOutSwitches!.packet.documentToken,
+      initialSwitchScope: row.scope, presentationType: "dedicated_button", placementType: "first_layer_body",
+      channels: ["dom_snapshot", "geometry"], artifactRefs: ["dom_text_pre_consent"], classifier: null,
+    }));
+  const primaryEvidence = [...bundleEvidence, ...geometryEvidence]
     .filter((item) => documentStatus === "matched" && Boolean(canonicalId) && item.documentId === canonicalId)
+    .filter(item => !item.initialSwitchScope || !originalSwitchEvidence.some(original =>
+      original.initialSwitchScope === item.initialSwitchScope && original.label === item.label))
+    .filter(item => !item.opensPreferenceCenter || !originalSettingsEvidence.some(original => original.label === item.label))
     .sort((left, right) => left.observedAtMs - right.observedAtMs)
     .filter((item, index, all) => all.findIndex((candidate) => candidate.evidenceId === item.evidenceId) === index)
-    .slice(0, 96);
+    .slice(0, 96 - originalSwitchEvidence.length - originalSettingsEvidence.length);
+  const evidence = [...primaryEvidence, ...originalSwitchEvidence, ...originalSettingsEvidence]
+    .sort((left, right) => left.observedAtMs - right.observedAtMs);
 
   const firstLayerEvidence = evidence.filter((item) => item.layer === "first_layer");
-  const actionableConsentEvidence = firstLayerEvidence.filter((item) => item.intent !== "privacy_opt_out");
+  const actionableConsentEvidence = firstLayerEvidence.filter((item) => item.intent !== "privacy_opt_out" && item.intent !== "vendor_refusal");
   // A sale/share or advertising opt-out is retained consent-adjacent evidence,
   // but it does not prove that a GDPR/ePrivacy cookie-consent surface exists.
   // Keep the privacy choice observable without promoting it to actionable A/R/O.
@@ -711,8 +902,12 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     inspectionCurrent && Boolean(inspection && inspection.candidates.length > 0 && isControlInspectionComplete(inspection, intent));
   const resultWithInspection = (intent: "accept" | "reject" | "options" | "privacy_opt_out") => {
     const currentControlComplete = !inspection || !inspectionCurrent || !inspectionDocumentBound || isControlInspectionComplete(inspection, intent);
-    const inspected = (completeInventory && currentControlComplete) || independentlyComplete(intent);
-    const result = resultFor(intent, evidence, inspected, reasons);
+    const timing = intent === "privacy_opt_out" ? input.optOutTimingLimitation : undefined;
+    const independentOriginal = intent === "privacy_opt_out" && Boolean(originalOptOutSwitches?.recovery || originalOptOutSettings?.recovery);
+    const placementConflict = intent === "privacy_opt_out" && Boolean(optOutPlacementCorrections);
+    const inspected = !timing && !independentOriginal && !placementConflict && ((completeInventory && currentControlComplete) || independentlyComplete(intent));
+    const result = resultFor(intent, evidence, inspected, timing ? [timing.reason, ...reasons] :
+      placementConflict ? ["verified_outside_initial_banner", ...reasons] : reasons);
     result.inspection = {
       policy: inspection?.version ?? CONTROL_INSPECTION_POLICY, status: inspected ? "complete" : "limited",
       evidenceRefs: inspected ? bounded(independentlyComplete(intent)
@@ -747,7 +942,16 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const firstObservedAtMs = observations.find((observation) => observation.likelyPresent)?.observedAtMs ?? null;
   const lastObservedAtMs = observations.at(-1)?.observedAtMs ?? input.geometry?.observedAtMs ?? null;
   const sourceInput = {
+    ...(originalOptOutSwitches ? {originalOptOutSwitches} : {}),
+    ...(originalOptOutSettings ? {originalOptOutSettings} : {}),
+    ...(optOutPlacementCorrections ? {optOutPlacementCorrections} : {}),
+    ...(input.footerOriginalVisit ? {footerOriginalVisit: input.footerOriginalVisit} : {}),
+    ...(input.sameVisitFooter ? {sameVisitFooter: input.sameVisitFooter} : {}),
+    ...(input.sameVisitFooterCapture ? {sameVisitFooterCapture: input.sameVisitFooterCapture} : {}),
+    ...(input.optOutFooterInspection ? {optOutFooterInspection: input.optOutFooterInspection} : {}),
+    ...(input.optOutTimingLimitation ? {optOutTimingLimitation: input.optOutTimingLimitation} : {}),
     positiveSurfacePolicy:"verified_control_presence.v1",
+    ...(input.optOutFooterLinks?.length ? {optOutFooterLinks: input.optOutFooterLinks} : {}),
     capturePolicyVersion: CONSENT_CONTROL_CAPTURE_POLICY_VERSION,
     registryVersion: CONSENT_CONTROL_LABEL_REGISTRY_VERSION,
     evidencePolicy: CONSENT_CONTROL_EVIDENCE_POLICY,
@@ -816,6 +1020,15 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
       evidenceRefs: bounded(input.surface?.evidenceRefs ?? observations.flatMap((observation) => observation.evidenceRefs ?? [])),
     },
     controls: firstLayerResults,
+    ...(originalOptOutSwitches ? {originalOptOutSwitches} : {}),
+    ...(originalOptOutSettings ? {originalOptOutSettings} : {}),
+    ...(optOutPlacementCorrections ? {optOutPlacementCorrections} : {}),
+    ...(!assessmentBlocked && input.footerOriginalVisit ? {footerOriginalVisit: input.footerOriginalVisit} : {}),
+    ...(!assessmentBlocked && input.sameVisitFooter ? {sameVisitFooter: input.sameVisitFooter} : {}),
+    ...(!input.scan.noGo && input.sameVisitFooterCapture ? {sameVisitFooterCapture: input.sameVisitFooterCapture} : {}),
+    ...(!assessmentBlocked && input.optOutFooterInspection ? {optOutFooterInspection: input.optOutFooterInspection} : {}),
+    ...(!assessmentBlocked && input.optOutTimingLimitation ? {optOutTimingLimitation: input.optOutTimingLimitation} : {}),
+    ...(!assessmentBlocked && input.optOutFooterLinks !== undefined ? {optOutFooterLinks: input.optOutFooterLinks} : {}),
     coverage: {
       ...(captureDiagnostic ? {captureDiagnostic} : {}),
       ...(firstLayerOptOutGeometry ? {firstLayerOptOutGeometry} : {}),

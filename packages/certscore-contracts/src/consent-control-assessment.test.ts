@@ -786,3 +786,50 @@ test("new materializations honor structural control eligibility without reinterp
     assert.deepEqual(consentControlAssessmentSchema.parse(stored),stored);
   }
 });
+
+test('a provider-specific first-layer refusal remains visible without counting as site-wide sale/sharing or cookie rejection', () => {
+  const input = baseInput();
+  input.observations = [{
+    observationId: 'consent-ui', observedAtMs: 100, likelyPresent: true, layerInspected: 'first_layer',
+    captureStatus: 'observed', inventoryOutcome: 'complete_with_controls', documentId: input.document!.canonicalDocumentId,
+    completedChannels: ['dom_inventory', 'geometry'],
+    controls: [candidate({
+      actionType: 'do_not_sell_share', label: 'Utiq jetzt ablehnen', evidenceId: 'provider-refusal',
+      classifierReasonCodes: ['vendor_specific_privacy_opt_out', 'matched_privacy_opt_out'],
+    })],
+  }];
+  const assessment = deriveConsentControlAssessment(input);
+  assert.equal(assessment.controls.privacyOptOut.state, 'not_observed');
+  assert.equal(assessment.controls.reject.state, 'not_observed');
+  const evidence = assessment.evidence.find(e => e.evidenceId === 'provider-refusal');
+  assert.equal(evidence?.intent, 'vendor_refusal');
+  assert.equal(evidence?.opensPreferenceCenter, undefined);
+  assert.ok(consentControlAssessmentSchema.safeParse(assessment).success);
+
+  input.observations[0]!.controls!.push(candidate({
+    actionType: 'do_not_sell_share', label: 'Do Not Sell My Personal Information', evidenceId: 'site-choice',
+  }));
+  const mixed = deriveConsentControlAssessment(input);
+  assert.equal(mixed.controls.privacyOptOut.state, 'observed');
+  assert.ok(mixed.controls.privacyOptOut.evidenceRefs.includes('site-choice'));
+  assert.ok(!mixed.controls.privacyOptOut.evidenceRefs.includes('provider-refusal'));
+});
+
+test('standalone Abmelden stays ambiguous both in current capture and when replaying a legacy classified link', () => {
+  const label = 'Abmelden';
+  const current = classifyConsentControlLabel({label, hasConsentContext: true, usage: 'observation', localeHints: ['de']});
+  assert.notEqual(current.intent, 'privacy_opt_out');
+  const input = baseInput();
+  input.observations = [{
+    observationId: 'finanztip-first-layer', observedAtMs: 10522, likelyPresent: true, layerInspected: 'first_layer',
+    captureStatus: 'observed', documentId: input.document!.canonicalDocumentId,
+    controls: [candidate({
+      actionType: 'do_not_sell_share', label, tagName: 'a', selectorHint: 'a', evidenceId: 'logout',
+      classifierReasonCodes: ['matched_privacy_opt_out','match_strength_direct','context_satisfied'],
+      linkDestination: 'other_document', matchedTerm: 'abmelden',
+    })],
+  }];
+  const assessment = deriveConsentControlAssessment(input);
+  assert.notEqual(assessment.controls.privacyOptOut.state, 'observed');
+  assert.equal(assessment.evidence.some(e => e.evidenceId === 'logout' && e.intent === 'privacy_opt_out'), false);
+});

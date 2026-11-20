@@ -52,7 +52,8 @@ const ACCESS_NO_GO_PATTERNS: Array<{ code: string; pattern: RegExp }> = [
   { code: "imperva_challenge", pattern: /\b(?:imperva|incapsula)\b/i },
   { code: "kasada_challenge", pattern: /\b(?:kasada|x-kpsdk|protected by kasada)\b/i },
   { code: "temporary_interstitial", pattern: /\bzaraz wracamy\b/i },
-  { code: "rate_limited", pattern: /\b(?:too many requests|rate limit|request blocked)\b/i },
+  // The bare phrase is also a navigation label. Text alone should describe a denial.
+  { code: "rate_limited", pattern: /\b(?:too many requests|request blocked|rate[- ]limit (?:(?:has been|was) )?(?:exceeded|reached)|(?:exceeded|reached) (?:the |your )?rate[- ]limit)\b/i },
   { code: "generic_error_page", pattern: /\b(?:something went wrong|service unavailable|temporarily unavailable)\b/i },
 ];
 

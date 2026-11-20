@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v31";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v33";
 
 /** OneTrust's banner wrapper can repeat the labels of descendant controls. */
 export function isOneTrustConsentBannerWrapper(element: {
@@ -484,6 +484,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     // passive-only rather than stripping quotes from every action label.
     { phrase: '"do not sell my personal information"', intent: "privacy_opt_out", strength: "direct",
       observationOnly: true, exactLabelOnly: true, requiresConsentContext: true },
+    { phrase: "do not sell/share personal info", intent: "privacy_opt_out", strength: "direct",
+      observationOnly: true, exactLabelOnly: true, requiresConsentContext: true },
     ...direct("privacy_opt_out", "do not share"),
     ...direct("privacy_opt_out", "do not sell or share"),
     ...direct("privacy_opt_out", "your privacy choices"),
@@ -617,7 +619,6 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("privacy_opt_out", "berechtigtem interesse widersprechen"),
     ...direct("privacy_opt_out", "widerspruch"),
     ...direct("privacy_opt_out", "opt-out"),
-    ...direct("privacy_opt_out", "abmelden"),
     ...direct("privacy_opt_out", "nicht verkaufen"),
     ...direct("privacy_opt_out", "nicht weitergeben"),
     ...direct("privacy_opt_out", "datenschutzoptionen"),

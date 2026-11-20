@@ -316,3 +316,54 @@ test('declared advertising-cookie evidence retains template and unverified-link 
  assert.ok(summary);assert.doesNotMatch(summary,/template wording|destination|COMPANY NAME/);
  assert.doesNotMatch(html,/<details[^>]*data-opt-out-evidence[^>]*open|deduct|points/i);
 });
+
+test("California coverage distinguishes banner settings, footer links and vendor-only refusals", async () => {
+  const {CaliforniaCoverageSummary} = await import("./regulatory-review-focus");
+  const surfaces = {
+    version: "opt_out_surfaces.v1" as const,
+    bannerControls: [{label: "Do Not Sell My Personal Information / Customize Settings", opensPreferenceCenter: true as const, evidenceRef: "banner"}],
+    footerLinks: [{label: "Your Privacy Choices", evidenceRef: "footer", documentUrl: "https://example.test/"}],
+    vendorRefusals: [{label: "Utiq jetzt ablehnen", evidenceRef: "vendor"}],
+  };
+  const html = renderToStaticMarkup(<CaliforniaCoverageSummary optOutSurfaces={surfaces}
+    optOutPresence={{state: "not_observed", absenceScope: "Captured text"}} />);
+  assert.match(html, /data-opt-out-status="not_observed"/);
+  assert.match(html, /Banner controls<\/h3>.*Labeled to open privacy settings/);
+  assert.match(html, /Footer links<\/h3>.*Your Privacy Choices/);
+  assert.match(html, /Vendor-specific refusals<\/h3>.*Utiq jetzt ablehnen/);
+  assert.match(html, /within this search scope/);
+  const vendorOnly = renderToStaticMarkup(<CaliforniaCoverageSummary optOutSurfaces={{...surfaces, bannerControls: [], footerLinks: []}} />);
+  assert.match(vendorOnly, /data-opt-out-status="unknown"/);
+  assert.doesNotMatch(vendorOnly, /Banner controls|Footer links/);
+});
+
+test("renders the source of a settings instruction and footer inspection scope", async () => {
+  const {CaliforniaCoverageSummary} = await import("./regulatory-review-focus");
+  const surfaces = {version: "opt_out_surfaces.v1" as const, footerLinks: [], vendorRefusals: [],
+    bannerControls: [{label: "Do Not Sell My Personal Information", opensPreferenceCenter: true as const,
+      settingsEntranceSource: "same_banner_notice" as const, evidenceRef: "button"}],
+    footerInspection: {status: "limited" as const, documentUrl: "https://example.test/", inspectionHash: "1".repeat(64)}};
+  const evidence = renderToStaticMarkup(<CaliforniaCoverageSummary optOutSurfaces={surfaces}/>);
+  assert.match(evidence, /Banner instructions identify this button/);
+  assert.match(evidence, /Partial coverage/);
+  const uninspected = renderToStaticMarkup(<CaliforniaCoverageSummary optOutSurfaces={{...surfaces, bannerControls: [],
+    footerInspection: {status: "unavailable", reason: "no_policy_run"}}}/>);
+  assert.match(uninspected, /Policy scan did not run/);
+  assert.doesNotMatch(uninspected, /No footer links found/);
+});
+
+test("covered footer controls and hidden duplicates have separate report evidence", async () => {
+  const {CaliforniaCoverageSummary} = await import("./regulatory-review-focus");
+  const surfaces = {version: "opt_out_surfaces.v1" as const, bannerControls: [], vendorRefusals: [],
+    footerLinks: [{label: "Your Privacy Choices", evidenceRef: "dom_text_pre_consent:footer-control-0",
+      documentUrl: "https://example.test/", visibility: "covered" as const}],
+    sameVisitFooter: {coverage: "limited" as const, otherControls: [{label: "Do Not Sell My Personal Information",
+      visibility: "hidden" as const, evidenceRef: "dom_text_pre_consent:footer-control-1"}]}};
+  const html = renderToStaticMarkup(<CaliforniaCoverageSummary optOutSurfaces={surfaces}/>);
+  assert.match(html, /Footer links<\/h3>.*Your Privacy Choices.*Covered at the sampled points<\/p><\/section>/);
+  assert.match(html, /Other footer observations<\/h3>.*Do Not Sell My Personal Information.*Hidden at capture/);
+  assert.doesNotMatch(html, /Banner controls|Vendor-specific refusals|Reached by the pointer/);
+  const hiddenOnly = renderToStaticMarkup(<CaliforniaCoverageSummary optOutSurfaces={{...surfaces, footerLinks: []}}/>);
+  assert.match(hiddenOnly, /Hidden at capture/);
+  assert.doesNotMatch(hiddenOnly, /Footer links<\/h3>/);
+});

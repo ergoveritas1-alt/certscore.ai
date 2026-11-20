@@ -9,6 +9,12 @@ export * from "./gpc-guidance";
 import { runtimeEvidenceClockSchema, resolveRuntimeEvidenceClock } from "./runtime-evidence-clock";
 export * from "./runtime-evidence-clock";
 import {domOptOutSearchSchema} from "./scoped-opt-out-search";
+import {consentFooterOptOutObservationSchema} from "./consent-footer-opt-out";
+import {consentFooterOptOutCaptureSchema} from "./consent-footer-opt-out-capture";
+import {originalInitialOptOutSwitchesSchema} from "./initial-opt-out-switch";
+import {originalOneTrustSettingsEntranceSchema} from "./explicit-opt-out-control";
+export * from "./consent-footer-opt-out-capture";
+export * from "./consent-footer-opt-out";
 export * from "./scoped-opt-out-search";
 export * from "./broad-opt-out-assessment";
 export * from "./reviewed-opt-out-routes";
@@ -1943,6 +1949,10 @@ export const blockingFrameChallengeSchema = z.object({
 });
 
 export const domSnapshotArtifactSchema = z.object({
+  originalInitialOptOutSwitches: originalInitialOptOutSwitchesSchema.optional(),
+  originalOneTrustSettingsEntrance: originalOneTrustSettingsEntranceSchema.optional(),
+  footerOptOutObservation: consentFooterOptOutObservationSchema.optional(),
+  footerOptOutCapture: consentFooterOptOutCaptureSchema.optional(),
   runtimeDocumentCapture: z.object({
     version: z.literal("runtime_document_capture.v1"),
     viewportAttempted: z.literal(true).optional(),
@@ -4062,6 +4072,7 @@ export * from "./consent-scope-exclusion";
 export * from "./gpc-collection-comparison.js";
 
 export * from "./explicit-opt-out-control";
+export * from "./initial-opt-out-switch";
 
 export * from "./conditional-opt-out-decision";
 export * from "./opt-out-dispatch-rejection";

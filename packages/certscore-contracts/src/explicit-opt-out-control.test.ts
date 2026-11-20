@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {boundOptOutControlFromAttributes,explicitOptOutEntranceName} from './explicit-opt-out-control';
+import {boundOptOutControlFromAttributes,explicitOptOutEntranceName,namesOptOutSettingsEntrance,optOutSettingsNoticeSentence} from './explicit-opt-out-control';
 import {consentAccessibilityDomBindingSchema} from './consent-accessibility-dom-binding';
 import {conditionalOptOutDecisionSchema,retainedConditionalOptOutDecision} from './conditional-opt-out-decision';
 
@@ -37,4 +37,39 @@ test('v3 source presence needs an original observation reference without authori
  assert.equal(conditionalOptOutDecisionSchema.safeParse({...value,observationId:undefined}).success,false);
  assert.equal(conditionalOptOutDecisionSchema.safeParse({...value,status:'dispatched',remainingTimeMs:5000}).success,false);
  assert.equal(conditionalOptOutDecisionSchema.safeParse({...value,version:'conditional_opt_out_dispatch.v2',observationId:undefined}).success,true);
+});
+
+test('a combined sale/settings entrance can be observed without granting an action recipe', () => {
+  const label = 'Do Not Sell My Personal Information / Customize Settings';
+  const aria = label + ', Opens the preference center dialog';
+  assert.ok(namesOptOutSettingsEntrance(label, aria));
+  assert.equal(explicitOptOutEntranceName(label), undefined);
+  assert.equal(boundOptOutControlFromAttributes('button', ['id', 'onetrust-pc-btn-handler'], aria), undefined);
+  for (const [visible, accessible] of [
+    [label, 'Accept All Cookies'],
+    [label, aria + ' and accepts optional cookies'],
+    ['Customize Settings', 'Customize Settings, Opens preference center dialog'],
+    ['Opt out of newsletters', 'Opt out of newsletters, Opens preference center dialog'],
+    ['Utiq jetzt ablehnen', 'Utiq jetzt ablehnen, Opens preference center dialog'],
+    ['Learn more about ' + label, 'Learn more about ' + aria],
+    ['Your Privacy Choices / Accept all', 'Your Privacy Choices / Accept all, Opens preference center dialog'],
+  ]) {
+    assert.equal(namesOptOutSettingsEntrance(visible, accessible), false, accessible);
+  }
+});
+
+test("a settings notice requires an affirmative instruction for the quoted opt-out label", () => {
+  const label = "Your Privacy Choices";
+  const sentence = 'Click on "Your Privacy Choices" to customize your preferences.';
+  assert.equal(optOutSettingsNoticeSentence(label, "We use cookies. " + sentence), sentence);
+  for (const notice of [
+    'Do not click on "Your Privacy Choices" to customize your preferences.',
+    'Click on "Cookie Settings" to customize your preferences. Your Privacy Choices.',
+    'Click on "Your Privacy Choices" to customize your newsletter preferences.',
+    'Click on "Your Privacy Choices" to customize your preferences or opt in to advertising.',
+    'Our policy explains how to customize your preferences.',
+    sentence.repeat(31),
+  ]) assert.equal(optOutSettingsNoticeSentence(label, notice), undefined);
+  assert.equal(optOutSettingsNoticeSentence("Cookie Settings", 'Click on "Cookie Settings" to customize your preferences.'), undefined);
+  assert.equal(explicitOptOutEntranceName(sentence), undefined);
 });

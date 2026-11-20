@@ -1,10 +1,12 @@
-import { browserPolicyLinkSchema, type BrowserPolicyLink } from "@certscore/contracts";
+import { browserPolicyLinkSchema, ENSIGHTEN_FOOTER_REVEAL_MAX_MS, ONETRUST_CUSTOM_FOOTER_REVEAL_MAX_MS, type BrowserPolicyLink } from "@certscore/contracts";
 import { createGpcNavigationRecovery } from "../gpc-navigation-recovery";
 import { consentGeometryCheckpoint } from "../consent-geometry-checkpoint.js";
 import { reconcileConsentGeometryInventoryCoverage } from "../consent-geometry-inventory-coverage.js";
 import {createFinalConsentGeometryRefresh, evaluateFinalConsentGeometryEligibility, prepareFinalConsentGeometryArtifact} from "../consent-final-geometry-refresh.js";
 import {buildConsentCaptureDiagnostic, type ConsentRefreshDiagnosticOutcome} from "../consent-capture-diagnostic.js";
 import {retainDomOptOutLabel,retainDomOptOutSearch} from "../dom-opt-out-label.js";
+import {captureConsentFooterOptOutWithOutcome, footerCaptureStopped, AEM_LEGAL_FOOTER_LINK_SELECTOR, FOOTER_OPT_OUT_READ_MAX_MS, FOOTER_OPACITY_REVEAL_READ_MAX_MS} from "../consent-footer-opt-out.js";
+import {retainOriginalInitialOptOutSwitches} from "../original-initial-opt-out-switches.js";
 import {captureBoundRuntimeTextSnapshot,retainRuntimeOptOutSearch,type RuntimeTextCapture} from "../runtime-opt-out-text.js";
 import {isGateRuntimeTextTarget} from "@certscore/contracts";
 import { createResponseCompletionRecovery } from "../response-completion-recovery.js";
@@ -256,7 +258,9 @@ const CANONICAL_NECESSARY_PREFERENCE_CATEGORY_LABELS = unique(
 const CANONICAL_CMP_CONTAINER_SELECTORS = unique(
   KNOWN_CMP_REGISTRY.flatMap((definition) => definition.domSelectors ?? []),
 ).slice(0, 250);
-const NON_FIRST_LAYER_SURFACE_SELECTOR = KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(",");
+// The CMP prefix in Adobe Core Component class names is page structure, not consent context.
+const NON_FIRST_LAYER_SURFACE_SELECTOR = [AEM_LEGAL_FOOTER_LINK_SELECTOR,
+  ...KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? [])].join(",");
 const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
@@ -1500,7 +1504,7 @@ export async function preConsentRuntimeScanner(
         : [],
       screenshots: [...screenshots],
       visualCapture: { ...visualCapture },
-      domSnapshots: [...fallbackDomSnapshots],
+      domSnapshots: captureScope === "consent_proof" ? fallbackDomSnapshots.map(s=>({...s,...footerCaptureStopped(s,input.scanStartedAtMs)})) : [...fallbackDomSnapshots],
       artifactRefs: retainedTransportSecurityArtifactRef
         ? [retainedTransportSecurityArtifactRef]
         : [],
@@ -2795,6 +2799,12 @@ export async function preConsentRuntimeScanner(
       ? pageEvidence.domTextCapture as typeof domTextCapture
       : undefined;
     const initialRuntimeText = domTextCapture;
+    const originalInitialOptOutSwitches = captureScope === "consent_proof" && domTextCapture
+      ? await retainOriginalInitialOptOutSwitches({
+        page, text: domTextCapture, scanStartedAtMs: input.scanStartedAtMs, signal: effectiveSignal,
+        budgetMs: optionalEvidenceAllowance({remainingMs: remainingModuleBudgetMs(), maximumMs: 450}),
+        readBinding: () => ({url: page.url(), documentIdentity: currentBrowserDocumentIdentity(page)}),
+      }) : undefined;
     const readDomTextCapture = async (runtimeAllowanceMs = Math.min(2_000, remainingModuleBudgetMs())) => {
       if (bindStartingPageText) {
         if (runtimeAllowanceMs <= 0 || effectiveSignal?.aborted) return null;
@@ -4713,6 +4723,10 @@ export async function preConsentRuntimeScanner(
       const documentLanguage = captureRuntimeEvidence ? siteMetadata?.language : await readDeclaredDocumentLanguage(page);
       const textBinding = captureScope === "consent_proof" || bindStartingPageText ? domTextCapture : undefined;
       const domSnapshot: DomSnapshotArtifact = {
+        ...(originalInitialOptOutSwitches && textBinding?.url === originalInitialOptOutSwitches.documentUrl &&
+          textBinding.documentIdentity?.source === "cdp_loader_id" &&
+          textBinding.documentIdentity.token === originalInitialOptOutSwitches.documentToken
+          ? {originalInitialOptOutSwitches} : {}),
         ...(captureGateRuntimeText?{optOutSearch:retainRuntimeOptOutSearch(domTextCapture as RuntimeTextCapture|undefined,input.normalizedUrl,domText)}:{}),
         ...(captureScope === "consent_proof" && domTextCapture ? {optOutLabel:retainDomOptOutLabel(domTextCapture,"dom_text_pre_consent"),optOutSearch:retainDomOptOutSearch(domTextCapture,"dom_text_pre_consent")} : {}),
         ...(siteMetadata ? { siteMetadata } : {}),
@@ -4992,6 +5006,41 @@ export async function preConsentRuntimeScanner(
       finalizationReserveMs: EVIDENCE_WORK_POLICY.finalizationReserveMs,
       transportRefreshBudgetMs: transportSecurityRemainingMs, formVisualBudgetMs, crawlMetadataBudgetMs, formPixelWorkCompleted,
     }));
+    if (captureScope === "consent_proof") {
+      // Read the frozen original document before optional browser teardown.
+      // A degraded visual transaction can leave the renderer busy. When the
+      // DOM also hints at a sale/sharing choice, give the exact end-strip
+      // witness work ahead of general footer traversal in the same allowance.
+      responseCaptureFinalized = true;
+      const prioritizeFundingChoicesStrip = (screenshotErrors.length > 0 || visualCapture.status === "placeholder") &&
+        /(?:^|\n)\s*do not sell or share my personal information\s*(?:\n|$)/i.test(domText);
+      const allowExtendedFooterReveal = !prioritizeFundingChoicesStrip && /(?:^|\n)\s*your (?:california )?privacy choices\s*(?:\n|$)/i.test(domText);
+      const footerGeometry = consentGeometryArtifactRetained ? latestRetainedConsentGeometry : undefined;
+      const boundFooterGeometry = allowExtendedFooterReveal && footerGeometry &&
+        footerGeometry.pageUrl === domSnapshot.url && footerGeometry.documentIdentity?.source === "cdp_loader_id" &&
+        domSnapshot.documentIdentity?.source === "cdp_loader_id" && footerGeometry.documentIdentity.token === domSnapshot.documentIdentity.token;
+      const allowEnsightenFooterReveal = !!boundFooterGeometry && footerGeometry?.cmp.name === "Ensighten Privacy";
+      const allowOneTrustCustomFooterReveal = !!boundFooterGeometry && footerGeometry?.cmp.name === "OneTrust";
+      const allowance = optionalEvidenceAllowance({remainingMs: remainingModuleBudgetMs(),
+        maximumMs: allowEnsightenFooterReveal ? ENSIGHTEN_FOOTER_REVEAL_MAX_MS :
+          allowOneTrustCustomFooterReveal ? ONETRUST_CUSTOM_FOOTER_REVEAL_MAX_MS :
+          allowExtendedFooterReveal ? FOOTER_OPACITY_REVEAL_READ_MAX_MS : FOOTER_OPT_OUT_READ_MAX_MS});
+      const session = networkMetadataSession;
+      const footer = await recordTiming(timingBreakdown,"starting-page footer choice capture",
+        prioritizeFundingChoicesStrip ? "Prefer the reviewed end strip when the renderer had visual capture trouble." :
+          "Read original-loader footer choices before browser cleanup.",
+        () => captureConsentFooterOptOutWithOutcome({page, snapshot:domSnapshot, scanStartedAtMs:input.scanStartedAtMs,
+          readBinding:() => ({url:page.url(), documentIdentity:currentBrowserDocumentIdentity(page)}),
+          verifyOpenMainFrame:session ? async () => {
+            const frame = (await session.send("Page.getFrameTree")).frameTree.frame;
+            if (!frame.loaderId) return undefined;
+            return {url:frame.url+(frame.urlFragment ?? ""), documentIdentity:{source:"cdp_loader_id",token:frame.loaderId}};
+          } : undefined,
+          budgetMs:allowance, signal:effectiveSignal, prioritizeFundingChoicesStrip, allowExtendedFooterReveal, allowEnsightenFooterReveal,
+          allowOneTrustCustomFooterReveal}),
+        result => result.footerOptOutCapture?.outcome === "timed_out" ? "timed_out" : "completed");
+      Object.assign(domSnapshot,footer);
+    }
     if (proxyDestinations && !retainOwnedBrowserForPolicyRecovery) {
       responseCaptureFinalized = true;
       await boundedCleanup(browser.close(), Math.min(1000, remainingModuleBudgetMs()));
@@ -5228,7 +5277,7 @@ export async function preConsentRuntimeScanner(
         : [],
       screenshots,
       visualCapture,
-      domSnapshots: fallbackDomSnapshots,
+      domSnapshots: captureScope === "consent_proof" ? fallbackDomSnapshots.map(s=>({...s,...footerCaptureStopped(s,input.scanStartedAtMs)})) : fallbackDomSnapshots,
       artifactRefs: retainedTransportSecurityArtifactRef
         ? [retainedTransportSecurityArtifactRef]
         : [],

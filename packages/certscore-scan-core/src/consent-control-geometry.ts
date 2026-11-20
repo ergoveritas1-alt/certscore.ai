@@ -1,10 +1,15 @@
 import type { Frame, Page } from "playwright";
+import { AEM_LEGAL_FOOTER_LINK_SELECTOR } from "./consent-footer-opt-out.js";
 import {
   classifyConsentControlLabel,
   classifyConsentInspectionRole,
   isInitialNecessaryOnlySelection,
   isInitialSelectionSubmit,
   isOneTrustConsentBannerWrapper,
+  EXPLICIT_SALE_SHARING_LAUNCHER_LABEL,
+  type StandaloneSaleSharingAnchor,
+  optOutSettingsNoticeSentence, namesNoticeBoundPrivacyRightsButton, initialOptOutSwitchScope, verifiedInitialOptOutSwitch, type InitialOptOutSwitch,
+  type SettingsEntranceNotice,
   isRelevantConsentInspectionCandidate,
   CONTROL_INSPECTION_POLICY,
   FIRST_LAYER_OPT_OUT_GEOMETRY_SAMPLE_LIMIT,
@@ -147,6 +152,9 @@ export interface ConsentControlCandidateEvidence {
   inputType?: string;
   initialSelection?: InitialConsentSelection;
   namedRejectRouting?: NamedRejectRoutingEvidence;
+  settingsEntranceNotice?: SettingsEntranceNotice;
+  standaloneSaleSharingAnchor?: StandaloneSaleSharingAnchor;
+  initialOptOutSwitch?: InitialOptOutSwitch;
   selectorHint: string;
   containerSelectorHint?: string;
   containerId?: string;
@@ -282,6 +290,9 @@ interface RawGeometryCandidate {
   inputType?: string;
   initialSelection?: InitialConsentSelection;
   namedRejectRouting?: NamedRejectRoutingEvidence;
+  settingsNoticeText?: string;
+  standaloneSaleSharingAnchor?: StandaloneSaleSharingAnchor;
+  initialSwitchRow?: {label:string; bounds:ConsentControlRect};
   selectorHint: string;
   containerSelectorHint?: string;
   containerIndex?: number;
@@ -385,6 +396,7 @@ export async function captureConsentControlGeometry(
     consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
     controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
     additionalControlLabelPatternSource: ADDITIONAL_CONTROL_LABEL_PATTERN.source,
+    standaloneSaleSharingLabelSource: EXPLICIT_SALE_SHARING_LAUNCHER_LABEL.source,
     registrySelectors,
     // Names only: no property reads, SDK getters or protocol calls. Use the
     // canonical library in this same document snapshot as the control inventory.
@@ -398,6 +410,7 @@ export async function captureConsentControlGeometry(
       ? [{ ...entry.rejectLabelBoundNecessaryOnly, provider: entry.canonicalName }] : []),
     initialOptionalOffCloseRecipes: KNOWN_CMP_REGISTRY.flatMap(entry => entry.initialOptionalOffCloseObservation ? [entry.initialOptionalOffCloseObservation] : []),
     nonFirstLayerSurfaceSelector: KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(","),
+    aemFooterLinkSelector: AEM_LEGAL_FOOTER_LINK_SELECTOR,
   };
   const initialPageUrl = page.url();
   const mainFrame = page.mainFrame();
@@ -467,6 +480,20 @@ export async function captureConsentControlGeometry(
   const candidates = raw.candidates.map((candidate, index) =>
     buildCandidateEvidence(candidate, index, expectedPageUrl, options.screenshotArtifactRef, containers)
   );
+  // Keep both physical nodes. The repeated aria-labelledby ID in this panel cannot distinguish rows.
+  for (const [i,candidate] of candidates.entries()) {
+    const capture=raw.candidates[i]!, local=capture.initialSwitchRow, scope=initialOptOutSwitchScope(local?.label);
+    if (!local || !scope || capture.captureFrameSlot!==0) continue;
+    const matches=candidates.filter((node,j)=>node.tagName==="label" && node.label===local.label && raw.candidates[j]?.captureFrameSlot===0 &&
+      node.boundingBox.x===local.bounds.x && node.boundingBox.y===local.bounds.y && node.boundingBox.width===local.bounds.width &&
+      node.boundingBox.height===local.bounds.height);
+    if (matches.length!==1) continue;
+    candidate.initialOptOutSwitch={version:"inmobi_choice.initial_opt_out_switch.v1",scope,label:local.label,
+      labelCandidateId:matches[0]!.candidateId,frameSlot:0,labelFrameSlot:0,binding:"same_visible_row"};
+  }
+  const switchGeometry={candidates,containers};
+  const verifiedSwitches=candidates.map((c,i)=>c.initialOptOutSwitch && verifiedInitialOptOutSwitch(switchGeometry,i,expectedPageUrl));
+  for (const [i,c] of candidates.entries()) if(c.initialOptOutSwitch && !verifiedSwitches[i]) delete c.initialOptOutSwitch;
   reconcileActionableVisualProxies(candidates);
   reconcileConfirmedConsentModalClusters(candidates, containers);
   classifyConsentControlPlacements(candidates, containers);
@@ -566,7 +593,7 @@ function summarizeFirstLayerOptOutGeometry(
     const sample = {ordinal, frameSlot, role: proof.role, confirmedVisible: candidate.decisionStatus === "confirmed_visible"};
     if (proof.unresolvedIntents.includes("privacy_opt_out")) {
       unresolved.push({...sample, coverage: "unresolved_opt_out"});
-    } else if (candidate.actionType === "do_not_sell_share") {
+    } else if (candidate.actionType === "do_not_sell_share" || candidate.settingsEntranceNotice) {
       classified.push({...sample, coverage: "classified_opt_out"});
     } else if (proof.unresolvedIntents.length) {
       otherUnresolved.push({...sample, coverage: "other_unresolved"});
@@ -994,6 +1021,10 @@ function buildCandidateEvidence(
   const diagnosticClassifications = diagnosticClassificationsForCandidate(candidate);
   const reasons = bannerWrapper ? ["one_trust_consent_banner_wrapper"] : [];
   const decisionStatus = decisionStatusForCandidate(candidate, actionType, classification, reasons);
+  const settingsSentence = (actionType === "do_not_sell_share" || actionType === "manage_preferences" &&
+    namesNoticeBoundPrivacyRightsButton(candidate.label, candidate.ariaLabel)) && decisionStatus === "confirmed_visible" &&
+    candidate.layer === "first_layer" && candidate.frameUrl === pageUrl && candidate.captureFrameSlot === 0
+      ? optOutSettingsNoticeSentence(candidate.label, candidate.settingsNoticeText) : undefined;
   return {
     candidateId: `candidate_${index}`,
     label: candidate.label,
@@ -1009,6 +1040,9 @@ function buildCandidateEvidence(
     value: candidate.value,
     inputType: candidate.inputType,
     initialSelection: candidate.initialSelection,
+    ...(settingsSentence ? {settingsEntranceNotice: {version: "onetrust.same_banner_notice.v1" as const,
+      bannerSelector: "#onetrust-banner-sdk" as const, noticeSelector: "#onetrust-policy-text" as const,
+      sentence: settingsSentence}} : {}),
     ...(actionType === "reject_all" && decisionStatus === "confirmed_visible" &&
       candidate.namedRejectRouting && KNOWN_CMP_REGISTRY.some(entry =>
         entry.canonicalName === candidate.namedRejectRouting!.provider &&
@@ -1042,7 +1076,8 @@ function buildCandidateEvidence(
     ...(classification.reasonCodes.includes("adjacent_text_node_label_binding") ? {
       labelBinding: { version: "adjacent_text_node.v1" as const, text: `${candidate.label} ${candidate.adjacentText}` },
     } : {}),
-    consentContextConfirmed: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
+    consentContextConfirmed: Boolean(candidate.standaloneSaleSharingAnchor) || CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
+    ...(candidate.standaloneSaleSharingAnchor ? {standaloneSaleSharingAnchor:candidate.standaloneSaleSharingAnchor} : {}),
     linkDestination: candidate.linkHref !== undefined ? classifyConsentControlLinkDestination(candidate.linkHref, candidate.frameUrl) : undefined,
     diagnosticClassifications,
     effectiveVisibility: decisionStatus === "confirmed_visible" ? "direct" : undefined,
@@ -1421,11 +1456,13 @@ function collectConsentGeometryInPage(input: {
   consentPatternSource: string;
   controlLabelPatternSource: string;
   additionalControlLabelPatternSource: string;
+  standaloneSaleSharingLabelSource: string;
   registrySelectors: string[];
   registryGlobals: string[];
   namedRejectRecipes: (NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["rejectLabelBoundNecessaryOnly"]> & { provider: string })[];
   initialOptionalOffCloseRecipes: NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["initialOptionalOffCloseObservation"]>[];
   nonFirstLayerSurfaceSelector: string;
+  aemFooterLinkSelector: string;
   nonVisitorSurfaces: readonly { origin: string; selector: string }[];
 }): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
@@ -1582,6 +1619,24 @@ function collectConsentGeometryInPage(input: {
         } satisfies RawGeometryContainer,
       };
   }
+  // A fixed, first-viewport privacy launcher can have no surrounding consent copy.
+  // Admit only a narrow same-document anchor with an actual handler and physical exposure.
+  const standaloneLabel = new RegExp(input.standaloneSaleSharingLabelSource, "i");
+  const possibleStandaloneAnchors = window === window.top
+    ? document.querySelectorAll<HTMLAnchorElement>('a[href="#"][onclick]') : [];
+  const standaloneAnchors = possibleStandaloneAnchors.length <= 48 ? Array.from(possibleStandaloneAnchors).filter(element => {
+    if (isExcludedSurface(element) || !standaloneLabel.test(compactText(element.innerText)) ||
+        element.matches('[target],[download],[aria-labelledby]') || typeof element.onclick !== "function" ||
+        element.closest('footer,[role="contentinfo"],header,nav,article,aside,main,form,dialog,[role="dialog"],[aria-modal="true"],[aria-hidden="true"],[aria-disabled="true"]')) return false;
+    const role = element.getAttribute("role");
+    const aria = compactText(element.getAttribute("aria-label") ?? "");
+    if (role && role !== "link" || aria && aria.toLowerCase() !== compactText(element.innerText).toLowerCase()) return false;
+    const box = rectFor(element), style = styleFor(element);
+    return style.position === "fixed" && style.pointerEvents !== "none" && box.width >= viewport.width / 2 &&
+      box.height >= 12 && box.height <= Math.min(96, viewport.height / 4) && Math.abs(box.bottom - viewport.height) <= 2 &&
+      contextTextIsReadable(element);
+  }) : [];
+  const standaloneOwner = standaloneAnchors.length === 1 ? standaloneAnchors[0] : undefined;
   const documentControls = deepQuerySelectorAll(controlSelector)
     .filter(element => !isExcludedSurface(element))
     .filter((element) => {
@@ -1618,7 +1673,7 @@ function collectConsentGeometryInPage(input: {
   const containerControlInventories = containers.map((container) => deepQuerySelectorAll(controlSelector, container.element).sort((a, b) => Number(potentiallyVisibleFirstLayer(b)) - Number(potentiallyVisibleFirstLayer(a))));
   const containerControls = containerControlInventories.flatMap(controls => controls.slice(0, 80));
   const seenControlElements = new Set<Element>();
-  const controlElements = [...containerControls, ...documentControls].filter((element) => {
+  const controlElements = [...(standaloneOwner ? [standaloneOwner] : []), ...containerControls, ...documentControls].filter((element) => {
     if (isExcludedSurface(element) || seenControlElements.has(element)) {
       return false;
     }
@@ -1702,7 +1757,8 @@ function collectConsentGeometryInPage(input: {
       return null;
     }
     const label = labelFor(element);
-    const containerIndex = nearestContainerIndex(element, containerItems);
+    const aemFooterLink = Boolean(element.closest(input.aemFooterLinkSelector));
+    const containerIndex = aemFooterLink ? undefined : nearestContainerIndex(element, containerItems);
     const contextRoot = typeof containerIndex === "number" ? containerItems[containerIndex]?.element : nearestContextRoot(element, contextPattern);
     const consentfulContextRoot = nearestTextContextRoot(element, contextPattern, label);
     const contextText = compactText(
@@ -1717,10 +1773,14 @@ function collectConsentGeometryInPage(input: {
       element.getAttribute("title") || "",
       contextText,
     ].join(" "));
-    if ((!label && !contextRoot) || (!controlLabelPattern.test(attrs) && !contextPattern.test(attrs) && !contextRoot)) {
+    const box = rectFor(element);
+    const standaloneOcclusion = element === standaloneOwner ? occlusionFor(element, box, false) : undefined;
+    const standalone = standaloneOcclusion?.center && standaloneOcclusion.checkedPoints === 5 &&
+      [standaloneOcclusion.topLeft, standaloneOcclusion.topRight, standaloneOcclusion.bottomLeft,
+        standaloneOcclusion.bottomRight].filter(Boolean).length >= 2;
+    if (!standalone && ((!label && !contextRoot) || (!controlLabelPattern.test(attrs) && !contextPattern.test(attrs) && !contextRoot))) {
       return null;
     }
-    const box = rectFor(element);
     const style = styleFor(element);
     const scrollableAncestor = nearestScrollableAncestor(element);
     const scrollableAncestorBox = scrollableAncestor ? rectFor(scrollableAncestor) : undefined;
@@ -1736,7 +1796,48 @@ function collectConsentGeometryInPage(input: {
       title: attr(element, "title"),
       value: element instanceof HTMLInputElement ? element.value.slice(0, 160) : undefined,
       inputType: element instanceof HTMLInputElement ? element.type : undefined,
+      ...(standalone ? {standaloneSaleSharingAnchor:{version:"standalone_sale_sharing_anchor.v1",
+        binding:"main_document_fixed_end_inline_handler"} as const} : {}),
       initialSelection: initialSelectionFor(element),
+      initialSwitchRow: (() => {
+        if (window!==window.top || !(element instanceof HTMLButtonElement) ||
+            !element.matches('button.qc-cmp2-toggle[role="switch"][aria-labelledby="toggleDescription"]') ||
+            !["true","false"].includes(element.getAttribute("aria-checked") ?? "") || element.disabled ||
+            element.hasAttribute("form") || element.form || element.closest('[inert],[aria-disabled="true"]') ||
+            element.getRootNode()!==document) return;
+        const dialog=element.closest('#qc-cmp2-usp[role="dialog"][aria-modal="true"]');
+        const section=element.closest("li.qc-cmp2-list-item.qc-cmp2-expanded");
+        const wrapper=element.parentElement, row=wrapper?.parentElement;
+        if (!dialog || !dialog.closest("#qc-cmp2-main") || document.querySelectorAll("#qc-cmp2-usp").length!==1 ||
+            !section || !dialog.contains(section) || !section.querySelector(':scope > button.qc-cmp2-list-item-header[aria-label="Opt-Outs"]') ||
+            !wrapper?.matches(".qc-cmp2-toggle-switch") || !row || row.children.length!==2 ||
+            row.querySelectorAll("button,input,[role=switch]").length!==1) return;
+        const label=row.querySelector(':scope > label.qc-usp-action-description[id="toggleDescription"]');
+        if (!label || row.querySelectorAll("label").length!==1 || !contextTextIsReadable(label) ||
+            !contextTextIsReadable(element) || !intersects(rectFor(label),viewportRect())) return;
+        const text=readableContextText(label);
+        if (!text || text.length>120) return;
+        return {label:text,bounds:rectFor(label)};
+      })(),
+      settingsNoticeText: (() => {
+        if (!(element instanceof HTMLButtonElement) || element.id !== "onetrust-pc-btn-handler" || window !== window.top ||
+            element.getRootNode() !== document || element.disabled || element.form || element.hasAttribute("form")) return undefined;
+        const banner = element.closest("#onetrust-banner-sdk");
+        const dialog = element.closest('[role="alertdialog"],[role="dialog"],dialog');
+        if (!banner || !dialog || !banner.contains(dialog) ||
+            document.querySelectorAll("#onetrust-banner-sdk,#onetrust-policy-text,#onetrust-pc-btn-handler").length !== 3) return undefined;
+        const described = dialog.getAttribute("aria-describedby")?.split(/\s+/).includes("onetrust-policy-text");
+        const group = element.closest("#onetrust-button-group");
+        const rightsButton = element.matches(".cookie-setting-link") &&
+          label.trim().toLowerCase() === "your privacy rights" && !!group && dialog.contains(group) &&
+          group.querySelectorAll("button,a[href],[role=button]").length === 1;
+        const notice = described ? dialog.querySelector("p#onetrust-policy-text") :
+          rightsButton ? dialog.querySelector("#onetrust-policy > div#onetrust-policy-text") : null;
+        if (!notice || notice.closest('[role="alertdialog"],[role="dialog"],dialog') !== dialog ||
+            !contextTextIsReadable(notice) || !intersects(rectFor(notice), viewportRect())) return undefined;
+        const text = readableContextText(notice);
+        return text.length <= 1600 ? text : undefined;
+      })(),
       namedRejectRouting: (() => {
         const recipe = input.namedRejectRecipes.find(row => element.matches(row.controlSelector));
         const root = element.getRootNode() as Document | ShadowRoot;
@@ -1753,7 +1854,7 @@ function collectConsentGeometryInPage(input: {
       selectorHint: selectorHintFor(element),
       containerSelectorHint: container?.evidence.selectorHint,
       containerIndex,
-      layer: container?.evidence.layer ?? layerFor(element, box),
+      layer: standalone ? "first_layer" : aemFooterLink ? "footer" : container?.evidence.layer ?? layerFor(element, box),
       enabled: !(element instanceof HTMLButtonElement || element instanceof HTMLInputElement) || !element.disabled,
       semanticallyInteractive: isSemanticallyInteractive(element),
       computedStyle: {
@@ -1774,7 +1875,7 @@ function collectConsentGeometryInPage(input: {
           boundingBox: scrollableAncestorBox,
         }
         : undefined,
-      occlusion: occlusionFor(element, box),
+      occlusion: standalone ? standaloneOcclusion : occlusionFor(element, box),
       contextText: contextText.slice(0, 1_000),
       scopeText: (() => {
         const scope = element.closest("p,li,[role=dialog],[role=alertdialog],dialog");
@@ -2373,7 +2474,7 @@ function collectConsentGeometryInPage(input: {
     return undefined;
   }
 
-  function occlusionFor(element: Element, box: ConsentControlRect): ConsentControlOcclusionCheck {
+  function occlusionFor(element: Element, box: ConsentControlRect, allowAncestor = true): ConsentControlOcclusionCheck {
     const points = [
       ["center", box.left + box.width / 2, box.top + box.height / 2],
       ["topLeft", box.left + 2, box.top + 2],
@@ -2396,7 +2497,7 @@ function collectConsentGeometryInPage(input: {
       }
       result.checkedPoints += 1;
       const hit = document.elementFromPoint(x, y);
-      const matches = Boolean(hit && (hit === element || composedContains(element, hit) || composedContains(hit, element)));
+      const matches = Boolean(hit && (hit === element || composedContains(element, hit) || allowAncestor && composedContains(hit, element)));
       result[key] = matches;
       if (hit && !matches) {
         result.hitSelectorHints.push(selectorHintFor(hit));

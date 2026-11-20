@@ -5,6 +5,23 @@ import {
   deriveConsentSurfaceInspectionOutcome,
   classifyConsentControlLabel,
   classifyConsentInspectionRole,
+  namesPrivacyChoiceEntrance,
+  EXPLICIT_SALE_SHARING_LAUNCHER_LABEL,
+  standaloneSaleSharingAnchorSchema,
+  consentFooterOptOutCaptureSchema, type FooterCaptureResolution,
+  consentFooterOptOutObservationSchema,
+  footerStripSelectors,
+  footerChoiceScopeForWitness,
+  ONETRUST_FOOTER_SETTINGS_ID_SELECTOR,
+  privacyChoiceInspectionSchema,
+  isCurrentCaliforniaChoiceInspection,
+  namesOptOutSettingsEntrance,
+  namesNoticeBoundPrivacyRightsButton,
+  optOutSettingsNoticeSentence,
+  settingsEntranceNoticeSchema, verifiedInitialOptOutSwitch,
+  originalInitialOptOutSwitchesSchema,
+  originalOneTrustSettingsEntranceSchema,
+  hasPositiveControlBox,
   consentControlInspectionSchema,
   consentControlVisualComparisonSchema,
   firstLayerOptOutGeometryDiagnosticSchema,
@@ -27,6 +44,7 @@ import {
   type ConsentControlAssessmentGeometry,
   type ConsentControlAssessmentInput,
   type ConsentControlInspection,
+  type OptOutPlacementCorrection,
 } from "@certscore/contracts";
 
 type ConsentSurfaceInspectionLike = {
@@ -172,12 +190,347 @@ function geometryObservedAtMs(
   return Math.max(0, capturedAtMs - scanStartedAtMs);
 }
 
+function observedSettingsEntrance(row: Record<string, unknown>, pageUrl: string | null, mainFrameNoticeWitness: boolean): ConsentControlAssessmentCandidate["settingsEntranceSource"] {
+  const frame = row.frameContext as { frameKind?: string; frameUrl?: string } | undefined;
+  const style = row.computedStyle as { visibility?: string; display?: string; opacity?: string; pointerEvents?: string } | undefined;
+  const reasons = row.classifierReasonCodes;
+  // Retain the original action classification. This recovery supplies observation evidence only.
+  const eligible = typeof row.candidateId === "string" && row.candidateId.length > 0 && row.candidateId.length <= 240 &&
+    row.selectorHint === "#onetrust-pc-btn-handler" && row.tagName === "button" &&
+    [row.title, row.value].every(text => text == null || text === "" || text === row.label || text === row.ariaLabel) &&
+    (row.role == null || row.role === "button") && row.layer === "first_layer" && row.presentationType === "dedicated_button" &&
+    row.semanticallyInteractive === true && row.enabled === true && row.consentContextConfirmed === true &&
+    frame?.frameKind === "main_frame" && typeof frame.frameUrl === "string" && normalizedDocumentId(frame.frameUrl) === pageUrl &&
+    row.intersectsViewport === true && row.clippedByScrollableAncestor === false &&
+    (row.occlusion as {center?: boolean} | undefined)?.center === true && hasPositiveControlBox(row.boundingBox) &&
+    style?.visibility === "visible" && typeof style.display === "string" && style.display !== "none" && Number(style.opacity) > 0 &&
+    typeof style.pointerEvents === "string" && style.pointerEvents !== "none" &&
+    ((row.actionType === "other" && row.decisionStatus === "ambiguous" &&
+      Array.isArray(reasons) && reasons.length === 1 && reasons[0] === "visible_accessible_intent_conflict") ||
+      ((row.actionType === "do_not_sell_share" || row.actionType === "manage_preferences" &&
+       namesNoticeBoundPrivacyRightsButton(row.label, row.ariaLabel)) && row.decisionStatus === "confirmed_visible"));
+  if (!eligible) return undefined;
+  if (namesOptOutSettingsEntrance(row.label, row.ariaLabel)) return "accessible_name";
+  const direct = row.actionType === "do_not_sell_share" && (row.ariaLabel == null || row.ariaLabel === "" || row.ariaLabel === row.label);
+  const rights = row.actionType === "manage_preferences" && namesNoticeBoundPrivacyRightsButton(row.label, row.ariaLabel);
+  if (!mainFrameNoticeWitness || (!direct && !rights) || row.decisionStatus !== "confirmed_visible") return undefined;
+  const notice = settingsEntranceNoticeSchema.safeParse(row.settingsEntranceNotice);
+  if (notice.success && optOutSettingsNoticeSentence(row.label, notice.data.sentence) === notice.data.sentence)
+    return "same_banner_notice";
+  return undefined;
+}
+
+function verifiedStandaloneSaleSharingAnchor(row: Record<string, unknown>, pageUrl: string | null): boolean {
+  const frame = row.frameContext as {frameKind?: string; frameUrl?: string} | undefined;
+  const style = row.computedStyle as {position?: string; display?: string; visibility?: string; opacity?: string; pointerEvents?: string} | undefined;
+  const occlusion = row.occlusion as Record<string, unknown> | undefined;
+  return standaloneSaleSharingAnchorSchema.safeParse(row.standaloneSaleSharingAnchor).success &&
+    row.tagName === "a" && (row.role == null || row.role === "link") && row.linkDestination === "same_document" &&
+    row.layer === "first_layer" && row.actionType === "do_not_sell_share" && row.matchStrength === "direct" &&
+    row.enabled === true && row.semanticallyInteractive === true && row.decisionStatus === "confirmed_visible" &&
+    row.intersectsViewport === true && row.clippedByScrollableAncestor === false && hasPositiveControlBox(row.boundingBox) &&
+    typeof row.label === "string" && EXPLICIT_SALE_SHARING_LAUNCHER_LABEL.test(row.label) &&
+    frame?.frameKind === "main_frame" && normalizedDocumentId(frame.frameUrl ?? null) === pageUrl &&
+    style?.position === "fixed" && style.visibility === "visible" && style.display !== "none" &&
+    Number(style.opacity) > 0 && style.pointerEvents !== "none" &&
+    occlusion?.center === true && occlusion.checkedPoints === 5 &&
+    [occlusion.topLeft, occlusion.topRight, occlusion.bottomLeft, occlusion.bottomRight].filter(hit => hit === true).length >= 2;
+}
+
+function footerInspection(bundle: CanonicalEvidenceBundle, documentUrl: string | null): NonNullable<ConsentControlAssessmentInput["optOutFooterInspection"]> {
+  const run = bundle.modulesRun?.find(module => module.moduleName === "policySurfaceScanner");
+  if (!run) return {status: "unavailable", reason: "no_policy_run"};
+  const parsed = privacyChoiceInspectionSchema.safeParse(bundle.policySurfaceInspection?.privacyChoiceInspection);
+  if (!parsed.success || !documentUrl || documentUrl.length > 500 || parsed.data.documentUrl !== documentUrl ||
+      !isCurrentCaliforniaChoiceInspection(parsed.data)) return {status: "unavailable", reason: "missing_bound_inspection"};
+  const inspection = parsed.data;
+  return {status: run.status === "completed" ? inspection.coverage : "limited", documentUrl, inspectionHash: inspection.sourceHash};
+}
+
+function optOutTimingLimitation(bundle: CanonicalEvidenceBundle, raw: Record<string, unknown> | null | undefined,
+  documentUrl: string | null, token: string | null, geometry: ConsentControlAssessmentGeometry | null): ConsentControlAssessmentInput["optOutTimingLimitation"] {
+  if (!documentUrl || !token) return;
+  // Report the nearest retained pre-choice screenshot from the same loader as the signal.
+  // Its time explains the observation window. Pixels alone never establish a control.
+  const screenshotAt = (signalToken: string, at: number) => {
+    const shot = (bundle.screenshots ?? []).filter(s => s.documentIdentity?.source === "cdp_loader_id" &&
+      s.documentIdentity.token === signalToken && s.url === documentUrl && s.consentStateAtTime === "pre_consent" &&
+      screenshotIsRetainedAndDisplayable(s) && Number.isInteger(s.capturedAtMs))
+      .sort((a,b) => Math.abs(a.capturedAtMs - at) - Math.abs(b.capturedAtMs - at))[0];
+    return shot ? {screenshot: {artifactId: shot.artifactId, capturedAtMs: shot.capturedAtMs}} : {};
+  };
+  // An independently navigated recovery inventory cannot disprove a choice signal from the original visit.
+  const recovery = bundle.consentUiObservations?.find(o => o.documentIdentity?.source === "cdp_loader_id" && o.documentIdentity.token === token &&
+    o.layerInspected === "first_layer" && Number.isInteger(o.observedAtMs) &&
+    o.documentUrl === documentUrl && o.basis?.includes("recovery:independent_consent_capture_completed"));
+  if (recovery) {
+    const original = bundle.domSnapshots?.find(s => s.artifactId === "dom_text_pre_consent" && s.url === documentUrl &&
+      s.consentStateAtTime === "pre_consent" && s.documentIdentity?.source === "cdp_loader_id" && s.documentIdentity.token !== token &&
+      s.capturedAtMs < recovery.observedAtMs && s.optOutSearch?.result === "specific_signal" && s.optOutSearch.documentToken === s.documentIdentity.token &&
+      s.optOutSearch.documentUrl === documentUrl && s.optOutSearch.capturedAtMs === s.capturedAtMs &&
+      s.optOutSearch.artifactId === s.artifactId);
+    if (original?.documentIdentity) return {reason: "recovery_inventory_different_document", inventoryAtMs: recovery.observedAtMs,
+      evidenceAtMs: original.capturedAtMs, evidenceRef: original.artifactId, ...screenshotAt(original.documentIdentity.token, original.capturedAtMs)};
+  }
+  const observedAt = geometry?.observedAtMs;
+  if (geometry?.documentToken !== token || typeof observedAt !== "number" || !Number.isInteger(observedAt) || !raw ||
+      raw.pageUrl !== documentUrl || !verifiedNarrowGeometry(raw, bundle.scanId)) return;
+  const timing = raw.captureTiming as {version?: string; mainFrameCompletedAt?: string} | undefined;
+  const mainFrameAt = timing?.version === "consent_geometry_capture_timing.v1" && timing.mainFrameCompletedAt
+    ? Date.parse(timing.mainFrameCompletedAt) - Date.parse(bundle.startedAt) : NaN;
+  const time = mainFrameAt >= 0 && mainFrameAt <= observedAt ? mainFrameAt : observedAt;
+  const later = bundle.consentUiObservations?.find(o => o.documentIdentity?.source === "cdp_loader_id" && o.documentIdentity.token === token && o.documentUrl === documentUrl &&
+    o.observedAtMs > time && o.layerInspected === "first_layer" && o.likelyPresent &&
+    o.visibleChoiceLabels?.some(label => namesPrivacyChoiceEntrance(label)));
+  if (later) return {reason: "choice_observed_after_inventory", inventoryAtMs: time, evidenceAtMs: later.observedAtMs,
+    evidenceRef: later.observationId, ...screenshotAt(token, later.observedAtMs)};
+  // Geometry can catch an entering banner before its button names become visible.
+  const height = (raw.viewport as {height?:number} | undefined)?.height;
+  if (typeof height !== "number" || !Number.isFinite(height) || height <= 0 || !Array.isArray(raw.containers)) return;
+  const partial = raw.containers.some(container => {
+    if (container?.layer !== "first_layer" || container.intersectsViewport !== true ||
+        !hasPositiveControlBox(container.boundingBox)) return false;
+    const {y, height: boxHeight} = container.boundingBox;
+    const visibleHeight = Math.min(height, y + boxHeight) - Math.max(0, y);
+    if (typeof y !== "number" || boxHeight < 40 || visibleHeight <= 0 || visibleHeight >= Math.min(40, boxHeight / 3)) return false;
+    return container.selectorHint === "#onetrust-banner-sdk" || (container.containerId && Array.isArray(raw.candidates) &&
+      raw.candidates.some(row => row?.containerId === container.containerId && row.layer === "first_layer" &&
+        row.tagName === "button" && row.consentContextConfirmed === true && typeof row.label === "string" &&
+        namesPrivacyChoiceEntrance(row.label)));
+  });
+  if (partial) return {reason: "banner_partially_in_view", inventoryAtMs: time, evidenceAtMs: time, evidenceRef: "ConsentControlGeometryEvidence.json", ...screenshotAt(token, time)};
+}
+
+function boundSameVisitFooter(bundle: CanonicalEvidenceBundle, documentUrl: string | null, token: string | null, documentMismatch: boolean):
+  Pick<ConsentControlAssessmentInput,"sameVisitFooter"|"footerOriginalVisit"|"sameVisitFooterCapture"> {
+  const originals = (bundle.domSnapshots ?? []).filter(snapshot => snapshot.artifactId === "dom_text_pre_consent");
+  let diagnostic: FooterCaptureResolution["diagnostic"];
+  const status=(resolution:FooterCaptureResolution["resolution"])=>({sameVisitFooterCapture:{resolution,...(diagnostic ? {diagnostic} : {})}});
+  if (!originals.length) return status("primary_snapshot_missing");
+  if (originals.length!==1) return status("primary_snapshot_ambiguous");
+  const snapshot=originals[0]!;
+  if (snapshot.consentStateAtTime!=="pre_consent") return status("source_unavailable");
+  if (snapshot.footerOptOutCapture !== undefined) {
+    const result=consentFooterOptOutCaptureSchema.safeParse(snapshot.footerOptOutCapture);
+    if (!result.success || result.data.artifactId!==snapshot.artifactId || result.data.documentUrl!==snapshot.url ||
+        result.data.snapshotAtMs!==snapshot.capturedAtMs || result.data.documentToken!==
+          (snapshot.documentIdentity?.source==="cdp_loader_id" ? snapshot.documentIdentity.token : undefined)) return status("invalid_packet");
+    diagnostic=result.data;
+  }
+  if (documentMismatch || documentUrl && snapshot.url!==documentUrl || diagnostic?.outcome==="document_mismatch") return status("document_mismatch");
+  if (diagnostic && diagnostic.outcome!=="captured") return status("capture_incomplete");
+  if (!token || !documentUrl || documentUrl.length>500 || snapshot.documentIdentity?.source!=="cdp_loader_id") return status("source_unavailable");
+  if (snapshot.footerOptOutObservation===undefined) return status(diagnostic ? "invalid_packet" : "not_retained");
+  const parsed=consentFooterOptOutObservationSchema.safeParse(snapshot.footerOptOutObservation);
+  if (!parsed.success) return status("invalid_packet");
+  const packet=parsed.data;
+  if (packet.artifactId!==snapshot.artifactId || packet.documentToken!==snapshot.documentIdentity.token ||
+      packet.documentUrl!==documentUrl || packet.snapshotAtMs!==snapshot.capturedAtMs ||
+      diagnostic && packet.capturedAtMs>diagnostic.completedAtMs) return status("invalid_packet");
+  if (packet.documentToken===token) return {...status("available"),sameVisitFooter:packet};
+  // A later banner inventory may own the canonical first-layer loader. Keep a
+  // positive from the original footer only with independent witnesses to both visits.
+  const shot = bundle.screenshots?.find(s => s.artifactId.startsWith("screenshot_pre_consent") &&
+    s.url === documentUrl && s.consentStateAtTime === "pre_consent" && s.documentIdentity?.source === "cdp_loader_id" &&
+    s.documentIdentity.token === packet.documentToken && s.path && screenshotIsRetainedAndDisplayable(s));
+  const recovery = bundle.consentUiObservations?.find(o => o.documentUrl === documentUrl &&
+    o.documentIdentity?.source === "cdp_loader_id" && o.documentIdentity.token === token && o.layerInspected === "first_layer" &&
+    o.basis?.includes("recovery:independent_consent_capture_completed"));
+  if (shot && recovery) return {...status("available"),sameVisitFooter: packet, footerOriginalVisit: {documentToken: packet.documentToken,
+    screenshotRef: shot.artifactId, screenshotAtMs: shot.capturedAtMs, recoveryObservationRef: recovery.observationId, recoveryToken: token}};
+  return status("document_mismatch");
+}
+
+function boundOriginalOptOutSwitches(bundle: CanonicalEvidenceBundle, documentUrl: string | null, token: string | null):
+  ConsentControlAssessmentInput["originalOptOutSwitches"] {
+  const originals = (bundle.domSnapshots ?? []).filter(snapshot => snapshot.artifactId === "dom_text_pre_consent");
+  const [snapshot] = originals;
+  if (originals.length !== 1 || !documentUrl || !token || !snapshot?.path ||
+      snapshot.url !== documentUrl || snapshot.consentStateAtTime !== "pre_consent" ||
+      snapshot.documentIdentity?.source !== "cdp_loader_id") return;
+  const parsed = originalInitialOptOutSwitchesSchema.safeParse(snapshot.originalInitialOptOutSwitches);
+  if (!parsed.success || parsed.data.documentUrl !== documentUrl ||
+      parsed.data.documentToken !== snapshot.documentIdentity.token) return;
+  const packet = parsed.data;
+  if (packet.documentToken === token) return {packet};
+  const recovery = bundle.consentUiObservations?.find(observation =>
+    observation.layerInspected === "first_layer" && observation.documentUrl === documentUrl &&
+    observation.documentIdentity?.source === "cdp_loader_id" && observation.documentIdentity.token === token &&
+    observation.observedAtMs > packet.observedAtMs &&
+    observation.basis?.includes("recovery:independent_consent_capture_completed"));
+  if (recovery) return {packet, recovery: {observationRef: recovery.observationId, documentToken: token}};
+}
+
+function boundOriginalOptOutSettings(bundle: CanonicalEvidenceBundle, documentUrl: string | null, token: string | null):
+  ConsentControlAssessmentInput["originalOptOutSettings"] {
+  const originals = (bundle.domSnapshots ?? []).filter(snapshot => snapshot.artifactId === "dom_text_pre_consent");
+  const [snapshot] = originals;
+  if (originals.length !== 1 || !documentUrl || !token || !snapshot?.path || snapshot.url !== documentUrl ||
+      snapshot.consentStateAtTime !== "pre_consent" || snapshot.documentIdentity?.source !== "cdp_loader_id") return;
+  const parsed = originalOneTrustSettingsEntranceSchema.safeParse(snapshot.originalOneTrustSettingsEntrance);
+  const diagnostic = consentFooterOptOutCaptureSchema.safeParse(snapshot.footerOptOutCapture);
+  if (!parsed.success || !diagnostic.success || diagnostic.data.outcome !== "captured" || diagnostic.data.documentUrl !== documentUrl ||
+      diagnostic.data.snapshotAtMs !== snapshot.capturedAtMs || diagnostic.data.documentToken !== snapshot.documentIdentity.token ||
+      parsed.data.documentUrl !== documentUrl || parsed.data.documentToken !== snapshot.documentIdentity.token ||
+      parsed.data.observedAtMs < snapshot.capturedAtMs || parsed.data.observedAtMs > diagnostic.data.completedAtMs) return;
+  const packet = parsed.data;
+  if (packet.documentToken === token) return {packet};
+  const recovery = bundle.consentUiObservations?.find(observation => observation.layerInspected === "first_layer" &&
+    observation.documentUrl === documentUrl && observation.documentIdentity?.source === "cdp_loader_id" &&
+    observation.documentIdentity.token === token && observation.observedAtMs > packet.observedAtMs &&
+    observation.basis?.includes("recovery:independent_consent_capture_completed"));
+  const shot = bundle.screenshots?.find(s => s.artifactId.startsWith("screenshot_pre_consent") && s.url === documentUrl &&
+    s.consentStateAtTime === "pre_consent" && s.documentIdentity?.source === "cdp_loader_id" &&
+    s.documentIdentity.token === packet.documentToken && s.path && screenshotIsRetainedAndDisplayable(s));
+  if (recovery && shot && shot.capturedAtMs <= recovery.observedAtMs) return {packet,recovery:{
+    documentToken:packet.documentToken,screenshotRef:shot.artifactId,screenshotAtMs:shot.capturedAtMs,
+    recoveryObservationRef:recovery.observationId,recoveryToken:token,
+  }};
+}
+
+/** Correct placement only when verified main-frame geometry identifies the
+ * same control below the viewport on the same loader. */
+function verifiedNonBannerPlacements(raw: Record<string, unknown> | null | undefined,
+  scanId: string, documentUrl: string | null, token: string | null) {
+  const placements = new Map<string, {label: string; tagName: string}>();
+  const identity = raw?.documentIdentity as {source?: unknown; token?: unknown} | undefined;
+  const viewport = raw?.viewport as {height?: number} | undefined;
+  const height = viewport?.height;
+  if (!raw || !token || !documentUrl || raw.pageUrl !== documentUrl || identity?.source !== "cdp_loader_id" ||
+      identity.token !== token || typeof height !== "number" || !Number.isFinite(height) || height <= 0 ||
+      !verifiedNarrowGeometry(raw, scanId) || !Array.isArray(raw.candidates)) return placements;
+  const knownSelectors = [...Object.values(footerStripSelectors), ONETRUST_FOOTER_SETTINGS_ID_SELECTOR];
+  for (const selector of knownSelectors) {
+    const isSettingsAnchor = selector === ONETRUST_FOOTER_SETTINGS_ID_SELECTOR;
+    const tagName = isSettingsAnchor ? "a" : "button";
+    const matches = raw.candidates.filter(row => row?.selectorHint === selector && row?.tagName === tagName &&
+      row?.frameContext?.frameKind === "main_frame" && row.frameContext.frameUrl === documentUrl);
+    const [row] = matches;
+    if (matches.length !== 1 || row.intersectsViewport !== false || typeof row.label !== "string" ||
+        !Number.isFinite(row.boundingBox?.y) || row.boundingBox.y < height || !hasPositiveControlBox(row.boundingBox)) continue;
+    const placedAway = isSettingsAnchor ? row.layer === "footer" && row.decisionStatus === "footer_or_policy_link" :
+      row.layer === "page_body" && row.decisionStatus === "dom_present_not_visible";
+    if (placedAway) placements.set(selector, {label: row.label, tagName});
+  }
+  return placements;
+}
+
+type PlacementInventoryControl = CanonicalEvidenceBundle["consentUiObservations"][number]["controls"][number];
+
+function verifiedOptOutPlacementGeometry(raw: Record<string, unknown> | null | undefined,
+  scanId: string, documentUrl: string | null, token: string | null) {
+  if (!raw || !documentUrl || !token || raw.pageUrl !== documentUrl || retainedDocumentToken(raw.documentIdentity) !== token ||
+      !Array.isArray(raw.candidates)) return undefined;
+  const source = verifiedNarrowGeometry(raw, scanId);
+  const viewport = raw.viewport as {width?: unknown;height?: unknown} | undefined;
+  const {width,height} = viewport ?? {};
+  if (!source || typeof width !== "number" || typeof height !== "number" || !Number.isFinite(width) || !Number.isFinite(height) ||
+      width <= 0 || height <= 0) return undefined;
+  const inventory = firstLayerOptOutGeometryDiagnosticSchema.safeParse(raw.firstLayerOptOutGeometry);
+  const coverage = inventory.success ? inventory.data.captureCoverage : undefined;
+  const complete = inventory.success && inventory.data.retainedCandidateCount === raw.candidates.length &&
+    inventory.data.frameOutcomes[0] === "captured" && coverage?.documentReadyState === "complete" &&
+    coverage.mainFrameAvailable === true && coverage.documentAndFramesStable === true && coverage.inventoryTruncated === false;
+  const rows = raw.candidates.filter(row => row?.frameContext?.frameKind === "main_frame" && row.frameContext.frameUrl === documentUrl);
+  return {rows, complete, documentUrl, token, width, height, sourceSha256:source.sha256};
+}
+
+const normalizedPlacementLabel = (label: string) => label.trim().toLowerCase().replace(/\s+/g, " ");
+
+function correctedOptOutPlacement(geometry: ReturnType<typeof verifiedOptOutPlacementGeometry>, control: PlacementInventoryControl,
+  inventory: PlacementInventoryControl[], evidenceRef: string): OptOutPlacementCorrection | undefined {
+  if (!geometry || control.visible !== true || control.actionType !== "do_not_sell_share" || !control.tagName ||
+      !control.selectorHint || !namesPrivacyChoiceEntrance(control.label)) return;
+  const label = normalizedPlacementLabel(control.label);
+  const sameName = (name: unknown) => typeof name === "string" && normalizedPlacementLabel(name) === label;
+  const genericAnchor = control.tagName === "a" && control.selectorHint === "a";
+  let candidates = geometry.rows.filter(row => row.tagName === control.tagName && sameName(row.label));
+  if (genericAnchor) {
+    // A tag-only inventory locator needs the complete geometry inventory and
+    // a unique compatible owner on each side. A second same-name control can
+    // be a genuine banner peer and makes the weak locator ambiguous.
+    if (!geometry.complete || !control.linkDestination || control.linkDestination === "unverified" ||
+        inventory.filter(row => row.tagName === control.tagName && sameName(row.label)).length !== 1 || candidates.length !== 1) return;
+    candidates = candidates.filter(row => row.linkDestination === control.linkDestination &&
+      typeof row.selectorHint === "string" && /(?:[ >])a$/.test(row.selectorHint));
+  } else candidates = candidates.filter(row => row.selectorHint === control.selectorHint);
+  const [row, second] = candidates;
+  if (!row || second || row.actionType !== "do_not_sell_share" || row.semanticallyInteractive !== true || row.enabled !== true ||
+      row.placementType !== "persistent_surface" || row.presentationType !== "persistent_link" ||
+      !["footer", "preference_center", "page_body", "deeper_layer"].includes(row.layer) ||
+      !["deeper_layer", "footer_or_policy_link", "dom_present_not_visible"].includes(row.decisionStatus) ||
+      !hasPositiveControlBox(row.boundingBox) || typeof row.candidateId !== "string" || !row.candidateId) return;
+  const below = row.intersectsViewport === false && row.boundingBox.y >= geometry.height;
+  const hit = row.intersectsViewport === true && row.occlusion?.center === true &&
+    Number.isInteger(row.occlusion.checkedPoints) && row.occlusion.checkedPoints >= 1 && row.occlusion.checkedPoints <= 5;
+  if (!below && !hit) return;
+  const scrollable = row.scrollableAncestor;
+  const navigation = hit && typeof scrollable?.selectorHint === "string" &&
+    /(?:^|[ .#_>:-])(?:nav|sidenav|sidebar)(?:$|[ .#_>:-])/i.test(scrollable.selectorHint) &&
+    hasPositiveControlBox(scrollable.boundingBox) && scrollable.boundingBox.width <= geometry.width / 2;
+  return {label:control.label,evidenceRef:evidenceRef.slice(0,240),geometryCandidateId:row.candidateId.slice(0,240),
+    sourceSha256:geometry.sourceSha256,documentUrl:geometry.documentUrl,documentToken:geometry.token,
+    placement:navigation ? "persistent_site_navigation" : "outside_initial_banner"};
+}
+
+function verifiedOneTrustFooterPlacement(geometry: ReturnType<typeof verifiedOptOutPlacementGeometry>,
+  footer: NonNullable<ConsentControlAssessmentInput["sameVisitFooter"]> | undefined,
+  candidate: NonNullable<ConsentControlAssessmentInput["sameVisitFooter"]>["candidates"][number] | undefined): OptOutPlacementCorrection | undefined {
+  if (!geometry || !footer || !candidate || footer.documentToken !== geometry.token || footer.documentUrl !== geometry.documentUrl) return;
+  const owners = geometry.rows.filter(row => row.tagName === "button" && row.selectorHint === ONETRUST_FOOTER_SETTINGS_ID_SELECTOR);
+  const [row] = owners;
+  if (owners.length !== 1 || row.actionType !== "do_not_sell_share" || row.enabled !== true || row.semanticallyInteractive !== true ||
+      row.layer !== "first_layer" || typeof row.label !== "string" || normalizedPlacementLabel(row.label) !== normalizedPlacementLabel(candidate.label) ||
+      typeof row.candidateId !== "string" || !row.candidateId || !hasPositiveControlBox(row.boundingBox)) return;
+  return {label:candidate.label,evidenceRef:`${footer.artifactId}:${candidate.evidenceId}`,geometryCandidateId:row.candidateId.slice(0,240),
+    sourceSha256:geometry.sourceSha256,documentUrl:geometry.documentUrl,documentToken:geometry.token,placement:"outside_initial_banner"};
+}
+
+function observedFooterLinks(bundle: CanonicalEvidenceBundle, documentUrl: string | null,
+  sameVisitFooter?: ConsentControlAssessmentInput["sameVisitFooter"]) {
+  const links: NonNullable<ConsentControlAssessmentInput["optOutFooterLinks"]> = [];
+  const nativeLabels = new Set<string>();
+  for (const row of sameVisitFooter?.candidates ?? []) {
+    if (row.visibility !== "rendered_exposed" && row.visibility !== "covered") continue;
+    const choiceScope = footerChoiceScopeForWitness(row.controlWitness);
+    links.push({label: row.label, visibility: row.visibility, documentUrl: sameVisitFooter!.documentUrl,
+      ...(row.placementWitness ? {placement: "document_end_strip" as const} : {}),
+      ...(choiceScope ? {choiceScope} : {}),
+      ...(row.controlWitness === "named_privacy_policy_entrance" ? {destinationKind: "privacy_policy" as const} : {}),
+      evidenceRef: sameVisitFooter!.artifactId + ":" + row.evidenceId});
+    nativeLabels.add(row.label.toLowerCase().replace(/\s+/g, " ").trim());
+    if (links.length === 16) return links;
+  }
+  const inspectedDocument = bundle.policySurfaceInspection?.privacyChoiceInspection?.documentUrl;
+  if (!documentUrl || (inspectedDocument && inspectedDocument !== documentUrl)) return links;
+  const policyRan = bundle.modulesRun?.some(run => run.moduleName === "policySurfaceScanner" &&
+    (run.status === "completed" || run.status === "partial"));
+  for (const s of bundle.policySurfaceObservations ?? []) {
+    // A rendered positive can survive a later inventory timeout. Keep the
+    // scan's footer inspection status independent from that individual fact.
+    if (!inspectedDocument && !(policyRan && s.sourceScanner === "policy_surface" &&
+        s.scenario === "policy_surface_review" && s.selector)) continue;
+    if (s.discoveryMethod !== "footer_link" || s.linkSourcePageUrl !== documentUrl ||
+        s.traversalDepth !== 0 || s.parentObservationId || s.directlyLinkedFromScannedPage !== true ||
+        s.linkObservationState !== "observed" || s.linkVisibility !== "visible" || s.clickable !== true ||
+        !s.accessibleNameSource || s.accessibleNameSource === "none" || !s.linkText || s.linkText.length > 120 ||
+        !s.observationId || s.observationId.length > 220 || documentUrl.length > 500) continue;
+    if (!namesPrivacyChoiceEntrance(s.linkText) || nativeLabels.has(s.linkText.toLowerCase().replace(/\s+/g, " ").trim()) ||
+        links.some(link => link.evidenceRef === "policy-surface:" + s.observationId)) continue;
+    links.push({label: s.linkText, evidenceRef: "policy-surface:" + s.observationId, documentUrl});
+    if (links.length === 16) break;
+  }
+  return links;
+}
+
 function geometryInput(
   raw: Record<string, unknown> | null | undefined,
   canonicalDocumentId: string | null,
   canonicalDocumentToken: string | null,
   scanStartedAt: string | null | undefined,
   scanId: string,
+  allowSettingsEntrance: boolean,
+  footerGeometryId?: string,
 ): ConsentControlAssessmentGeometry | null {
   if (!raw) return null;
   const observedAtMs = geometryObservedAtMs(raw, scanStartedAt);
@@ -189,12 +542,24 @@ function geometryInput(
   const tokenBoundToCanonicalDocument = Boolean(
     canonicalDocumentToken && documentToken === canonicalDocumentToken,
   );
+  const verifiedEntranceSource = allowSettingsEntrance && tokenBoundToCanonicalDocument &&
+    pageUrl === canonicalDocumentId && observedAtMs !== null && Boolean(verifiedNarrowGeometry(raw, scanId));
+  const optOutGeometry = firstLayerOptOutGeometryDiagnosticSchema.safeParse(raw.firstLayerOptOutGeometry);
+  // Same-URL child frames can share the legacy human-readable frameKind and frameUrl.
+  const mainFrameOptOutOrdinals = new Set(optOutGeometry.success && Array.isArray(raw.candidates) &&
+    optOutGeometry.data.retainedCandidateCount === raw.candidates.length && optOutGeometry.data.frameOutcomes[0] === "captured"
+      ? optOutGeometry.data.candidates.filter(sample => sample.frameSlot === 0 && sample.confirmedVisible &&
+        sample.role === "decision" && sample.coverage === "classified_opt_out").map(sample => sample.ordinal) : []);
   let legacyOptOutBannerWrapper = false;
   const candidates = Array.isArray(raw.candidates)
-    ? raw.candidates.flatMap((candidate): ConsentControlAssessmentCandidate[] => {
+    ? raw.candidates.flatMap((candidate, ordinal): ConsentControlAssessmentCandidate[] => {
         if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
         const row = candidate as Record<string, unknown>;
+        const boundFooter = footerGeometryId !== undefined && row.candidateId === footerGeometryId;
         const actionType = typeof row.actionType === "string" ? row.actionType : "other";
+        const boundMainFrameOptOut = row.candidateId === `candidate_${ordinal}` && mainFrameOptOutOrdinals.has(ordinal);
+        if (row.standaloneSaleSharingAnchor !== undefined && (!verifiedEntranceSource || !boundMainFrameOptOut ||
+          (raw.documentIdentity as {source?: string})?.source !== "cdp_loader_id" || !verifiedStandaloneSaleSharingAnchor(row, pageUrl))) return [];
         if (actionType === "do_not_sell_share" && row.layer === "first_layer" && isOneTrustConsentBannerWrapper(row)) {
           legacyOptOutBannerWrapper = true;
           return [];
@@ -211,6 +576,10 @@ function geometryInput(
           : "other",
           classifierReasonCodes,
         );
+        const settingsEntrance = !boundFooter && verifiedEntranceSource && (raw.documentIdentity as {source?: string})?.source === "cdp_loader_id" &&
+          observedSettingsEntrance(row, pageUrl, boundMainFrameOptOut);
+        const initialSwitch = verifiedEntranceSource && pageUrl && (raw.documentIdentity as {source?: string})?.source === "cdp_loader_id" &&
+          row.initialOptOutSwitch ? verifiedInitialOptOutSwitch(raw,ordinal,pageUrl) : undefined;
         const controlVariant = retainedControlVariant(classifierReasonCodes);
         const presentationType =
           row.presentationType === "dedicated_button" ||
@@ -224,11 +593,11 @@ function geometryInput(
           row.placementType === "persistent_surface"
             ? row.placementType
             : "unknown";
-        const visible =
+        const visible = Boolean(settingsEntrance || initialSwitch) ||
           row.decisionStatus === "confirmed_visible" ||
           (presentationType === "persistent_link" && row.decisionStatus === "footer_or_policy_link");
         const selection = initialConsentSelectionSchema.safeParse(row.initialSelection);
-        return [{
+        const projected: ConsentControlAssessmentCandidate = {
           tagName: typeof row.tagName === "string" ? row.tagName : undefined,
           role: typeof row.role === "string" ? row.role : undefined,
           semanticallyInteractive: typeof row.semanticallyInteractive === "boolean" ? row.semanticallyInteractive : undefined,
@@ -236,14 +605,17 @@ function geometryInput(
           ...(selection.success && selectionVerified ? { initialSelection: selection.data } : {}),
           evidenceId: typeof row.candidateId === "string" ? row.candidateId : undefined,
           actionType: supportedActionType,
+          ...(initialSwitch ? {intent: "privacy_opt_out" as const, initialSwitchScope: initialSwitch.scope} : {}),
+          ...(settingsEntrance ? {intent: "privacy_opt_out" as const, opensPreferenceCenter: true as const,
+            settingsEntranceSource: settingsEntrance} : {}),
           controlVariant,
-          label: typeof row.label === "string" ? row.label : null,
+          label: initialSwitch?.label ?? (typeof row.label === "string" ? row.label : null),
           matchedTerm: typeof row.matchedTerm === "string" ? row.matchedTerm : null,
           locale: typeof row.matchedLocale === "string" ? row.matchedLocale as ConsentControlAssessmentCandidate["locale"] : null,
           matchStrength: typeof row.matchStrength === "string" ? row.matchStrength as ConsentControlAssessmentCandidate["matchStrength"] : null,
           classifierRegistryVersion: typeof row.classifierRegistryVersion === "string" ? row.classifierRegistryVersion : undefined,
           classifierReasonCodes,
-          layer: row.layer === "first_layer"
+          layer: boundFooter ? "deeper_layer" : row.layer === "first_layer"
             ? "first_layer"
             : row.layer === "footer" || row.layer === "preference_center" || row.layer === "page_body" || row.layer === "deeper_layer"
               ? "deeper_layer"
@@ -259,7 +631,12 @@ function geometryInput(
           // The geometry JSON is the retained proof; its optional screenshot
           // can be unavailable without turning this into a dangling image ref.
           artifactRefs: ["ConsentControlGeometryEvidence.json"],
-        }];
+        };
+        if (settingsEntrance === "same_banner_notice" && actionType === "manage_preferences") {
+          const {intent: _intent, opensPreferenceCenter: _opens, settingsEntranceSource: _source, ...options} = projected;
+          return [options, {...projected, evidenceId: `${projected.evidenceId}:notice-opt-out`}];
+        }
+        return [projected];
       })
     : [];
   const complete =
@@ -282,7 +659,6 @@ function geometryInput(
       ? "document_mismatch"
       : "complete";
   const verifiedInspection = verifyConsentControlInspection(raw.controlInspection, raw.candidates);
-  const optOutGeometry = firstLayerOptOutGeometryDiagnosticSchema.safeParse(raw.firstLayerOptOutGeometry);
   const optOutGeometrySource = optOutGeometry.success ? verifiedNarrowGeometry(raw, scanId) : null;
   const firstLayerOptOutGeometry = optOutGeometry.success && optOutGeometrySource && verifiedInspection && tokenBoundToCanonicalDocument &&
     pageUrl === canonicalDocumentId && optOutGeometry.data.retainedCandidateCount === verifiedInspection.retainedCandidateCount &&
@@ -505,7 +881,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
   requestedUrl?: string | null;
   scanId?: string | null;
 }): ConsentControlAssessment {
-  const fallbackUrl = retainedDocumentUrl(input.finalUrl ?? input.bundle.domSnapshots.at(-1)?.url ??
+  const fallbackUrl = retainedDocumentUrl(input.finalUrl ?? input.bundle.domSnapshots?.at(-1)?.url ??
     input.bundle.normalizedUrl ?? input.bundle.url);
   const consentLaneDocument = verifiedConsentLaneDocument(input.bundle, input.consentControlGeometryEvidence,
     !input.noGo && (!input.scanId || input.scanId === input.bundle.scanId) ? fallbackUrl : null);
@@ -540,8 +916,30 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const canonicalDocumentToken = consentLaneDocument?.token ?? recoveryToken ?? retainedDocumentSnapshots
     .filter((snapshot) => snapshot.documentId === canonicalDocumentId && snapshot.documentToken)
     .at(-1)?.documentToken ?? null;
+  const sameUsableScan = !input.noGo && !accessLimited && (!input.scanId || input.scanId === input.bundle.scanId);
+  const originalFooterCandidate = sameUsableScan ? boundSameVisitFooter(input.bundle, finalUrl, canonicalDocumentToken, false) : undefined;
+  const sameLoaderFooter = originalFooterCandidate?.sameVisitFooter;
+  const oneTrustFooterOwners = sameLoaderFooter?.documentToken === canonicalDocumentToken
+    ? sameLoaderFooter?.candidates.filter(row => (row.controlWitness === "onetrust_footer_sell_data" ||
+      row.controlWitness === "onetrust_reveal_footer_settings" || row.controlWitness === "onetrust_custom_legal_footer_settings") &&
+      (row.visibility === "rendered_exposed" || row.visibility === "covered")) : undefined;
+  const oneTrustFooterOwner = oneTrustFooterOwners?.length === 1 ? oneTrustFooterOwners[0] : undefined;
+  const nonBannerPlacements = verifiedNonBannerPlacements(input.consentControlGeometryEvidence,
+    input.bundle.scanId, finalUrl, canonicalDocumentToken);
+  const placementGeometry = sameUsableScan ? verifiedOptOutPlacementGeometry(input.consentControlGeometryEvidence,
+    input.bundle.scanId,finalUrl,canonicalDocumentToken) : undefined;
+  const optOutPlacementCorrections = new Map<string,OptOutPlacementCorrection>();
+  const oneTrustFooterPlacement = oneTrustFooterOwner?.controlWitness === "onetrust_reveal_footer_settings" ||
+    oneTrustFooterOwner?.controlWitness === "onetrust_custom_legal_footer_settings"
+      ? verifiedOneTrustFooterPlacement(placementGeometry,sameLoaderFooter,oneTrustFooterOwner) : undefined;
+  if (oneTrustFooterPlacement) optOutPlacementCorrections.set(oneTrustFooterPlacement.geometryCandidateId,oneTrustFooterPlacement);
   const geometry = geometryInput(
     input.consentControlGeometryEvidence, canonicalDocumentId, canonicalDocumentToken, input.bundle.startedAt, input.scanId ?? input.bundle.scanId,
+    !input.noGo && !accessLimited && (!input.scanId || input.scanId === input.bundle.scanId) &&
+      (input.bundle.consentUiObservations ?? []).some(o => o.layerInspected === "first_layer" &&
+        normalizedDocumentId(o.documentUrl) === canonicalDocumentId && o.documentIdentity?.source === "cdp_loader_id" &&
+        o.documentIdentity.token === canonicalDocumentToken),
+    oneTrustFooterPlacement?.geometryCandidateId,
   );
   // The recovery pair can confirm a sighting even when the older inspection
   // cannot independently verify absence or establish whole-layer coverage.
@@ -738,7 +1136,21 @@ export function deriveMaterializedConsentControlAssessment(input: {
         if ((control.tagName === "ax-node" || control.selectorHint?.startsWith("ax:")) &&
           (control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface")) return [];
         const evidenceId = control.artifactRef ?? `${observation.observationId}:${control.label}`;
-        const layer = control.presentationType === "persistent_link" || control.placementType === "persistent_surface"
+        const boundObservation = observation.documentIdentity?.source === "cdp_loader_id" &&
+          observationDocumentToken === canonicalDocumentToken && observation.documentUrl === finalUrl;
+        const correction = boundObservation && (control.layer ?? retainedLayer) === "first_layer"
+          ? correctedOptOutPlacement(placementGeometry,control,observation.controls ?? [],evidenceId) : undefined;
+        if (correction && optOutPlacementCorrections.size < 24)
+          optOutPlacementCorrections.set(correction.geometryCandidateId,correction);
+        const placement = control.selectorHint ? nonBannerPlacements.get(control.selectorHint) : undefined;
+        const boundBelowViewport = control.actionType === "do_not_sell_share" && placement &&
+          placement.tagName === control.tagName && placement.label === control.label &&
+          observation.documentIdentity?.source === "cdp_loader_id" && observationDocumentToken === canonicalDocumentToken &&
+          observation.documentUrl === finalUrl;
+        const boundFooterSale = oneTrustFooterOwner && control.actionType === "do_not_sell_share" &&
+          control.selectorHint === ONETRUST_FOOTER_SETTINGS_ID_SELECTOR && control.tagName === "button" &&
+          normalizedPlacementLabel(control.label) === normalizedPlacementLabel(oneTrustFooterOwner.label) && boundObservation;
+        const layer = correction || boundBelowViewport || boundFooterSale || control.presentationType === "persistent_link" || control.placementType === "persistent_surface"
           ? "deeper_layer" as const
           : control.layer ?? retainedLayer;
         const actionType = retainedActionType(control.actionType, control.classifierReasonCodes);
@@ -971,7 +1383,18 @@ export function deriveMaterializedConsentControlAssessment(input: {
                 ? "not_observed"
           : "unknown";
 
+  const originalFooter = documentIdentityStatus === "matched" ? originalFooterCandidate
+    : sameUsableScan ? boundSameVisitFooter(input.bundle, finalUrl, null, documentIdentityStatus === "mismatched") : undefined;
   return deriveConsentControlAssessment({
+    ...originalFooter,
+    optOutPlacementCorrections:[...optOutPlacementCorrections.values()],
+    originalOptOutSwitches: sameUsableScan && documentIdentityStatus === "matched"
+      ? boundOriginalOptOutSwitches(input.bundle, finalUrl, canonicalDocumentToken) : undefined,
+    originalOptOutSettings: sameUsableScan && documentIdentityStatus === "matched"
+      ? boundOriginalOptOutSettings(input.bundle, finalUrl, canonicalDocumentToken) : undefined,
+    optOutTimingLimitation: sameUsableScan ? optOutTimingLimitation(input.bundle, input.consentControlGeometryEvidence, finalUrl, canonicalDocumentToken, geometry) : undefined,
+    optOutFooterInspection: sameUsableScan ? footerInspection(input.bundle, finalUrl) : undefined,
+    optOutFooterLinks: sameUsableScan && documentIdentityStatus === "matched" ? observedFooterLinks(input.bundle, finalUrl, originalFooter?.sameVisitFooter) : [],
     cmpAudit: deriveCmpAuditAssessment(input.bundle, input.consentControlGeometryEvidence),
     visualEvidence,
     scan: {

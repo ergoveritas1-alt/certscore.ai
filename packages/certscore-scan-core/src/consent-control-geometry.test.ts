@@ -3,6 +3,7 @@ import test from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
 import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION, verifiedMainFrameVisualCapture } from "@certscore/contracts";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
+import { retainOriginalInitialOptOutSwitches } from "./original-initial-opt-out-switches.js";
 import { comparisonPair, measureConsentControlVisualComparison } from "./consent-control-visual-comparison.js";
 
 let browser: Browser | undefined;
@@ -13,6 +14,33 @@ test.before(async () => {
 
 test.after(async () => {
   await browser?.close();
+});
+
+test("a fixed same-document sale-sharing anchor needs its own rendered label, handler and pointer hits", async () => {
+  const page = await browser!.newPage({viewport:{width:1000,height:700}});
+  try {
+    const url = "https://standalone-choice.test/";
+    await page.route("**/*", route => route.request().url() === url ? route.fulfill({contentType:"text/html",body:`
+      <style>body{margin:0}#launcher{position:fixed;inset:auto 0 0;height:25px;text-align:center}
+      #blocker{position:fixed;inset:auto 0 0;height:30px;background:white;z-index:2}</style>
+      <div>Related searches</div><div><a id="launcher" href="#" onclick="window.activated=true">Do Not Sell or Share My Personal Information</a></div>`}) : route.abort());
+    await page.goto(url);
+    const read = () => captureConsentControlGeometry(page,{documentIdentity:{source:"cdp_loader_id",token:"standalone-loader"},timeoutMs:1200});
+    const row = (await read()).candidates.find(candidate => candidate.standaloneSaleSharingAnchor);
+    assert.equal(row?.actionType,"do_not_sell_share");
+    assert.equal(row.layer,"first_layer");
+    assert.equal(row.decisionStatus,"confirmed_visible");
+    assert.equal(row.consentContextConfirmed,true);
+    assert.equal(row.occlusion.center,true);
+    await page.evaluate(() => { const shield = document.createElement("div"); shield.id="blocker"; document.body.append(shield); });
+    assert.ok((await read()).candidates.every(candidate => !candidate.standaloneSaleSharingAnchor));
+    await page.evaluate(() => {
+      document.getElementById("blocker")!.remove();
+      document.getElementById("launcher")!.removeAttribute("onclick");
+    });
+    assert.ok((await read()).candidates.every(candidate => !candidate.standaloneSaleSharingAnchor));
+    assert.equal(await page.evaluate(() => Reflect.get(window,"activated")),undefined);
+  } finally {await page.close();}
 });
 
 test("late CookieYes controls get fresh same-image geometry without repeated snapshot reads or clicks", async () => {
@@ -1814,4 +1842,122 @@ test("named Reject routing retains exact live root/control proof without authori
       bannerSelector: "#onetrust-banner-sdk", controlSelector: "#onetrust-reject-all-handler",
     });
   }
+});
+
+test("the named opt-out button binds only a visible instruction in its own described OneTrust banner", async () => {
+  const page = await browser!.newPage({viewport: {width: 1366, height: 900}});
+  const label = "Do Not Sell or Share My Personal Information";
+  const sentence = `Click on “X” or “Accept All” to confirm that you agree to these practices, “${label}” to customize your preferences, or “Reject Non-Necessary” to decline the use of certain cookies.`;
+  const identity = {source: "cdp_loader_id" as const, token: "fixture-loader"};
+  try {
+    await page.route("https://scoped-notice.test/**", route => route.fulfill({contentType: "text/html; charset=utf-8", body:
+      `<div id="onetrust-banner-sdk" style="position:fixed;bottom:0;background:white"><div role="alertdialog" aria-describedby="onetrust-policy-text">
+       <p id="onetrust-policy-text">We use cookies. ${sentence}</p><div id="onetrust-button-group"><button id="onetrust-pc-btn-handler">${label}</button>
+       <button>Reject Non-Necessary</button><button>Accept Cookies</button></div></div></div>`}));
+    await page.goto("https://scoped-notice.test/");
+    const capture = async () => {
+      const geometry = await captureConsentControlGeometry(page, {documentIdentity: identity, timeoutMs: 1500});
+      return geometry.candidates.find(c => c.selectorHint === "#onetrust-pc-btn-handler");
+    };
+    const original = await capture();
+    assert.equal(original?.decisionStatus, "confirmed_visible");
+    assert.deepEqual(original.settingsEntranceNotice, {version: "onetrust.same_banner_notice.v1",
+      bannerSelector: "#onetrust-banner-sdk", noticeSelector: "#onetrust-policy-text", sentence});
+    for (const mutation of ["hidden", "other_dialog", "outside_banner", "different_label", "duplicate_button", "undescribed"]) {
+      await page.reload();
+      await page.evaluate(kind => {
+        const notice = document.querySelector<HTMLParagraphElement>("#onetrust-policy-text")!;
+        const dialog = notice.closest('[role="alertdialog"]')!;
+        if (kind === "hidden") notice.hidden = true;
+        if (kind === "other_dialog") {const other = document.createElement("div"); other.role = "dialog"; dialog.append(other); other.append(notice);}
+        if (kind === "outside_banner") document.body.prepend(notice);
+        if (kind === "different_label") notice.textContent = notice.textContent!.replace("Share My Personal Information", "Share My Data");
+        if (kind === "duplicate_button") document.body.append(document.getElementById("onetrust-pc-btn-handler")!.cloneNode(true));
+        if (kind === "undescribed") dialog.removeAttribute("aria-describedby");
+      }, mutation);
+      assert.equal((await capture())?.settingsEntranceNotice, undefined, mutation);
+    }
+  } finally {await page.close();}
+});
+
+test("duplicate switch description IDs in an initially open consent dialog bind to the visible label in each physical row",async()=>{
+  const page=await browser!.newPage({viewport:{width:1366,height:900}});
+  const url="https://initial-switch.test/", label=(type:string)=>`I want to opt-out of the ${type} of my Personal Data.`;
+  const row=(type:string)=>`<div style="display:flex;justify-content:space-between;width:550px;align-items:center;margin:10px"><label class="qc-usp-action-description" id="toggleDescription" style="width:420px"><p>${label(type)}</p></label>
+    <div class="qc-cmp2-toggle-switch"><button type="button" role="switch" aria-checked="false" class="qc-cmp2-toggle" aria-labelledby="toggleDescription" style="width:56px;height:28px;overflow:hidden">DESACTIVADOACTIVADO</button></div></div>`;
+  try {
+    await page.route("**/*",r=>r.request().url()===url ? r.fulfill({contentType:"text/html; charset=utf-8",body:
+      `<div id="qc-cmp2-main"><div id="qc-cmp2-usp" role="dialog" aria-modal="true" style="position:fixed;inset:10% 20%;background:white">
+      <header>Do Not Process My Personal Information</header><p>Manage how we use cookies and your privacy preferences.</p>
+      <ul class="qc-cmp2-consent-list"><li class="qc-cmp2-list-item qc-cmp2-expanded">
+      <button class="qc-cmp2-list-item-header" role="listitem" aria-label="Opt-Outs">Personal Data Processing Opt Outs</button>
+      ${row("Sharing")}${row("Sale")}${row("Collection, Use, Retention, Sale, and/or Sharing")}
+      </li></ul><button>Confirm</button></div></div><script>window.clicks=0;document.addEventListener('click',()=>window.clicks++)</script>`}) : r.abort());
+    await page.goto(url);
+    const measure=()=>captureConsentControlGeometry(page,{documentIdentity:{source:"cdp_loader_id",token:"switch-loader"},timeoutMs:1300});
+    const geometry=await measure();
+    const identity = {source:"cdp_loader_id" as const, token:"switch-loader"};
+    const scanStartedAtMs = Date.now();
+    const text = {url, documentIdentity: identity, capturedAtMs:0, value:await page.locator("body").innerText()};
+    const packet = await retainOriginalInitialOptOutSwitches({page, text, scanStartedAtMs, budgetMs:450,
+      readBinding: () => ({url, documentIdentity:identity})});
+    assert.deepEqual(packet?.rows.map(row => row.scope).sort(), ["sale", "sharing"]);
+    assert.equal(await retainOriginalInitialOptOutSwitches({page, text, scanStartedAtMs, budgetMs:450,
+      readBinding: () => ({url, documentIdentity:{...identity, token:"different"}})}), undefined);
+    const switches=geometry.candidates.filter(c=>c.initialOptOutSwitch);
+    assert.deepEqual(switches.map(c=>c.initialOptOutSwitch!.scope).sort(),["sale","sharing"]);
+    for (const control of switches) {
+      const proof=control.initialOptOutSwitch!;
+      assert.equal(geometry.candidates.find(c=>c.candidateId===proof.labelCandidateId)?.label,proof.label);
+      assert.equal(control.actionType,"other");assert.equal(control.decisionStatus,"ambiguous");
+      assert.equal(proof.binding,"same_visible_row");assert.equal(proof.frameSlot,0);
+      assert.doesNotMatch(JSON.stringify(proof),/checked|registered|opted_in/i);
+    }
+    for (const mode of ["different_row","additional_label","sensitive","covered","contradictory_aria"]) {
+      await page.reload(); await page.evaluate(kind=>{
+        const first=document.querySelector<HTMLLabelElement>("label.qc-usp-action-description")!;
+        const button=first.parentElement!.querySelector("button")!;
+        if(kind==="different_row") first.parentElement!.after(first);
+        if(kind==="additional_label") first.after(first.cloneNode(true));
+        if(kind==="sensitive") first.textContent="I want to opt-out of the sharing of sensitive information.";
+        if(kind==="contradictory_aria") button.setAttribute("aria-label","Accept all");
+        if(kind==="covered"){const b=button.getBoundingClientRect();const overlay=document.createElement("div");
+          overlay.style.cssText=`position:fixed;left:${b.left}px;top:${b.top}px;width:${b.width}px;height:${b.height}px;z-index:1000;background:white`;document.body.append(overlay);}
+      },mode);
+      assert.deepEqual((await measure()).candidates.flatMap(c=>c.initialOptOutSwitch?.scope??[]),["sale"],mode);
+    }
+    assert.equal(await page.evaluate(()=> (window as unknown as {clicks:number}).clicks),0);
+  } finally{await page.close();}
+});
+
+test("Jagex notice and shadow banner wording separate scope from action classification", async () => {
+  const page = await browser!.newPage({viewport:{width:1366,height:900}});
+  const url = "https://notice-and-shadow.test/";
+  const instruction = "By clicking the button on the right, you can exercise your privacy rights (such as a right to opt-out of the use of certain cookies or to opt-out of the sharing of your personal information for the purposes of cross-contextual behavioral advertising).";
+  try {
+    await page.route("**/*", route => route.request().url() === url ? route.fulfill({
+      contentType:"text/html", body:`<div id="onetrust-banner-sdk"><div role="dialog" aria-label="Your Privacy"
+        style="position:fixed;top:300px;left:20px;width:440px;background:white">
+        <div id="onetrust-policy"><div id="onetrust-policy-text">${instruction}</div></div>
+        <div id="onetrust-button-group"><button id="onetrust-pc-btn-handler" class="cookie-setting-link"
+          aria-label="Your Privacy Rights, Opens the preference center dialog">Your Privacy Rights</button></div>
+      </div></div><div id="shadow"></div><script>document.querySelector('#shadow').attachShadow({mode:'open'}).innerHTML=
+      '<div role="region" aria-label="Consent preferences" style="position:fixed;top:0;left:0;width:100%;background:white">We and our vendors use cookies for targeted ads. <button>Continue with all</button><button>Do not sell/share personal info</button><button>Customize my choices</button></div>';</script>`,
+    }) : route.abort());
+    await page.goto(url);
+    const measure = () => captureConsentControlGeometry(page,{timeoutMs:1200});
+    const initial = await measure();
+    const settings = initial.candidates.find(row => row.label === "Your Privacy Rights");
+    assert.equal(settings?.actionType, "manage_preferences");
+    assert.equal(settings?.settingsEntranceNotice?.sentence, instruction);
+    assert.equal(initial.candidates.find(row => row.label === "Do not sell/share personal info")?.actionType, "do_not_sell_share");
+    await page.evaluate(() => {
+      document.querySelector("#onetrust-policy-text")!.textContent = "Use the button to customize your cookie settings.";
+      const row = document.querySelector("#shadow")!.shadowRoot!.querySelectorAll("button")[1]!;
+      row.textContent = "Learn about do not sell/share personal info";
+    });
+    const unrelated = await measure();
+    assert.ok(!unrelated.candidates.some(row => row.settingsEntranceNotice));
+    assert.ok(!unrelated.candidates.some(row => row.actionType === "do_not_sell_share"));
+  } finally { await page.close(); }
 });

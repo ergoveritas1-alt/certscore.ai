@@ -2059,6 +2059,7 @@ function buildEvidenceArtifact(input: {
         ...firstLayerConsentChoices,
         // Only the verified canonical assessment may supply the new v11 facts.
         privacyOptOutControlObserved: canonicalChoices?.privacyOptOutControlObserved,
+        optOutSurfaces: canonicalChoices?.optOutSurfaces,
         privacyOptOutControlInventoryComplete: canonicalChoices?.privacyOptOutControlInventoryComplete,
       }, [
         "evidenceSource",
@@ -2076,6 +2077,7 @@ function buildEvidenceArtifact(input: {
         "layerInspected",
         "managePreferencesControlObserved",
         "privacyOptOutControlObserved",
+        "optOutSurfaces",
         "privacyOptOutControlInventoryComplete",
         "nonEssentialDefaultsOff",
         "observedAtMs",

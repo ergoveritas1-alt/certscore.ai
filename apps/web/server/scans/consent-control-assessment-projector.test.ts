@@ -107,6 +107,19 @@ function completeInspection(outcome: string, observed: boolean) {
   };
 }
 
+test("historical bundles without DOM snapshots leave footer evidence unavailable", () => {
+  const source: Partial<CanonicalEvidenceBundle> = bundle([], { likelyPresent: false });
+  delete source.domSnapshots;
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source as CanonicalEvidenceBundle,
+    noGo: false,
+  });
+
+  assert.equal(assessment.scan.finalUrl, source.url);
+  assert.equal(assessment.sameVisitFooterCapture?.resolution, "primary_snapshot_missing");
+  assert.equal(projectPublicFirstLayerConsentEvidence(assessment, source.scanId!)?.optOutSurfaces?.footerLinks.length ?? 0, 0);
+});
+
 test("main-frame comparison persists through a limited whole-frame assessment without upgrading coverage", async () => {
   const {consentVisualFixture, visualFixtureStartMs} = await import("../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison");
   const {measureConsentControlVisualComparison} = await import("../../../../packages/certscore-scan-core/src/consent-control-visual-comparison");
@@ -1701,14 +1714,14 @@ test("runtime loading stays scoped while the materializer preserves consent docu
     for (const action of ["accept", "reject", "options"] as const) {
       assert.equal(result.controls[action].state, mismatch ? "unknown" : "not_observed", action);
     }
-    assert.equal(result.provenance.projectorVersion, "2.2.4");
+    assert.equal(result.provenance.projectorVersion, "2.2.38");
     assert.deepEqual(b.runtimeCoverage!.limitationKeys, ["runtime_page_inventory_document_loading"]);
   }
 });
 
 test("new materialization preserves legacy classifier provenance rather than inventing a registry version", () => {
   const result = deriveMaterializedConsentControlAssessment({ bundle: bundle([{ actionType: "accept_all", label: "Accept", visible: true }]), noGo: false });
-  assert.equal(result.provenance.projectorVersion, "2.2.4");
+  assert.equal(result.provenance.projectorVersion, "2.2.38");
   assert.equal(result.evidence[0]?.classifier?.registryVersion, "consent-control-label-registry");
 });
 
@@ -2011,4 +2024,641 @@ test("retained committed status repairs a partial consent handoff only with its 
   assert.notEqual(failed.scan.finalUrl, g.pageUrl);
   assert.equal(failed.controls.reject.state, "unknown");
   b.scanLaneRuns = saved.scanLaneRuns;
+});
+
+const control4SettingsLabel = 'Do Not Sell My Personal Information / Customize Settings';
+
+// Fields retained by the November 19 Control4 re-scan's native first-layer geometry.
+function settingsEntranceFixture() {
+  const url = 'https://www.control4.com/';
+  const identity = {source: 'cdp_loader_id' as const, token: 'control4-loader'};
+  const source = bundle([], {url});
+  Object.assign(source.domSnapshots[0]!, {url, documentIdentity: identity, capturedAtMs: 6318});
+  Object.assign(source.consentUiObservations[0]!, {documentUrl: url, documentIdentity: identity, observedAtMs: 6318});
+  const control = {
+    candidateId: 'candidate_0', label: control4SettingsLabel,
+    ariaLabel: control4SettingsLabel + ', Opens the preference center dialog',
+    actionType: 'other', presentationType: 'dedicated_button', semanticallyInteractive: true,
+    selectorHint: '#onetrust-pc-btn-handler', tagName: 'button', layer: 'first_layer', enabled: true,
+    frameContext: {frameKind: 'main_frame', frameUrl: url}, decisionStatus: 'ambiguous',
+    classifierReasonCodes: ['visible_accessible_intent_conflict'], consentContextConfirmed: true,
+    intersectsViewport: true, clippedByScrollableAncestor: false, occlusion: {center: true},
+    boundingBox: {x: 792.27, y: 766.79, width: 505.44, height: 41.61},
+    computedStyle: {visibility: 'visible', display: 'inline-block', opacity: '1', pointerEvents: 'auto'},
+    viewport: {width: 1366, height: 900},
+  };
+  const unrelated = {candidateId: 'unrelated', label: 'Accept All Cookies', actionType: 'accept_all',
+    tagName: 'button', layer: 'first_layer', decisionStatus: 'confirmed_visible', enabled: true, semanticallyInteractive: true};
+  const raw = {...geometry([control, unrelated], {firstLayerAccept: true, firstLayerReject: true, firstLayerOptions: false,
+    limitations: ['visible_accessible_intent_conflict']}), pageUrl: url, documentIdentity: identity, observedAtMs: 6318};
+  return {url, source, raw, control};
+}
+
+function bindEntranceGeometry(raw: Record<string, unknown>, scanId: string) {
+  const bytes = Buffer.from(JSON.stringify(raw));
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  return bindNarrowGeometry(raw, {scanId, auxiliaryArtifacts: [{
+    fileName: 'ConsentControlGeometryEvidence.json', sha256, sizeBytes: bytes.length,
+  }]}, sha256, bytes.length)!;
+}
+
+test("a standalone sale-sharing strip projects only verified original main-frame pointer evidence", () => {
+  const {raw, source, url, control} = settingsEntranceFixture();
+  const label = "Do Not Sell or Share My Personal Information";
+  const owner = {...control, label, ariaLabel:undefined, actionType:"do_not_sell_share", decisionStatus:"confirmed_visible",
+    classifierReasonCodes:["matched_privacy_opt_out", "match_strength_direct", "context_satisfied"], matchStrength:"direct",
+    tagName:"a", presentationType:"inline_link", linkDestination:"same_document", selectorHint:"#launcher",
+    boundingBox:{x:0,y:875,width:1366,height:25}, computedStyle:{...control.computedStyle, position:"fixed"},
+    occlusion:{checkedPoints:5,center:true,topLeft:true,topRight:true,bottomLeft:true,bottomRight:true},
+    standaloneSaleSharingAnchor:{version:"standalone_sale_sharing_anchor.v1",binding:"main_document_fixed_end_inline_handler"}};
+  const captureCoverage = {inventoryTruncated:false,documentReadyState:"complete",mainFrameAvailable:true,
+    documentAndFramesStable:true,frameCount:2,capturedFrameCount:2};
+  const read = (candidate = owner, frameSlot = 0, bind = true) => {
+    const packet = {...raw, candidates:[candidate], summary:{...raw.summary, limitations:[]},
+      firstLayerOptOutGeometry:{version:"first_layer_opt_out_geometry_diagnostic.v1",structuralCoverage:"complete",
+        framesAtStart:2,frameOutcomes:["captured","captured"],retainedCandidateCount:1,inspectedCandidateCount:1,
+        unresolvedOptOutCount:0,classifiedOptOutCount:1,otherUnresolvedCount:0,captureCoverage,
+        candidates:[{ordinal:0,frameSlot,role:"decision",coverage:"classified_opt_out",confirmedVisible:true}]}};
+    const assessment = deriveMaterializedConsentControlAssessment({bundle:source,finalUrl:url,noGo:false,
+      consentControlGeometryEvidence: bind ? bindEntranceGeometry(packet, source.scanId) : packet});
+    return projectPublicFirstLayerConsentEvidence(assessment, source.scanId)?.optOutSurfaces;
+  };
+  assert.deepEqual(read()?.bannerControls.map(row=>row.label),[label]);
+  assert.deepEqual(read()?.footerLinks,[]);
+  assert.deepEqual(read()?.vendorRefusals,[]);
+  assert.deepEqual(read(owner,1)?.bannerControls,[]);
+  assert.deepEqual(read(owner,0,false)?.bannerControls,[]);
+  assert.deepEqual(read({...owner,occlusion:{...owner.occlusion,center:false}})?.bannerControls,[]);
+});
+
+test('the Control4 native proof records a first-layer settings entrance independently of action eligibility', () => {
+  const {raw, source, url, control} = settingsEntranceFixture();
+  const baseline = deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false});
+  const assessment = deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false,
+    consentControlGeometryEvidence: bindEntranceGeometry(raw, source.scanId)});
+  assert.equal(assessment.controls.privacyOptOut.state, 'observed');
+  const entrance = assessment.evidence.find(e => e.opensPreferenceCenter);
+  assert.equal(entrance?.label, control4SettingsLabel);
+  assert.equal(entrance?.layer, 'first_layer');
+  assert.equal(entrance?.intent, 'privacy_opt_out');
+  assert.equal(assessment.controls.reject.state, baseline.controls.reject.state);
+  assert.notEqual(assessment.controls.accept.state, 'observed');
+  assert.equal(assessment.coverage.status, 'limited');
+  assert.equal(control.actionType, 'other');
+  assert.equal(control.decisionStatus, 'ambiguous');
+  assert.equal(source.consentUiObservations[0]!.controls.length, 0);
+});
+
+test('an observation-only settings entrance requires matching source, document and visible interactive geometry', () => {
+  for (const [reason, patch] of Object.entries({
+    hidden: {computedStyle: {visibility: 'hidden', display: 'block', opacity: '1', pointerEvents: 'auto'}},
+    transparent: {computedStyle: {visibility: 'visible', display: 'block', opacity: '0', pointerEvents: 'auto'}},
+    occluded: {occlusion: {center: false}}, disabled: {enabled: false}, clipped: {clippedByScrollableAncestor: true},
+    footer: {layer: 'footer'}, offscreen: {intersectsViewport: false}, role: {role: 'tab'},
+    foreignFrame: {frameContext: {frameKind: 'child_frame', frameUrl: 'https://other.example/'}},
+    acceptConflict: {ariaLabel: 'Accept All Cookies'}, extraConflict: {classifierReasonCodes: ['visible_accessible_intent_conflict', 'conflicting_consent_decisions']},
+    missingId: {candidateId: ''}, conflictingTitle: {title: 'Accept all cookies'}, conflictingValue: {value: 'Subscribe'},
+    wrongSelector: {selectorHint: '#unrelated'}, generic: {tagName: 'div'}, zeroWidth: {boundingBox: {x: 1, y: 1, width: 0, height: 40}},
+  })) {
+    const {raw, source, url, control} = settingsEntranceFixture();
+    const modified = {...raw, candidates: [{...control, ...patch}]};
+    const assessment = deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false,
+      consentControlGeometryEvidence: bindEntranceGeometry(modified, source.scanId)});
+    assert.notEqual(assessment.controls.privacyOptOut.state, 'observed', reason);
+  }
+
+  for (const reason of ['missing receipt', 'foreign scan', 'changed bytes', 'wrong loader', 'wrong observation', 'no go']) {
+    const {raw, source, url} = settingsEntranceFixture();
+    if (reason === 'wrong loader') raw.documentIdentity = {source: 'cdp_loader_id', token: 'different-geometry-token'};
+    if (reason === 'wrong observation') source.consentUiObservations[0]!.documentIdentity = {source:'cdp_loader_id',token:'unrelated'};
+    const g = reason === 'missing receipt' ? raw : bindEntranceGeometry(raw, reason === 'foreign scan' ? 'other-scan' : source.scanId);
+    if (reason === 'changed bytes') Object.assign(g, {observedAtMs: 6319});
+    const assessment = deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: reason === 'no go', consentControlGeometryEvidence: g});
+    assert.notEqual(assessment.controls.privacyOptOut.state, 'observed', reason);
+  }
+});
+
+test('a visible policy-lane footer entrance remains a footer observation with no banner or click claim', () => {
+  const {source, url} = settingsEntranceFixture();
+  const footer = {observationId: 'footer-choices', linkText: 'Your Privacy Choices', url: 'javascript:void(0);',
+    directlyLinkedFromScannedPage: true, traversalDepth: 0, linkSourcePageUrl: url, clickable: true,
+    linkObservationState: 'observed', linkVisibility: 'visible', accessibleNameSource: 'text', discoveryMethod: 'footer_link'};
+  const assessFooter = (observations: Array<Record<string, unknown>>, inspectionUrl = url) => {
+    const original = structuredClone(source);
+    Object.assign(original, {policySurfaceInspection: {privacyChoiceInspection: {documentUrl: inspectionUrl}}, policySurfaceObservations: observations});
+    return deriveMaterializedConsentControlAssessment({bundle: original, finalUrl: url, noGo: false});
+  };
+  const result = assessFooter([footer, footer]);
+  assert.deepEqual(result.optOutFooterLinks, [{label: footer.linkText, evidenceRef:'policy-surface:footer-choices', documentUrl: url}]);
+  assert.notEqual(result.controls.privacyOptOut.state, 'observed');
+  assert.equal(result.evidence.some(e => e.opensPreferenceCenter), false);
+  for (const patch of [{linkVisibility:'hidden'}, {clickable:false}, {linkSourcePageUrl:'https://other.test/'},
+    {traversalDepth:1}, {discoveryMethod:'common_path'}, {parentObservationId:'policy-parent'}, {accessibleNameSource:'none'},
+    {linkText:'Privacy Policy'}, {linkText:'Unsubscribe from newsletter'}, {linkText:'Learn about our Your Privacy Choices policy'}]) {
+    assert.deepEqual(assessFooter([{...footer, ...patch}]).optOutFooterLinks ?? [], []);
+  }
+  assert.deepEqual(assessFooter([footer], 'https://other.test/').optOutFooterLinks ?? [], []);
+  const direct = {...footer, sourceScanner: "policy_surface", scenario: "policy_surface_review", selector: "a"};
+  Object.assign(source, {modulesRun: [{moduleName: "policySurfaceScanner", status: "partial"}], policySurfaceObservations: [direct]});
+  const partial = deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false});
+  assert.equal(partial.optOutFooterLinks?.length, 1);
+  assert.deepEqual(partial.optOutFooterInspection, {status: "unavailable", reason: "missing_bound_inspection"});
+  Object.assign(direct, {linkVisibility: "hidden"});
+  assert.deepEqual(deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false}).optOutFooterLinks, []);
+});
+
+test("a cropped first-layer banner or a later named choice prevents an unsupported opt-out absence", () => {
+  const {source, raw, url} = settingsEntranceFixture();
+  const banner = {selectorHint: "#onetrust-banner-sdk", layer: "first_layer", intersectsViewport: true,
+    boundingBox: {x: 0, y: 892, width: 1366, height: 160}};
+  const project = (y: number, later = false) => {
+    const b = structuredClone(source);
+    if (later) Object.assign(b.consentUiObservations[0]!, {observedAtMs: raw.observedAtMs + 50, visibleChoiceLabels: ["Your Privacy Choices"]});
+    const g = {...raw, candidates: [], viewport: {height: 900, width: 1366},
+      containers: [{...banner, boundingBox: {...banner.boundingBox, y}}]};
+    return deriveMaterializedConsentControlAssessment({bundle: b, finalUrl: url, noGo: false,
+      consentControlGeometryEvidence: bindEntranceGeometry(g, b.scanId)});
+  };
+  assert.equal(project(892).optOutTimingLimitation?.reason, "banner_partially_in_view");
+  assert.equal(project(892).controls.privacyOptOut.inspection?.status, "limited");
+  assert.equal(project(700).optOutTimingLimitation, undefined);
+  assert.equal(project(700, true).optOutTimingLimitation?.reason, "choice_observed_after_inventory");
+});
+
+test("an independent recovery cannot clear a choice signal on the original loader", () => {
+  const {source, raw, url} = settingsEntranceFixture();
+  const original = {...source.domSnapshots[0]!, artifactId: "dom_text_pre_consent", capturedAtMs: 3000,
+    documentIdentity: {source: "cdp_loader_id" as const, token: "primary-document"}};
+  Object.assign(original, {optOutSearch: {result: "specific_signal", documentToken: "primary-document", capturedAtMs: 3000,
+    documentUrl: url, artifactId: original.artifactId}});
+  source.domSnapshots.unshift(original);
+  Object.assign(source.consentUiObservations[0]!, {basis: ["recovery:independent_consent_capture_completed"]});
+  const g = {...raw, candidates: []};
+  const assess = () => deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false,
+    consentControlGeometryEvidence: bindEntranceGeometry(g, source.scanId)});
+  assert.equal(assess().optOutTimingLimitation?.reason, "recovery_inventory_different_document");
+  assert.equal(assess().controls.privacyOptOut.state, "unknown");
+  const bundleOnly = deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false});
+  assert.equal(bundleOnly.optOutTimingLimitation?.inventoryAtMs, source.consentUiObservations[0]!.observedAtMs);
+  Object.assign(original, {url: "https://different.example/"});
+  assert.equal(assess().optOutTimingLimitation, undefined);
+});
+
+test("footer coverage distinguishes no run, unusable checkpoint, limited and completed rendered inspections", () => {
+  const {source, url} = settingsEntranceFixture();
+  const assess = () => deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false});
+  assert.deepEqual(assess().optOutFooterInspection, {status: "unavailable", reason: "no_policy_run"});
+  Object.assign(source, {modulesRun: [{moduleName: "policySurfaceScanner", status: "completed"}]});
+  assert.deepEqual(assess().optOutFooterInspection, {status: "unavailable", reason: "missing_bound_inspection"});
+  const inspection = {
+    contractVersion: "certscore.privacy-choice-inspection.v4", homepageAccessPolicy: "representative_homepage.v1",
+    documentUrl: url, capturedAt: "2026-11-19T00:00:01.000Z", sourceHash: "b".repeat(64),
+    scope: "rendered_named_links_and_buttons", coverage: "complete", namedChoiceCandidateCount: 0, unnamedControlCount: 0,
+    candidateEnumerationTruncated: false, uninspectedFrameCount: 0, uninspectedShadowRootCount: 0,
+    supportedDocumentLanguage: true, representativeDocument: true, documentStable: true, hiddenUnnamedControlCount: 0,
+    frameCount: 0, inspectedSameOriginFrameCount: 0, hiddenUninspectedFrameCount: 0, inaccessibleFrameCount: 0,
+    unreadyFrameCount: 0, unprojectableFrameCount: 0, frameBudgetLimitedCount: 0, namedFrameChoiceCandidateCount: 0,
+    frameInspectionWorkMs: 0, frameProofWorkMs: 0,
+  };
+  Object.assign(source, {policySurfaceInspection: {privacyChoiceInspection: inspection}});
+  assert.equal(assess().optOutFooterInspection?.status, "complete");
+  Object.assign(inspection, {coverage: "limited", unnamedControlCount: 1});
+  assert.equal(assess().optOutFooterInspection?.status, "limited");
+  Object.assign(inspection, {documentUrl: "https://unrelated.example/"});
+  assert.equal(assess().optOutFooterInspection?.status, "unavailable");
+});
+
+test("the bound notice names the exact confirmed button and persists its distinct source through public projection", () => {
+  const {raw, source, url, control} = settingsEntranceFixture();
+  const label = "Do Not Sell or Share My Personal Information";
+  const sentence = `Click on “X” or “Accept All” to confirm that you agree to these practices, “${label}” to customize your preferences, or “Reject Non-Necessary” to decline the use of certain cookies.`;
+  const notice = {version: "onetrust.same_banner_notice.v1", bannerSelector: "#onetrust-banner-sdk", noticeSelector: "#onetrust-policy-text", sentence};
+  const named = {...control, label, ariaLabel: undefined, actionType: "do_not_sell_share", decisionStatus: "confirmed_visible",
+    classifierReasonCodes: ["privacy_opt_out_context", "matched_privacy_opt_out", "match_strength_direct", "context_satisfied"],
+    settingsEntranceNotice: notice};
+  const diagnostic = {version: "first_layer_opt_out_geometry_diagnostic.v1", structuralCoverage: "complete",
+    framesAtStart: 2, frameOutcomes: ["captured", "captured"], retainedCandidateCount: 1, inspectedCandidateCount: 1,
+    unresolvedOptOutCount: 0, classifiedOptOutCount: 1, otherUnresolvedCount: 0,
+    captureCoverage: {inventoryTruncated: false, documentReadyState: "complete", mainFrameAvailable: true,
+      documentAndFramesStable: true, frameCount: 2, capturedFrameCount: 2},
+    candidates: [{ordinal: 0, frameSlot: 0, role: "decision", coverage: "classified_opt_out", confirmedVisible: true}]};
+  const run = (patch: Record<string, unknown> = {}, bound = true, firstLayerOptOutGeometry: unknown = diagnostic) => {
+    const geometry = {...raw, firstLayerOptOutGeometry, candidates: [{...named, ...patch}],
+      ...(patch.actionType === "manage_preferences" ? {summary:{...raw.summary, limitations:[]}} : {})};
+    return deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false,
+      consentControlGeometryEvidence: bound ? bindEntranceGeometry(geometry, source.scanId) : geometry});
+  };
+  const result = run();
+  const row = result.evidence.find(e => e.opensPreferenceCenter);
+  assert.equal(row?.label, label);
+  assert.equal(row.settingsEntranceSource, "same_banner_notice");
+  const projected = projectPublicFirstLayerConsentEvidence(result, source.scanId);
+  assert.equal(projected?.optOutSurfaces?.bannerControls[0]?.settingsEntranceSource, "same_banner_notice");
+  assert.equal(result.controls.reject.state, run({settingsEntranceNotice: undefined}).controls.reject.state);
+  for (const patch of [
+    {settingsEntranceNotice: undefined}, {settingsEntranceNotice: {...notice, sentence: sentence.replace(label, "Accept all")}},
+    {settingsEntranceNotice: {...notice, sentence: `Do not click on “${label}” to customize your preferences.`}},
+    {settingsEntranceNotice: {...notice, noticeSelector: "body"}}, {settingsEntranceNotice: {...notice, bannerSelector: "body"}},
+    {settingsEntranceNotice: {...notice, version: "different"}}, {decisionStatus: "ambiguous"}, {ariaLabel: "Open my account"},
+    {layer: "footer"}, {selectorHint: "#some-other-button"}, {occlusion: {center: false}},
+  ]) assert.equal(run(patch).evidence.some(e => e.opensPreferenceCenter), false, JSON.stringify(patch));
+  assert.equal(run({}, false).evidence.some(e => e.opensPreferenceCenter), false);
+  for (const witness of [null, {...diagnostic, retainedCandidateCount: 2},
+    {...diagnostic, candidates: [{...diagnostic.candidates[0], frameSlot: 1}]},
+    {...diagnostic, candidates: [{...diagnostic.candidates[0], confirmedVisible: false}]}]) {
+    assert.equal(run({}, true, witness).evidence.some(e => e.opensPreferenceCenter), false);
+  }
+  assert.equal(named.actionType, "do_not_sell_share");
+  assert.equal(source.consentUiObservations[0]!.controls.length, 0);
+  const rightsLabel = "Your Privacy Rights";
+  const rightsNotice = {...notice, sentence:"By clicking the button on the right, you can exercise your privacy rights (such as a right to opt-out of the use of certain cookies or to opt-out of the sharing of your personal information for the purposes of cross-contextual behavioral advertising)."};
+  const rights = {label:rightsLabel, ariaLabel:rightsLabel + ", Opens the preference center dialog",
+    actionType:"manage_preferences", settingsEntranceNotice:rightsNotice};
+  const rightsAssessment = run(rights);
+  assert.deepEqual(rightsAssessment.evidence.filter(e => e.label === rightsLabel).map(e => e.intent).sort(), ["options", "privacy_opt_out"]);
+  assert.equal(projectPublicFirstLayerConsentEvidence(rightsAssessment, source.scanId)?.optOutSurfaces?.bannerControls[0]?.label, rightsLabel);
+  assert.deepEqual(run({...rights, ariaLabel:"Open account settings"}).evidence.filter(e => e.intent === "privacy_opt_out"), []);
+});
+
+test("the starting-page footer retains pointer evidence and keeps hidden and unchecked controls out of positives", () => {
+  const {url, source} = settingsEntranceFixture();
+  const original = source.domSnapshots[0]!;
+  original.artifactId = "dom_text_pre_consent";
+  const sample = {scope: "footer", semanticRole: "link", view: "footer_position", bounds: [100, 400, 200, 30],
+    testedPoints: 3, matchingPoints: 0, occludingPoints: 3};
+  const packet = {version: "consent_footer_opt_out.v1", documentUrl: url, artifactId: original.artifactId,
+    documentToken: original.documentIdentity!.token, snapshotAtMs: original.capturedAtMs, capturedAtMs: original.capturedAtMs + 80,
+    coverage: "limited", limitations: ["unverified_control"], viewport: [800, 600], footerCount: 1, inspectedControls: 8,
+    candidates: [
+      {...sample, label: "Your Privacy Choices", evidenceId: "footer-control-0", visibility: "covered"},
+      {...sample, label: "Do Not Sell My Personal Information", evidenceId: "footer-control-1", visibility: "rendered_exposed", matchingPoints: 2, occludingPoints: 1},
+      {...sample, label: "Your Privacy Choices", evidenceId: "footer-control-2", visibility: "hidden", testedPoints: 0, occludingPoints: 0},
+      {...sample, label: "Your Privacy Choices", evidenceId: "footer-control-3", visibility: "offscreen_unverified", bounds: [100, 3000, 100, 10], testedPoints: 0, occludingPoints: 0},
+    ]};
+  const assess = (fields = {}, noGo = false, scanId = source.scanId) => {
+    Object.assign(original, {footerOptOutObservation: {...packet, ...fields}});
+    return deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo, scanId});
+  };
+  const result = assess();
+  assert.deepEqual(result.optOutFooterLinks?.map(row => row.visibility), ["covered", "rendered_exposed"]);
+  assert.notEqual(result.controls.privacyOptOut.state, "observed");
+  const surfaces = projectPublicFirstLayerConsentEvidence(result, source.scanId)?.optOutSurfaces;
+  assert.deepEqual(surfaces?.sameVisitFooter?.otherControls.map(row => row.visibility), ["hidden", "offscreen_unverified"]);
+  assert.deepEqual(surfaces?.bannerControls, []);
+  assert.deepEqual(surfaces?.vendorRefusals, []);
+  assert.equal(consentControlAssessmentSchema.safeParse({...result, optOutFooterLinks: [
+    {...result.optOutFooterLinks![0], visibility: "rendered_exposed"}]}).success, false);
+  for (const fields of [{documentUrl: url + "other"}, {documentToken: "next-loader"}, {artifactId: "recovery"},
+    {snapshotAtMs: 7}, {capturedAtMs: 3}, {candidates: [{...packet.candidates[0], label: "Cookie Settings"}]},
+    {candidates: [{...packet.candidates[0], occludingPoints: 0}]}]) {
+    assert.equal(assess(fields).sameVisitFooter, undefined);
+  }
+  assert.equal(assess({}, true).sameVisitFooter, undefined);
+  assert.equal(assess({}, false, "different-scan").sameVisitFooter, undefined);
+  source.domSnapshots.push({...original});
+  assert.equal(assess().sameVisitFooter, undefined);
+  const recoveryIdentity = {source: "cdp_loader_id" as const, token: "recovery-loader"};
+  source.domSnapshots[1] = {...original, artifactId: "dom_text_pre_consent_recovery",
+    capturedAtMs: original.capturedAtMs + 2000, documentIdentity: recoveryIdentity};
+  Object.assign(source.consentUiObservations[0]!, {documentIdentity: recoveryIdentity, layerInspected: "first_layer",
+    basis: ["recovery:independent_consent_capture_completed"]});
+  assert.equal(assess().sameVisitFooter, undefined);
+  source.screenshots = [{artifactId: "screenshot_pre_consent", capturedAtMs: original.capturedAtMs,
+    pagePhase: "network_idle", consentStateAtTime: "pre_consent", path: "/evidence/original.png", url,
+    documentIdentity: original.documentIdentity}];
+  const withRecovery = assess();
+  assert.equal(withRecovery.sameVisitFooter?.documentToken, original.documentIdentity!.token);
+  assert.equal(withRecovery.footerOriginalVisit?.recoveryToken, recoveryIdentity.token);
+  assert.equal(withRecovery.optOutFooterLinks?.length, 2);
+  assert.equal(consentControlAssessmentSchema.safeParse(withRecovery).success, true);
+  source.screenshots[0]!.documentIdentity = recoveryIdentity;
+  assert.equal(assess().sameVisitFooter, undefined);
+});
+
+test("verified main-frame placement corrects an end-of-page choice previously labeled as a banner control", () => {
+  const {source, url, raw} = settingsEntranceFixture();
+  const label = "Do Not Sell My Information";
+  const selectorHint = "#ez-ccpa-reject-all";
+  Object.assign(source.consentUiObservations[0]!, {controls: [{label, selectorHint, tagName: "button", visible: true,
+    actionType: "do_not_sell_share", semanticallyInteractive: true, consentContextEvidence: "local_surface"}]});
+  const row = {label, selectorHint, tagName: "button", actionType: "do_not_sell_share", layer: "page_body",
+    decisionStatus: "dom_present_not_visible", intersectsViewport: false,
+    boundingBox: {x: 40, y: 7535, width: 210, height: 40},
+    frameContext: {frameKind: "main_frame", frameUrl: url}};
+  const placement = {...raw, viewport: {width: 1366, height: 900}, candidates: [row]};
+  const assess = (input: Record<string, unknown>) => projectPublicFirstLayerConsentEvidence(
+    deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false, consentControlGeometryEvidence: input}),
+    source.scanId)?.optOutSurfaces?.bannerControls;
+  assert.deepEqual(assess(bindEntranceGeometry(placement, source.scanId)), []);
+  assert.equal(assess(placement)?.length, 1);
+  assert.equal(assess(bindEntranceGeometry({...placement, candidates: [{...row,
+    frameContext: {...row.frameContext, frameKind: "child_frame"}}]}, source.scanId))?.length, 1);
+});
+
+test("a verified footer placement keeps the same OneTrust settings anchor out of the banner inventory", () => {
+  const {source, url, raw} = settingsEntranceFixture();
+  const label = "Do Not Sell My Personal Information";
+  const selectorHint = "#ot-sdk-btn";
+  Object.assign(source.consentUiObservations[0]!, {controls: [{label, selectorHint, tagName: "a", visible: true,
+    actionType: "do_not_sell_share", semanticallyInteractive: true, consentContextEvidence: "local_surface"}]});
+  const row = {label, selectorHint, tagName: "a", actionType: "do_not_sell_share", layer: "footer",
+    decisionStatus: "footer_or_policy_link", intersectsViewport: false,
+    boundingBox: {x: 550, y: 3050, width: 207, height: 14}, frameContext: {frameKind: "main_frame", frameUrl: url}};
+  const placement = {...raw, viewport: {width: 1366, height: 900}, candidates: [row]};
+  const assess = (input: Record<string, unknown>) => projectPublicFirstLayerConsentEvidence(
+    deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false, consentControlGeometryEvidence: input}),
+    source.scanId)?.optOutSurfaces?.bannerControls;
+  assert.deepEqual(assess(bindEntranceGeometry(placement, source.scanId)), []);
+  assert.equal(assess(placement)?.length, 1);
+  assert.equal(assess(bindEntranceGeometry({...placement, candidates: [row, row]}, source.scanId))?.length, 1);
+});
+
+test("verified persistent links leave banner coverage and retain a proven navigation control", () => {
+  const {source, url, raw} = settingsEntranceFixture();
+  const actionType = "do_not_sell_share";
+  const footer = {label: "Your Privacy Choices", selectorHint: "#privacy-choice", tagName: "a", actionType,
+    visible: true, semanticallyInteractive: true, linkDestination: "same_document"};
+  const nav = {...footer, label: "Do Not Sell or Share My Personal Information", selectorHint: "a", linkDestination: "other_document"};
+  const placement = {presentationType: "persistent_link", placementType: "persistent_surface", enabled: true,
+    frameContext: {frameKind: "main_frame", frameUrl: url}, layer: "preference_center", decisionStatus: "deeper_layer"};
+  const footerGeometry = {...footer, ...placement, candidateId: "candidate_0", intersectsViewport: false,
+    boundingBox: {x: 30, y: 1575, width: 130, height: 20}};
+  const navGeometry = {...nav, ...placement, candidateId: "candidate_1", selectorHint: "div.secondary-nav a",
+    intersectsViewport: true, boundingBox: {x: 30, y: 632, width: 170, height: 20}, occlusion: {center: true, checkedPoints: 5},
+    scrollableAncestor: {selectorHint: "div.sidenav div", boundingBox: {x: 0, y: 0, width: 242, height: 890}}};
+  Object.assign(source.consentUiObservations[0]!, {controls: [footer, nav]});
+  const diagnostic = {version: "first_layer_opt_out_geometry_diagnostic.v1", structuralCoverage: "complete",
+    framesAtStart: 1, frameOutcomes: ["captured"], retainedCandidateCount: 2, inspectedCandidateCount: 0,
+    unresolvedOptOutCount: 0, classifiedOptOutCount: 0, otherUnresolvedCount: 0, candidates: [],
+    captureCoverage: {inventoryTruncated: false, documentReadyState: "complete", mainFrameAvailable: true,
+      documentAndFramesStable: true, frameCount: 1, capturedFrameCount: 1}};
+  const assess = (rows = [footerGeometry, navGeometry], bound = true, firstLayerOptOutGeometry = diagnostic) => {
+    const input = {...raw, viewport: {width: 1366, height: 900}, candidates: rows, firstLayerOptOutGeometry};
+    return deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false,
+      consentControlGeometryEvidence: bound ? bindEntranceGeometry(input, source.scanId) : input});
+  };
+  const result = assess();
+  const surfaces = projectPublicFirstLayerConsentEvidence(result, source.scanId)?.optOutSurfaces;
+  assert.deepEqual(result.optOutPlacementCorrections?.map(row => row.placement),
+    ["outside_initial_banner", "persistent_site_navigation"]);
+  assert.deepEqual(surfaces?.bannerControls, []);
+  assert.deepEqual(surfaces?.siteNavigationControls?.map(row => row.label), [nav.label]);
+  assert.equal(result.controls.privacyOptOut.state, "unknown");
+  assert.equal(consentControlAssessmentSchema.safeParse(result).success, true);
+  assert.equal(assess(undefined, false).optOutPlacementCorrections, undefined);
+  assert.equal(assess(undefined, true, {...diagnostic, retainedCandidateCount: 3}).optOutPlacementCorrections?.length, 1);
+  assert.equal(assess([footerGeometry, {...navGeometry, linkDestination: "same_document"}]).optOutPlacementCorrections?.length, 1);
+});
+
+test("native footer projection preserves a state scope, a combined scope and a policy destination", () => {
+  const {source, url} = settingsEntranceFixture();
+  const original = source.domSnapshots[0]!;
+  original.artifactId = "dom_text_pre_consent";
+  const hit = {semanticRole: "link", view: "original", bounds: [30, 60, 240, 20],
+    visibility: "rendered_exposed", testedPoints: 5, matchingPoints: 5, occludingPoints: 0};
+  Object.assign(original, {footerOptOutObservation: {
+    version: "consent_footer_opt_out.v1", artifactId: original.artifactId, documentUrl: url,
+    documentToken: original.documentIdentity!.token, snapshotAtMs: original.capturedAtMs,
+    capturedAtMs: original.capturedAtMs + 20, coverage: "complete", limitations: [],
+    viewport: [1200, 800], footerCount: 3, inspectedControls: 12,
+    candidates: [
+      {...hit, evidenceId: "footer-control-0", label: "Your State-Specific Privacy Choices",
+        scope: "footer", controlWitness: "state_privacy_choices"},
+      {...hit, evidenceId: "footer-control-1", label: "Do not sell or share my personal information/opt out of targeted advertising",
+        scope: "footer", controlWitness: "sale_sharing_and_targeted_advertising"},
+      {...hit, evidenceId: "footer-control-2", label: "Your Privacy Choices",
+        scope: "legal_footer_navigation", controlWitness: "named_privacy_policy_entrance"},
+      {...hit, evidenceId: "footer-control-3", label: "Your Privacy Choices/(Opt-Out of Sale/Targeted Ads)",
+        scope: "footer", controlWitness: "hearst_sale_ads_link"},
+      {...hit, evidenceId: "footer-control-4", label: "Don't sell my info",
+        semanticRole: "settings_control", scope: "footer", controlWitness: "mspa_footer_contracted_sale_handler"},
+      {...hit, evidenceId: "footer-control-5",
+        label: "Do Not Sell or Share My Personal Information or Limit Use of My Sensitive Personal Information",
+        scope: "footer", controlWitness: "onetrust_sensitive_data_webform"},
+      {...hit, evidenceId: "footer-control-6", label: "Do Not Sell My Personal Information",
+        semanticRole: "settings_control", scope: "footer", controlWitness: "onetrust_footer_text_trigger"},
+      {...hit, evidenceId: "footer-control-7", label: "Do not sell or share my personal information",
+        semanticRole: "button", scope: "custom_legal_footer"},
+    ],
+  }});
+  const assessment = deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false});
+  const links = projectPublicFirstLayerConsentEvidence(assessment, source.scanId)?.optOutSurfaces?.footerLinks;
+  assert.deepEqual(links?.map(link => [link.choiceScope, link.destinationKind]), [
+    ["state_privacy",undefined], ["sale_sharing_and_targeted_advertising",undefined], [undefined,"privacy_policy"],
+    ["sale_and_targeted_advertising",undefined], [undefined,undefined],
+    ["sale_sharing_and_sensitive_data",undefined], [undefined,undefined], [undefined,undefined],
+  ]);
+  assert.equal(links?.at(-1)?.placement, undefined);
+  assert.equal(links?.at(-1)?.visibility, "rendered_exposed");
+  assert.equal(consentControlAssessmentSchema.safeParse({...assessment,
+    optOutFooterLinks: [{...links![2], choiceScope: "sale_sharing_and_targeted_advertising"}]}).success,false);
+  assert.equal(consentControlAssessmentSchema.safeParse({...assessment,
+    optOutFooterLinks: [{...links![3], choiceScope: "sale_sharing_and_targeted_advertising"}]}).success,false);
+});
+
+for (const [scope, controlWitness] of [
+  ["legal_footer_navigation", "onetrust_reveal_footer_settings"],
+  ["custom_legal_footer", "onetrust_custom_legal_footer_settings"],
+] as const) test(`the ${scope} OneTrust owner reclassifies separately from a real banner`, () => {
+  const {source, raw, url, control} = settingsEntranceFixture();
+  const snapshot = source.domSnapshots[0]!;
+  const label = "Your Privacy Choices";
+  const footerControl = {label, selectorHint: "#ot-sdk-btn", tagName: "button", actionType: "do_not_sell_share",
+    visible: true, semanticallyInteractive: true, artifactRef: "footer-inventory-row"};
+  const banner = {...footerControl, selectorHint:"#onetrust-pc-btn-handler", artifactRef:"actual-banner-row",
+    consentContextEvidence:"local_surface"};
+  Object.assign(source.consentUiObservations[0]!, {controls: [footerControl]});
+  const footerGeometry = {...control, ...footerControl, decisionStatus:"covered", consentContextConfirmed:false,
+    ariaLabel:undefined, occlusion:{center:false,checkedPoints:5}};
+  const assess = (includeBanner = false) => {
+    const g = {...raw, viewport:{width:1366,height:900}, candidates: includeBanner ? [footerGeometry,
+      {...control,...banner,candidateId:"candidate_1",ariaLabel:undefined,decisionStatus:"confirmed_visible"}] : [footerGeometry]};
+    const assessment = deriveMaterializedConsentControlAssessment({bundle:source,finalUrl:url,noGo:false,
+      consentControlGeometryEvidence:bindEntranceGeometry(g,source.scanId)});
+    return {assessment, view: projectPublicFirstLayerConsentEvidence(assessment,source.scanId)?.optOutSurfaces};
+  };
+  assert.equal(assess().view?.bannerControls.length,1);
+  const packet = {version:"consent_footer_opt_out.v1",artifactId:"dom_text_pre_consent",documentUrl:url,documentToken:snapshot.documentIdentity!.token,
+    snapshotAtMs:snapshot.capturedAtMs,capturedAtMs:snapshot.capturedAtMs+30,coverage:"limited",limitations:["traversal_limited"],
+    viewport:[1366,900],footerCount:1,inspectedControls:1,candidates:[{evidenceId:"footer-control-0",label,
+      scope,semanticRole:"settings_control",controlWitness,
+      view:"footer_position",visibility:"rendered_exposed",bounds:[360,840,120,16],testedPoints:5,matchingPoints:5,occludingPoints:0}]};
+  Object.assign(snapshot,{artifactId:"dom_text_pre_consent",footerOptOutObservation:packet});
+  const {assessment,view} = assess();
+  assert.deepEqual(view?.bannerControls,[]);
+  assert.deepEqual(view?.footerLinks.map(row => [row.label,row.visibility]),[[label,"rendered_exposed"]]);
+  assert.equal(assessment.optOutPlacementCorrections?.[0]?.geometryCandidateId,"candidate_0");
+  assert.equal(consentControlAssessmentSchema.safeParse(assessment).success,true);
+  Object.assign(source.consentUiObservations[0]!,{controls:[footerControl,banner]});
+  assert.equal(assess(true).view?.bannerControls.length,1);
+  Object.assign(snapshot,{footerOptOutObservation:{...packet,documentToken:"foreign-loader"}});
+  assert.equal(assess().assessment.optOutPlacementCorrections,undefined);
+});
+
+test("the exact same-visit OneTrust footer button does not become a banner control", () => {
+  const {source, url} = settingsEntranceFixture();
+  const original = source.domSnapshots[0]!;
+  original.artifactId = "dom_text_pre_consent";
+  const label = "Do not sell my data";
+  const control = {label, selectorHint: "#ot-sdk-btn", tagName: "button", visible: true,
+    actionType: "do_not_sell_share", semanticallyInteractive: true, consentContextEvidence: "local_surface",
+    presentationType: "dedicated_button", layer: "first_layer"};
+  Object.assign(source.consentUiObservations[0]!, {controls: [control]});
+  const packet = {
+    version: "consent_footer_opt_out.v1", artifactId: original.artifactId, documentUrl: url,
+    documentToken: original.documentIdentity!.token, snapshotAtMs: original.capturedAtMs,
+    capturedAtMs: original.capturedAtMs + 20, coverage: "complete", limitations: [],
+    viewport: [1200, 800], footerCount: 1, inspectedControls: 1,
+    candidates: [{evidenceId: "footer-control-0", label, scope: "footer", semanticRole: "button", view: "original",
+      bounds: [30, 60, 240, 20], visibility: "rendered_exposed", testedPoints: 5, matchingPoints: 5, occludingPoints: 0,
+      controlWitness: "onetrust_footer_sell_data"}],
+  };
+  const project = () => {
+    const assessment = deriveMaterializedConsentControlAssessment({bundle: source, finalUrl: url, noGo: false});
+    return projectPublicFirstLayerConsentEvidence(assessment, source.scanId)?.optOutSurfaces;
+  };
+  Object.assign(original, {footerOptOutObservation: packet});
+  assert.deepEqual(project()?.bannerControls, []);
+  assert.equal(project()?.footerLinks[0]?.label, label);
+  Object.assign(original, {footerOptOutObservation: {...packet, documentToken: "different-loader"}});
+  assert.deepEqual(project()?.bannerControls?.map(row => row.label), [label]);
+  Object.assign(original, {footerOptOutObservation: packet});
+  Object.assign(source.consentUiObservations[0]!, {controls: [{...control, selectorHint: "#separate-banner-button"}]});
+  assert.deepEqual(project()?.bannerControls?.map(row => row.label), [label]);
+});
+
+test("a bound footer capture failure remains reportable coverage without a link or first-layer verdict",()=>{
+  const {url,source}=settingsEntranceFixture();
+  const original=source.domSnapshots[0]!;
+  original.artifactId="dom_text_pre_consent";
+  const receipt={version:"consent_footer_opt_out_capture.v1",artifactId:original.artifactId,
+    documentUrl:url,documentToken:original.documentIdentity!.token,snapshotAtMs:original.capturedAtMs,
+    completedAtMs:original.capturedAtMs+20,attempts:1,outcome:"timed_out",recovery:"none"};
+  const assess=(patch:Record<string,unknown>)=>{
+    Object.assign(original,{footerOptOutCapture:{...receipt,...patch}});
+    return deriveMaterializedConsentControlAssessment({bundle:source,finalUrl:url,noGo:false});
+  };
+  const result=assess({});
+  assert.equal(result.sameVisitFooterCapture?.resolution,"capture_incomplete");
+  const surfaces=projectPublicFirstLayerConsentEvidence(result,source.scanId)?.optOutSurfaces;
+  assert.equal(surfaces?.sameVisitFooterCapture?.reason,"timed_out");assert.equal(surfaces?.footerLinks.length,0);
+  assert.equal(result.sameVisitFooter,undefined);
+  assert.equal(assess({documentToken:"other"}).sameVisitFooterCapture?.resolution,"invalid_packet");
+  assert.equal(assess({outcome:"captured"}).sameVisitFooterCapture?.resolution,"invalid_packet");
+  delete original.footerOptOutCapture;
+  const legacy=deriveMaterializedConsentControlAssessment({bundle:source,finalUrl:url,noGo:false});
+  assert.equal(legacy.sameVisitFooterCapture?.resolution,"not_retained");
+  assert.equal(result.controls.privacyOptOut.state,legacy.controls.privacyOptOut.state);
+});
+
+test("geometry-bound initial sharing and sale switches project separate first-layer labels without click or opener evidence",()=>{
+  const {url,source,raw,control}=settingsEntranceFixture();
+  const candidates=["sharing","sale"].flatMap((scope,i)=>{
+    const label=`I want to opt-out of the ${scope==="sale"?"Sale":"Sharing"} of my Personal Data.`;
+    const a="candidate_"+(i*2), b="candidate_"+(i*2+1),y=420+i*60;
+    const base={...control,ariaLabel:undefined,actionType:"other",decisionStatus:"ambiguous",classifierReasonCodes:["privacy_opt_out_context"]};
+    return [
+      {...base,candidateId:a,label,role:undefined,tagName:"label",presentationType:"unknown",semanticallyInteractive:false,
+        selectorHint:"li.qc-cmp2-list-item label",boundingBox:{x:409,y:y+7,width:438,height:14}},
+      {...base,candidateId:b,label:"DESACTIVADOACTIVADO",role:"switch",tagName:"button",selectorHint:"button.qc-cmp2-toggle",
+        boundingBox:{x:905,y,width:52,height:27},initialOptOutSwitch:{version:"inmobi_choice.initial_opt_out_switch.v1",scope,
+          label,labelCandidateId:a,frameSlot:0,labelFrameSlot:0,binding:"same_visible_row"}}
+    ];
+  });
+  const payload={...raw,containers:[{selectorHint:"#qc-cmp2-usp",role:"dialog",layer:"first_layer",intersectsViewport:true}],candidates};
+  const project=(geometry:Record<string,unknown>,bound=true)=>deriveMaterializedConsentControlAssessment({bundle:source,finalUrl:url,noGo:false,
+    consentControlGeometryEvidence:bound?bindEntranceGeometry(geometry,source.scanId):geometry});
+  const result=project(payload),baseline=project({...payload,candidates:[]});
+  const publicEvidence=projectPublicFirstLayerConsentEvidence(result,source.scanId);
+  const rows=publicEvidence?.optOutSurfaces?.bannerControls;
+  assert.equal(result.controls.privacyOptOut.state,"observed");
+  assert.deepEqual(rows?.map(c=>[c.label,c.initialSwitchScope,c.opensPreferenceCenter]),[
+    ["I want to opt-out of the Sharing of my Personal Data.","sharing",null],["I want to opt-out of the Sale of my Personal Data.","sale",null]]);
+  for(const key of ["accept","reject","options"] as const)assert.equal(result.controls[key].state,baseline.controls[key].state);
+  assert.equal(result.coverage.status,"limited");
+  assert.deepEqual(project(payload,false).evidence.filter(e=>e.initialSwitchScope),[]);
+  assert.deepEqual(project({...payload,documentIdentity:{source:"cdp_loader_id",token:"foreign"}}).evidence.filter(e=>e.initialSwitchScope),[]);
+  const sharingSwitch=candidates[1]!;
+  assert.ok("initialOptOutSwitch" in sharingSwitch);
+  for(const [index,changes] of [[0,{label:"Your email preferences"}],[0,{occlusion:{center:false}}],
+    [0,{boundingBox:{x:409,y:950,width:438,height:14}}],[1,{role:"checkbox"}],
+    [1,{frameContext:{frameKind:"child_frame",frameUrl:url}}],[1,{computedStyle:{visibility:"hidden"}}],
+    [1,{initialOptOutSwitch:{...sharingSwitch.initialOptOutSwitch,labelCandidateId:"candidate_2"}}]] as const) {
+    const modified=candidates.map((candidate,i)=>i===index?{...candidate,...changes}:candidate);
+    assert.ok(!project({...payload,candidates:modified}).evidence.some(e=>e.initialSwitchScope==="sharing"));
+  }
+});
+
+test("the original opt-out switches survive an independently loaded empty recovery inventory", () => {
+  const {source, url} = settingsEntranceFixture();
+  const snapshot = source.domSnapshots[0]!;
+  snapshot.artifactId = "dom_text_pre_consent";
+  const originalToken = snapshot.documentIdentity!.token;
+  const recovery = {source:"cdp_loader_id" as const, token:"recovery-loader"};
+  const observedAtMs = snapshot.capturedAtMs + 2;
+  source.domSnapshots.push({...snapshot, artifactId:"dom_text_pre_consent_recovery",
+    documentIdentity:recovery, capturedAtMs:observedAtMs + 250});
+  Object.assign(source.consentUiObservations[0]!, {
+    observationId:"recovery-observation", documentIdentity:recovery, observedAtMs:observedAtMs + 200,
+    captureStatus:"no_evidence", likelyPresent:false, inventoryOutcome:"complete_empty",
+    basis:["recovery:independent_consent_capture_completed", "settled_control_inventory_completed"],
+  });
+  const baseline = deriveMaterializedConsentControlAssessment({bundle:source, finalUrl:url, noGo:false});
+  snapshot.originalInitialOptOutSwitches = {
+    version:"original_initial_opt_out_switches.v1", documentUrl:url, documentToken:originalToken, observedAtMs,
+    rows:[
+      {scope:"sale", label:"I want to opt-out of the Sale of my Personal Data.", switchCenter:[905, 420], labelCenter:[420, 421]},
+      {scope:"sharing", label:"I want to opt-out of the Sharing of my Personal Data.", switchCenter:[905, 460], labelCenter:[420, 461]},
+    ],
+  };
+  const materialize = () => deriveMaterializedConsentControlAssessment({bundle:source, finalUrl:url, noGo:false});
+  const assessment = materialize();
+  assert.equal(assessment.controls.privacyOptOut.state, "observed");
+  assert.equal(assessment.controls.privacyOptOut.inspection?.status, "limited");
+  assert.equal(assessment.originalOptOutSwitches?.recovery?.documentToken, recovery.token);
+  assert.deepEqual(assessment.evidence.filter(row => row.initialSwitchScope).map(row => row.documentToken), [originalToken, originalToken]);
+  const report = projectPublicFirstLayerConsentEvidence(assessment, source.scanId);
+  assert.deepEqual(report?.optOutSurfaces?.bannerControls.map(row => row.initialSwitchScope), ["sale", "sharing"]);
+  for (const key of ["accept", "reject", "options"] as const) assert.deepEqual(assessment.controls[key], baseline.controls[key]);
+  const packet = snapshot.originalInitialOptOutSwitches;
+  snapshot.originalInitialOptOutSwitches = {...packet, documentToken:"another-loader"};
+  assert.equal(materialize().originalOptOutSwitches, undefined);
+  snapshot.originalInitialOptOutSwitches = packet;
+  source.consentUiObservations[0]!.basis = [];
+  assert.equal(materialize().originalOptOutSwitches, undefined);
+});
+
+test("an original OneTrust banner entrance survives a later empty recovery with distinct loader evidence", () => {
+  const {source, url} = settingsEntranceFixture();
+  const snapshot = source.domSnapshots[0]!;
+  snapshot.artifactId = "dom_text_pre_consent";
+  const original = snapshot.documentIdentity!;
+  const later = {source:"cdp_loader_id" as const,token:"second-loader"};
+  const at = snapshot.capturedAtMs + 10;
+  source.domSnapshots.push({...snapshot,artifactId:"dom_text_pre_consent_recovery",capturedAtMs:at+100,documentIdentity:later});
+  source.screenshots = [{artifactId:"screenshot_pre_consent_cmp_controls",capturedAtMs:at-3,path:"cmp.png",url,
+    documentIdentity:original, pagePhase:"network_idle", consentStateAtTime:"pre_consent"}];
+  Object.assign(source.consentUiObservations[0]!, {observationId:"recovery",documentIdentity:later,observedAtMs:at+90,
+    captureStatus:"no_evidence",likelyPresent:false,inventoryOutcome:"complete_empty",controls:[],
+    basis:["recovery:independent_consent_capture_completed","settled_control_inventory_completed"]});
+  const label = "Do Not Sell or Share My Personal Information";
+  snapshot.originalOneTrustSettingsEntrance = {version:"original_onetrust_settings_entrance.v1",selector:"#onetrust-pc-btn-handler",
+    documentUrl:url,documentToken:original.token,observedAtMs:at,label,ariaLabel:label+", Opens the preference center dialog",
+    testedPoints:5,matchingPoints:5};
+  snapshot.footerOptOutCapture = {version:"consent_footer_opt_out_capture.v1",artifactId:"dom_text_pre_consent",
+    documentUrl:url,documentToken:original.token,snapshotAtMs:snapshot.capturedAtMs,completedAtMs:at+2,
+    attempts:1,outcome:"captured",recovery:"none"};
+  const materialize = (noGo = false) => deriveMaterializedConsentControlAssessment({bundle:source,finalUrl:url,noGo});
+  const a = materialize();
+  assert.equal(a.originalOptOutSettings?.recovery?.recoveryToken,later.token);
+  assert.equal(a.controls.privacyOptOut.state,"observed");
+  assert.equal(a.controls.privacyOptOut.inspection?.status,"limited");
+  assert.deepEqual(projectPublicFirstLayerConsentEvidence(a, source.scanId)?.optOutSurfaces?.bannerControls.map(row =>
+    [row.label,row.opensPreferenceCenter,row.settingsEntranceSource]),[[label,true,"accessible_name"]]);
+  assert.equal(materialize(true).originalOptOutSettings,undefined);
+  const [shot] = source.screenshots.splice(0,source.screenshots.length);
+  assert.equal(materialize().originalOptOutSettings,undefined);
+  source.screenshots.push(shot!);
+  snapshot.originalOneTrustSettingsEntrance.documentToken = "wrong";
+  assert.equal(materialize().originalOptOutSettings,undefined);
 });

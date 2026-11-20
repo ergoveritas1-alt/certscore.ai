@@ -1,3 +1,4 @@
+import type { PublicOptOutSurfaces } from "../../lib/scans/public-first-layer-consent-evidence";
 import { signalSnapshotValueClass } from "./signal-snapshot-styles";
 import { FindingDisclosureSummary } from "./finding-disclosure-summary";
 import type { CaliforniaChoicePresence, CaliforniaPolicyChoiceMethods, CaliforniaFrictionlessGpcException, CaliforniaOptOutPresence } from "../../lib/scans/california-choice-presence";
@@ -58,8 +59,10 @@ function californiaCoverageLabel(coverage: CaliforniaReviewCoverage) {
   return `${supported} supported${gaps ? ` · ${gaps} assessed ${gaps === 1 ? "gap" : "gaps"}` : ""} · ${review} to review${limited ? ` · ${limited} limited` : ""}`;
 }
 
-export function CaliforniaCoverageSummary({coverage, choicePresence, policyChoiceMethods, frictionlessGpcException, optOutPresence}: Pick<CaliforniaCoverageProps, "coverage"> & {choicePresence?: CaliforniaChoicePresence | null; policyChoiceMethods?: CaliforniaPolicyChoiceMethods | null; frictionlessGpcException?: CaliforniaFrictionlessGpcException | null; optOutPresence?: CaliforniaOptOutPresence}) {
-  const optOutState=optOutPresence?.state ?? choicePresence?.state ?? "unknown";
+export function CaliforniaCoverageSummary({coverage, choicePresence, policyChoiceMethods, frictionlessGpcException, optOutPresence, optOutSurfaces}: Pick<CaliforniaCoverageProps, "coverage"> & {choicePresence?: CaliforniaChoicePresence | null; policyChoiceMethods?: CaliforniaPolicyChoiceMethods | null; frictionlessGpcException?: CaliforniaFrictionlessGpcException | null; optOutPresence?: CaliforniaOptOutPresence; optOutSurfaces?: PublicOptOutSurfaces}) {
+  const observedEntrance = Boolean(optOutSurfaces?.bannerControls.length || optOutSurfaces?.footerLinks.length ||
+    optOutSurfaces?.siteNavigationControls?.length);
+  const optOutState = optOutPresence?.state ?? choicePresence?.state ?? "unknown";
   const optOutLabel=optOutState === "observed" ? "Observed" : optOutState === "not_observed" ? "Not observed" : "Unknown";
   const optOutSummary=<><span className="min-w-0 flex-1 font-medium text-zinc-900">Sale/sharing opt-out</span><span className="shrink-0" data-opt-out-status={optOutState}><EvidenceStatusBadge label={optOutLabel} tone={optOutState === "observed" ? "positive" : optOutState === "not_observed" ? "neutral" : "context"} /></span></>;
   const exceptionReason = !frictionlessGpcException ? "" : frictionlessGpcException.assessment.basis === "qualifying_collection_under_gpc"
@@ -78,7 +81,7 @@ export function CaliforniaCoverageSummary({coverage, choicePresence, policyChoic
         {optOutPresence?.signal || optOutPresence?.absenceScope || choicePresence?.labels.length || frictionlessGpcException || policyChoiceMethods?.methods.length ? <details className="group/opt-out-evidence" data-opt-out-evidence>
           <summary className="flex cursor-pointer list-none items-center gap-3 rounded hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">{optOutSummary}<span aria-hidden="true" className="inline-flex h-7 w-8 shrink-0 items-center justify-center rounded border border-zinc-200 bg-white text-base font-semibold text-sky-800">…</span><span className="sr-only group-open/opt-out-evidence:hidden">Show opt-out assessment details</span><span className="sr-only hidden group-open/opt-out-evidence:inline">Hide opt-out assessment details</span></summary>
           <div className="space-y-1 pt-2 text-xs">
-            {optOutPresence?.absenceScope?<><p>Scope: {optOutPresence.absenceScope}</p><p>No qualifying opt-out signal was found in the captured evidence.</p></>:null}
+            {optOutPresence?.absenceScope?<><p>Scope: {optOutPresence.absenceScope}</p><p>{observedEntrance ? "No qualifying opt-out signal was found within this search scope." : "No qualifying opt-out signal was found in the captured evidence."}</p></>:null}
             {optOutPresence?.absenceLimitations?.map(limit=><p key={limit}>{limit}</p>)}
             {optOutPresence?.absenceSourceUrl?<a className="break-all text-sky-800 underline underline-offset-2" href={optOutPresence.absenceSourceUrl} target="_blank" rel="noreferrer">Source page ↗</a>:null}
             {choicePresence?.labels.map(label=><p key={label}>“{label}”</p>)}
@@ -120,6 +123,34 @@ export function CaliforniaCoverageSummary({coverage, choicePresence, policyChoic
           </div>
         </details> : <div className="flex items-center justify-between gap-3">{optOutSummary}</div>}
       </div>
+      {observedEntrance || optOutSurfaces?.footerInspection || optOutSurfaces?.sameVisitFooter || optOutSurfaces?.bannerTimingLimitation || Boolean(optOutSurfaces?.vendorRefusals.length) ? <details data-captured-privacy-controls>
+        <summary className="cursor-pointer font-medium text-zinc-800">Captured website controls</summary>
+        <div className="mt-2 space-y-2">
+            {optOutSurfaces?.bannerControls.length ? <section><h3 className="font-medium text-zinc-800">Banner controls</h3>
+              {optOutSurfaces.bannerControls.map(row => <p key={row.evidenceRef}>“{row.label}”{row.settingsEntranceSource === "same_banner_notice" ? " · Banner instructions identify this button as opening privacy settings" : row.opensPreferenceCenter ? " · Labeled to open privacy settings" : ""}</p>)}</section> : null}
+            {optOutSurfaces?.siteNavigationControls?.length ? <section><h3 className="font-medium text-zinc-800">Site navigation controls</h3>
+              {optOutSurfaces.siteNavigationControls.map(row => <p key={row.evidenceRef}>“{row.label}”</p>)}</section> : null}
+            {optOutSurfaces?.bannerTimingLimitation ? <p>Banner timing limited the first-layer inspection.</p> : null}
+            {optOutSurfaces?.sameVisitFooter ? <p>Starting-page footer inspection · {optOutSurfaces.sameVisitFooter.coverage === "complete"
+              ? "Completed within the inspected footer regions" : optOutSurfaces.sameVisitFooter.coverage === "limited"
+              ? "Partial coverage" : "No verified starting-page footer capture"}</p> : null}
+            {optOutSurfaces?.sameVisitFooterCapture && <FooterCaptureDetail status={optOutSurfaces.sameVisitFooterCapture}/>}
+            {optOutSurfaces?.footerInspection ? <p>{optOutSurfaces.sameVisitFooter ? "Separate policy scan" : "Footer link inspection"} · {optOutSurfaces.footerInspection.status === "complete"
+              ? "Completed for rendered named controls" : optOutSurfaces.footerInspection.status === "limited"
+              ? "Partial coverage" : optOutSurfaces.footerInspection.status === "unavailable" && optOutSurfaces.footerInspection.reason === "no_policy_run"
+              ? "Policy scan did not run" : "No verified inspection for this page"}</p> : null}
+            {optOutSurfaces?.footerLinks.length ? <section><h3 className="font-medium text-zinc-800">Footer links</h3>
+              {optOutSurfaces.footerLinks.map(row => <p key={row.evidenceRef}>“{row.label}”{row.placement ? " · End-of-page strip" : ""}{row.choiceScope === "ads_privacy" ? " · Ads privacy choices" : ""}{row.destinationKind === "privacy_policy" ? " · Links to a privacy policy" : ""}{row.visibility === "rendered_exposed"
+                ? " · Reached by the pointer hit test" : row.visibility === "covered"
+                ? " · Covered at the sampled points" : optOutSurfaces.sameVisitFooter ? " · Observed on the policy scan" : ""}</p>)}</section> : null}
+            {optOutSurfaces?.sameVisitFooter?.otherControls.length ? <section><h3 className="font-medium text-zinc-800">Other footer observations</h3>
+              {optOutSurfaces.sameVisitFooter.otherControls.map(row => <p key={row.evidenceRef}>“{row.label}” · {row.visibility === "hidden"
+                ? "Hidden at capture" : row.visibility === "offscreen_unverified" ? "Outside the inspected viewport" : "Visibility unverified"}</p>)}</section> : null}
+            {optOutSurfaces?.vendorRefusals.length ? <section><h3 className="font-medium text-zinc-800">Vendor-specific refusals</h3>
+              {optOutSurfaces.vendorRefusals.map(row => <p key={row.evidenceRef}>“{row.label}”</p>)}</section> : null}
+            {observedEntrance ? <p>Opt-out submission and effectiveness were not verified from these controls.</p> : null}
+        </div>
+      </details> : null}
       {coverage ? <p>{californiaCoverageLabel(coverage)}</p> : null}
       <EvidenceJumpLink targetId="california-privacy-evidence" className="inline-block text-xs">View California privacy review ↓</EvidenceJumpLink>
     </div>
@@ -262,4 +293,18 @@ export function CaliforniaPrivacyWorkpaper({ evidence: retainedEvidence, focus, 
       </details>
     </div>
   </details>;
+}
+
+function FooterCaptureDetail({status}: {status: NonNullable<import("../../lib/scans/public-first-layer-consent-evidence").PublicOptOutSurfaces["sameVisitFooterCapture"]>}) {
+  const descriptions: Partial<Record<typeof status.reason,string>> = {
+    no_budget:"The capture budget ended before the footer read.",timed_out:"The footer read timed out.",
+    aborted:"The scan stopped before the footer read completed.",page_closed:"The page closed before the footer read completed.",
+    source_unavailable:"The scanner could not verify the original page identity.",document_mismatch:"The footer and report evidence refer to different documents.",
+    read_failed:"The browser could not complete the footer read.",invalid_packet:"The retained footer evidence could not be verified.",
+    lane_stopped:"The consent scan stopped before the footer checkpoint.",not_retained:"The scan retained no footer checkpoint.",
+    primary_snapshot_missing:"The original page snapshot was unavailable.",primary_snapshot_ambiguous:"Several snapshots claimed to be the original page.",
+  };
+  return <>{descriptions[status.reason] && <p>{descriptions[status.reason]}</p>}
+    {status.unsupportedControlName && <p>A privacy-related footer control had an unverified purpose.</p>}
+    {status.unverifiedGeometry && <p>Visibility or pointer access remained unverified for a named footer control.</p>}</>;
 }

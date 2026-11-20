@@ -14,6 +14,7 @@ import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema } from "@c
 import { cmsSecurityProjectionSchema } from "@certscore/contracts";
 import { projectExecutiveRuntimeCards } from "../../../lib/scans/executive-runtime-cards";
 import { selectSiteIntegrityFinding, projectStartingPageSiteIntegrityReport } from "../../../lib/scans/site-integrity-report";
+import { projectPublicFirstLayerConsentEvidence, projectDocumentMismatchFooterStatus } from "../../../lib/scans/public-first-layer-consent-evidence";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../../../lib/scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../../../lib/scans/choice-path-execution";
 import { consentControlReportLabels } from "../../../lib/scans/consent-control-report";
@@ -717,6 +718,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     californiaPrivacyReview,
     californiaFrictionlessGpcException: projectCaliforniaFrictionlessGpcException(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
     californiaPolicyChoiceMethods: projectCaliforniaPolicyChoiceMethods(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
+    optOutSurfaces: projectPublicFirstLayerConsentEvidence(retainedConsentAssessment(scanRecord), scanRecord.scan.id)?.optOutSurfaces ??
+      projectDocumentMismatchFooterStatus(retainedConsentAssessment(scanRecord),scanRecord.scan.id),
     californiaOptOutPresence: projectCaliforniaOptOutPresence(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
     californiaChoicePresence: projectCaliforniaChoicePresence(canonical.ownerUnifiedFindings, scanRecord.scan.id, californiaPrivacyReview?.documentUrl),
     californiaScore,

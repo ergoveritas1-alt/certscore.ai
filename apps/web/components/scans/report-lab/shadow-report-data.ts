@@ -149,6 +149,7 @@ export type GpcResponseReportProjection = {
 };
 
 export type ShadowReportData = {
+  optOutSurfaces?: import("../../../lib/scans/public-first-layer-consent-evidence").PublicOptOutSurfaces;
   californiaOptOutPresence?: import("../../../lib/scans/california-choice-presence").CaliforniaOptOutPresence;
   californiaFrictionlessGpcException?: import("../../../lib/scans/california-choice-presence").CaliforniaFrictionlessGpcException | null;
   californiaPolicyChoiceMethods?: import("../../../lib/scans/california-choice-presence").CaliforniaPolicyChoiceMethods | null;
