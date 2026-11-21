@@ -939,7 +939,9 @@ export const consentUiObservationSchema = z.object({
     }).optional(),
   }).superRefine((control, ctx) => {
     if (control.domBinding && (control.tagName !== control.domBinding.tagName ||
-        control.selectorHint !== `ax:${control.domBinding.axNodeId}` ||
+        control.selectorHint !== (control.domBinding.exactAcceptSelector ?? control.domBinding.exactRejectSelector ?? `ax:${control.domBinding.axNodeId}`) ||
+        (control.domBinding.exactAcceptSelector && control.actionType !== "accept_all") ||
+        (control.domBinding.exactRejectSelector && control.actionType !== "reject_all") ||
         Boolean(control.domBinding.optOutControl && control.domBinding.optOutControl.accessibleLabel !== control.label) ||
         control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface"))
       ctx.addIssue({code: z.ZodIssueCode.custom, message: "Native AX binding must match its exact observed control."});

@@ -1,3 +1,4 @@
+import { exactNativeConsentButtonSelector, exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled } from "./exact-native-consent-button-selector.js";
 import type { Frame, Page } from "playwright";
 import { AEM_LEGAL_FOOTER_LINK_SELECTOR } from "./consent-footer-opt-out.js";
 import {
@@ -156,6 +157,8 @@ export interface ConsentControlCandidateEvidence {
   standaloneSaleSharingAnchor?: StandaloneSaleSharingAnchor;
   initialOptOutSwitch?: InitialOptOutSwitch;
   selectorHint: string;
+  exactNativeAcceptSelectorVerified?: true;
+  exactNativeRejectSelectorVerified?: true;
   containerSelectorHint?: string;
   containerId?: string;
   layer: ConsentControlGeometryLayer;
@@ -294,6 +297,7 @@ interface RawGeometryCandidate {
   standaloneSaleSharingAnchor?: StandaloneSaleSharingAnchor;
   initialSwitchRow?: {label:string; bounds:ConsentControlRect};
   selectorHint: string;
+  exactNativeButtonSelector?: string;
   containerSelectorHint?: string;
   containerIndex?: number;
   layer: ConsentControlGeometryLayer;
@@ -388,6 +392,7 @@ function canonicalPhrasePattern(phrases: readonly string[]): RegExp {
 export async function captureConsentControlGeometry(
   page: Page,
   options: CaptureConsentControlGeometryOptions = {},
+  passive = false,
 ): Promise<ConsentControlGeometryArtifact> {
   const registrySelectors = KNOWN_CMP_REGISTRY.flatMap((entry) => entry.domSelectors ?? []);
   const frameInput = {
@@ -412,6 +417,12 @@ export async function captureConsentControlGeometry(
     nonFirstLayerSurfaceSelector: KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(","),
     aemFooterLinkSelector: AEM_LEGAL_FOOTER_LINK_SELECTOR,
   };
+  const exactRejectSelectorCapture = passive && exactRejectSelectorCaptureEnabled();
+  const exactAcceptSelectorCapture = passive && exactAcceptSelectorCaptureEnabled();
+  const exactSelectorCapture = exactAcceptSelectorCapture || exactRejectSelectorCapture;
+  const geometrySource = exactSelectorCapture
+    ? `(input) => { const __name = (fn) => fn; return (${collectConsentGeometryInPage.toString()})(input, (${exactNativeConsentButtonSelector.toString()})); }`
+    : undefined;
   const initialPageUrl = page.url();
   const mainFrame = page.mainFrame();
   const initialFrames = page.frames();
@@ -450,7 +461,9 @@ export async function captureConsentControlGeometry(
       // caller's timeout. Do not share its result with a later capture: the
       // control, document or action state may have changed in the meantime.
       const capture = Promise.resolve().then(() =>
-        frame.evaluate<RawGeometryCapture, typeof frameInput>(collectConsentGeometryInPage, frameInput)
+        geometrySource
+          ? frame.evaluate<RawGeometryCapture>(`(${geometrySource})(${JSON.stringify(frameInput)})`)
+          : frame.evaluate<RawGeometryCapture, typeof frameInput>(collectConsentGeometryInPage, frameInput)
       ).finally(() => {
         if (options.avoidOverlappingFrameReads) pendingActionGeometryReads.delete(frame);
       });
@@ -478,7 +491,7 @@ export async function captureConsentControlGeometry(
     ...container,
   }));
   const candidates = raw.candidates.map((candidate, index) =>
-    buildCandidateEvidence(candidate, index, expectedPageUrl, options.screenshotArtifactRef, containers)
+    buildCandidateEvidence(candidate, index, expectedPageUrl, options.screenshotArtifactRef, containers, exactAcceptSelectorCapture, exactRejectSelectorCapture)
   );
   // Keep both physical nodes. The repeated aria-labelledby ID in this panel cannot distinguish rows.
   for (const [i,candidate] of candidates.entries()) {
@@ -995,12 +1008,18 @@ function sanitizeSignalValue(source: KnownCmpSignal["source"], value: string): s
   return trimmed.slice(0, 240);
 }
 
+export function capturePassiveConsentControlGeometry(page: Page, options?: CaptureConsentControlGeometryOptions) {
+  return captureConsentControlGeometry(page,options,true);
+}
+
 function buildCandidateEvidence(
   candidate: RawGeometryCandidate,
   index: number,
   pageUrl: string,
   screenshotArtifactRef: string | undefined,
   containers: ConsentControlContainerEvidence[],
+  exactAcceptSelectorCapture: boolean,
+  exactRejectSelectorCapture: boolean,
 ): ConsentControlCandidateEvidence {
   const baseClassification = classifyCandidate(candidate);
   const classification: ConsentControlLabelClassification = candidate.layer === "first_layer" &&
@@ -1021,6 +1040,13 @@ function buildCandidateEvidence(
   const diagnosticClassifications = diagnosticClassificationsForCandidate(candidate);
   const reasons = bannerWrapper ? ["one_trust_consent_banner_wrapper"] : [];
   const decisionStatus = decisionStatusForCandidate(candidate, actionType, classification, reasons);
+  const namedRejectRouting = actionType === "reject_all" && decisionStatus === "confirmed_visible" &&
+    candidate.namedRejectRouting && KNOWN_CMP_REGISTRY.some(entry =>
+      entry.canonicalName === candidate.namedRejectRouting!.provider &&
+      entry.rejectLabelBoundNecessaryOnly?.expectedNormalizedLabels.includes(normalizeLabel(candidate.label)))
+    ? candidate.namedRejectRouting : undefined;
+  const retainExactSelector = actionType === "accept_all" && exactAcceptSelectorCapture ||
+    actionType === "reject_all" && !classification.variant && !namedRejectRouting && exactRejectSelectorCapture;
   const settingsSentence = (actionType === "do_not_sell_share" || actionType === "manage_preferences" &&
     namesNoticeBoundPrivacyRightsButton(candidate.label, candidate.ariaLabel)) && decisionStatus === "confirmed_visible" &&
     candidate.layer === "first_layer" && candidate.frameUrl === pageUrl && candidate.captureFrameSlot === 0
@@ -1043,12 +1069,13 @@ function buildCandidateEvidence(
     ...(settingsSentence ? {settingsEntranceNotice: {version: "onetrust.same_banner_notice.v1" as const,
       bannerSelector: "#onetrust-banner-sdk" as const, noticeSelector: "#onetrust-policy-text" as const,
       sentence: settingsSentence}} : {}),
-    ...(actionType === "reject_all" && decisionStatus === "confirmed_visible" &&
-      candidate.namedRejectRouting && KNOWN_CMP_REGISTRY.some(entry =>
-        entry.canonicalName === candidate.namedRejectRouting!.provider &&
-        entry.rejectLabelBoundNecessaryOnly?.expectedNormalizedLabels.includes(normalizeLabel(candidate.label)))
-      ? { namedRejectRouting: candidate.namedRejectRouting } : {}),
-    selectorHint: candidate.selectorHint,
+    ...(namedRejectRouting ? { namedRejectRouting } : {}),
+    selectorHint: retainExactSelector && candidate.exactNativeButtonSelector
+      ? candidate.exactNativeButtonSelector : candidate.selectorHint,
+    ...(actionType === "accept_all" && retainExactSelector && candidate.exactNativeButtonSelector
+      ? { exactNativeAcceptSelectorVerified: true as const } : {}),
+    ...(actionType === "reject_all" && retainExactSelector && candidate.exactNativeButtonSelector
+      ? { exactNativeRejectSelectorVerified: true as const } : {}),
     containerSelectorHint: candidate.containerSelectorHint,
     containerId: typeof candidate.containerIndex === "number" ? containers[candidate.containerIndex]?.containerId : undefined,
     layer: candidate.layer,
@@ -1464,7 +1491,7 @@ function collectConsentGeometryInPage(input: {
   nonFirstLayerSurfaceSelector: string;
   aemFooterLinkSelector: string;
   nonVisitorSurfaces: readonly { origin: string; selector: string }[];
-}): RawGeometryCapture {
+}, selectExactButton?: typeof exactNativeConsentButtonSelector): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
   globalWithNameHelper.__name ??= function(target) {
     return target;
@@ -1852,6 +1879,7 @@ function collectConsentGeometryInPage(input: {
           policyVersion: recipe.policyVersion, bannerSelector: recipe.bannerSelector, controlSelector: recipe.controlSelector };
       })(),
       selectorHint: selectorHintFor(element),
+      exactNativeButtonSelector: selectExactButton?.(element),
       containerSelectorHint: container?.evidence.selectorHint,
       containerIndex,
       layer: standalone ? "first_layer" : aemFooterLink ? "footer" : container?.evidence.layer ?? layerFor(element, box),

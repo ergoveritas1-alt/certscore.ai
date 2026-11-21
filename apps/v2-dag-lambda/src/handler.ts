@@ -1,3 +1,5 @@
+import type { AcceptFirstLayerGeometrySource } from "@certscore/scan-core/accept-first-layer-gate";
+import { buildProductionConsentGateShadow, evaluateConsentGateShadow, type ProductionConsentGateShadowFields } from "./consent-gate-production-shadow.js";
 import type { PostRefusalObserverInput } from "@certscore/scan-core/post-refusal-observer";
 import { retainRuntimeCmsMetadataSnapshot } from "@certscore/contracts";
 import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
@@ -981,6 +983,18 @@ function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
     value === "accept_observation";
 }
 
+function productionConsentGateShadowEnabled(payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject") {
+  if (payload.targetEnvironment !== "production" ||
+      isLoopbackPostRefusalTarget(payload.targetUrl) ||
+      classifyV2DagLambdaResultDisposition(payload).kind !== "persisted_scan") return false;
+  const observation = action === "accept" ? payload.postAcceptObservation : payload.postRefusalObservation;
+  const authorization = observation?.interactionAuthorization;
+  return observation?.enabled === true && observation.rolloutMode === "all_eligible" &&
+    process.env[action === "accept" ? "CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW" : "CERTSCORE_REJECT_GATE_PRODUCTION_SHADOW"] === "1" &&
+    (authorization?.kind === "scan_target" || authorization?.kind === "scan_target_resolution") &&
+    authorization.scanId === payload.scanId;
+}
+
 export function isPostAcceptWorkerEnabled(
   payload: Pick<LocalV2DagLambdaDispatchPayload, "postAcceptObservation">,
   environment: NodeJS.ProcessEnv = process.env,
@@ -1513,6 +1527,7 @@ async function runLocalV2DagLambdaScanBundle(
 }
 
 export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
+  consentGateShadow?: ProductionConsentGateShadowFields;
   conditionalOptOutDecision?: ConditionalOptOutDecision;
   executedSaleSharingOptOut?: SaleSharingOptOutDispatch;
   artifactRoot: string;
@@ -1601,6 +1616,7 @@ export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     ...(screenshotSafetyReviewCoordinator.diagnostics().reviews.length ? {
       screenshotSafetyReview: screenshotSafetyReviewCoordinator.diagnostics(),
     } : {}),
+    consentGateShadow: input.consentGateShadow,
     payload,
     phaseTimings,
     pointers,
@@ -2884,11 +2900,42 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         });
       });
   }
+  const shadowChannels = {
+    accept: isPostAcceptWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "accept"),
+    reject: isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "reject"),
+  };
+  let shadowConsentResult: LocalV2DagLambdaShardResult | undefined;
+  let earlyConsentMirror: ReturnType<typeof mirrorWorkerArtifactsIntoFinalArtifactRoot> | undefined;
+  let shadowPassive: ReturnType<typeof evaluateConsentGateShadow> | undefined;
+  const considerConsentShadow = (result: LocalV2DagLambdaShardResult) => {
+    if (!(shadowChannels.accept || shadowChannels.reject) || shadowConsentResult ||
+        result.workerLane !== "consent_proof" || result.status !== "completed" ||
+        result.scanId !== payload.scanId || options.signal?.aborted) return;
+    const parentDispatchSha256 = postRefusalParentDispatchSha256(payload);
+    const sourceSha256 = result.artifactMetadata?.scanArtifactUri?.sha256;
+    if (result.parentDispatchSha256 !== parentDispatchSha256 || !sourceSha256) return;
+    shadowConsentResult = result;
+    const read = earlyConsentReads.get(result) ?? readLocalV2DagLambdaWorkerBundle(result, {
+      awsRegion:payload.awsRegion, s3GetClient:options.s3GetClient,
+    });
+    earlyConsentReads.set(result, read);
+    earlyConsentMirror = mirrorWorkerArtifactsIntoFinalArtifactRoot({
+      artifactRoot, awsRegion:payload.awsRegion, s3GetClient:options.s3GetClient,
+      workerResults:[result], shadowGeometry:{result,targetUrl:payload.targetUrl},
+    });
+    void Promise.all([read, earlyConsentMirror]).then(([bundle, geometry]) => {
+      if (bundle && !options.signal?.aborted) shadowPassive = evaluateConsentGateShadow({
+        channels:shadowChannels, bundle, scanId:payload.scanId, targetUrl:payload.targetUrl,
+        sourceSha256, parentDispatchSha256, nowMs:Date.now(), deadlineAtMs:options.deadlineAtMs ?? Infinity, geometry,
+      });
+    }).catch(() => { /* Existing coordinator joins handle artifact failures. */ });
+  };
   const workerResults = await timeLambdaPhase(phaseTimings, "worker_invocations", () =>
     invokeLocalV2DagLambdaWorkers({
       lambdaClient: options.lambdaClient,
       onWorkerResult: (result) => {
         considerConditionalOptOut(result);
+        considerConsentShadow(result);
         if (
           result.workerLane !== "consent_proof" ||
           !result.consentRejectAvailability
@@ -2994,14 +3041,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   // with typed bundle verification/merge, then join before the single final
   // artifact publication. This removes copy latency from the serial critical
   // path without omitting or weakening retained evidence.
-  const workerAuxiliaryMirrorOutcomePromise = timeLambdaPhase(phaseTimings, "worker_auxiliary_mirror", () =>
-    mirrorWorkerArtifactsIntoFinalArtifactRoot({
-      artifactRoot,
-      awsRegion: payload.awsRegion,
-      s3GetClient: options.s3GetClient,
-      workerResults
-    })
-  ).then(
+  const workerAuxiliaryMirrorOutcomePromise = timeLambdaPhase(phaseTimings, "worker_auxiliary_mirror", async () => {
+    await Promise.all([earlyConsentMirror, mirrorWorkerArtifactsIntoFinalArtifactRoot({
+      artifactRoot, awsRegion:payload.awsRegion, s3GetClient:options.s3GetClient,
+      workerResults:workerResults.filter(result => result !== shadowConsentResult),
+    })]);
+  }).then(
     () => ({ status: "fulfilled" as const }),
     (error: unknown) => ({ error, status: "rejected" as const }),
   );
@@ -3437,7 +3482,23 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     }))
   });
 
+  const shadow = shadowChannels.accept || shadowChannels.reject ? buildProductionConsentGateShadow({
+    scanId:payload.scanId, channels:shadowChannels, passive:shadowPassive, nowMs:Date.now(),
+    accept:{
+      dispatchAtMs:postAcceptState.dispatchStartedAtMs, completedAtMs:postAcceptState.outcomeObservedAtMs,
+      deadlineAtMs:Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + postAcceptMaxTailWaitMs),
+      packet:joinedPostAcceptPacket,
+    },
+    reject:{
+      dispatchAtMs:postRefusalState.dispatchStartedAtMs, completedAtMs:postRefusalState.outcomeObservedAtMs,
+      deadlineAtMs:Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS),
+      packet:joinedPostRefusalPacket,
+    },
+  }) : undefined;
   const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({
+    ...(shadow ? { consentGateShadow: {
+      acceptGateShadowReceipt:shadow.acceptGateShadowReceipt, rejectGateShadowReceipt:shadow.rejectGateShadowReceipt,
+    } } : {}),
     conditionalOptOutDecision,
     ...(optOutOutcome?{executedSaleSharingOptOut:optOutDispatchPayload.saleSharingOptOut}:{}),
     artifactRoot,
@@ -3455,6 +3516,11 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     scanTuning,
     signal: options.artifactSignal ?? options.signal,
   });
+  if (shadow) console.info(JSON.stringify({
+    event:"consent_gate_shadow.v1", scanId:payload.scanId, region:payload.awsRegion, buildGitSha:process.env.BUILD_GIT_SHA,
+    ...shadow.baseline, manifestUri:artifacts.artifactPointers.manifestUri,
+    manifestSha256:artifacts.artifactMetadata.manifestUri?.sha256,
+  }));
   let artifactsWithLaneTimings = { ...artifacts, laneTimingSummary };
   if (postRefusalJoin === "joined" && postRefusalState.result) {
     artifactsWithLaneTimings = attachJoinedPostRefusalArtifactPointer(artifactsWithLaneTimings, postRefusalState.result);
@@ -3718,7 +3784,9 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const { gpcObservation: parentGpcObservation, ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
     ...parentPayloadWithoutGpcObservation,
-    ...(["cmp_preferences", "sale_sharing_opt_out", "policy_evidence", "runtime_evidence"].includes(workerLane) ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
+    ...(["cmp_preferences", "sale_sharing_opt_out", "policy_evidence", "runtime_evidence"].includes(workerLane) ||
+      (workerLane === "consent_proof" && (productionConsentGateShadowEnabled(input.parentPayload, "accept") ||
+        productionConsentGateShadowEnabled(input.parentPayload, "reject"))) ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
     callbackCorrelationId: input.parentScanId,
     ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
     ...(workerLane === "reject_observation" && input.parentPayload.postRefusalObservation
@@ -4503,8 +4571,10 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
   awsRegion?: LocalV2DagLambdaAwsRegion;
   s3GetClient?: S3GetClient;
   workerResults: LocalV2DagLambdaShardResult[];
-}) {
+  shadowGeometry?: { result: LocalV2DagLambdaShardResult; targetUrl: string };
+}): Promise<AcceptFirstLayerGeometrySource | undefined> {
   const s3Client = input.s3GetClient ?? localV2DagLambdaS3Client(input.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION);
+  let geometry: AcceptFirstLayerGeometrySource | undefined;
   await Promise.all(input.workerResults.map(async (result) => {
     if (result.workerLane === "gpc_observation" && result.status === "failed") return;
     try {
@@ -4517,6 +4587,20 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
       await writeFile(path.join(input.artifactRoot, manifestFileName), manifestBody);
       const manifest = asRecord(JSON.parse(manifestBody.toString("utf8")));
       const auxiliaryArtifacts = Array.isArray(manifest.auxiliaryArtifacts) ? manifest.auxiliaryArtifacts : [];
+      const geometryName = "ConsentControlGeometryEvidence.json";
+      const manifestMetadata = result.artifactMetadata?.manifestUri;
+      const scanUri = result.artifactPointers?.scanArtifactUri;
+      const manifestDirectory = manifestUri.endsWith("/LocalV2DagLambdaManifest.json")
+        ? manifestUri.slice(0, -"/LocalV2DagLambdaManifest.json".length) : undefined;
+      const verifiedConsentManifest = result === input.shadowGeometry?.result &&
+        result.workerLane === "consent_proof" && manifestDirectory?.endsWith(`/${result.scanId}/lanes/consent_proof`) &&
+        scanUri === `${manifestDirectory}/CanonicalEvidenceBundle.json` &&
+        manifestMetadata?.sizeBytes === manifestBody.byteLength &&
+        manifestMetadata.sha256 === createHash("sha256").update(manifestBody).digest("hex") &&
+        manifest.contractVersion === "certscore.v2.lambda-dag-artifact-manifest.v1" &&
+        manifest.scanId === result.scanId && manifest.targetUrl === input.shadowGeometry.targetUrl &&
+        asRecord(manifest.pointers).scanArtifactUri === scanUri &&
+        auxiliaryArtifacts.filter(value => asRecord(value).fileName === geometryName).length === 1;
       await Promise.all(auxiliaryArtifacts.flatMap((value) => {
         const artifact = asRecord(value);
         const fileName = compactString(artifact.fileName);
@@ -4535,6 +4619,10 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
           if (expectedSizeBytes !== null && expectedSizeBytes !== body.byteLength) {
             throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact size mismatch for ${fileName}.`);
           }
+          if (verifiedConsentManifest && fileName === geometryName && uri === `${manifestDirectory}/auxiliary/${geometryName}` &&
+            expectedSha256 === sha256 && expectedSizeBytes === body.byteLength) {
+            geometry = { bytes: body, sha256, sizeBytes: expectedSizeBytes };
+          }
           const workerFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-${fileName}`);
           await writeFile(path.join(input.artifactRoot, workerFileName), body);
           if (shouldPromoteEvidenceLaneArtifact(result.workerLane, fileName)) {
@@ -4548,6 +4636,7 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
       result.failureReason = "gpc_artifact_unverifiable";
     }
   }));
+  return geometry;
 }
 
 function shouldPromoteEvidenceLaneArtifact(
@@ -5743,6 +5832,7 @@ export async function uploadArtifactFiles(input: {
 }
 
 async function writeManifest(input: {
+  consentGateShadow?: ProductionConsentGateShadowFields;
   conditionalOptOutDecision?: ConditionalOptOutDecision;
   executedSaleSharingOptOut?: SaleSharingOptOutDispatch;
   artifactRoot: string;
@@ -5759,6 +5849,7 @@ async function writeManifest(input: {
   const manifestPath = path.join(input.artifactRoot, "LocalV2DagLambdaManifest.json");
   await writeFile(manifestPath, `${JSON.stringify({
     artifactOnly: true,
+    ...input.consentGateShadow,
     ...(input.conditionalOptOutDecision ? {conditionalOptOutDecision:input.conditionalOptOutDecision} : {}),
     ...(input.executedSaleSharingOptOut?{executedSaleSharingOptOut:input.executedSaleSharingOptOut}:{}),
     ...(input.artifactMetadata ? { artifactMetadata: input.artifactMetadata } : {}),

@@ -1,3 +1,4 @@
+import { exactNativeConsentButtonSelector, exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled } from "../exact-native-consent-button-selector.js";
 import { browserPolicyLinkSchema, ENSIGHTEN_FOOTER_REVEAL_MAX_MS, ONETRUST_CUSTOM_FOOTER_REVEAL_MAX_MS, type BrowserPolicyLink } from "@certscore/contracts";
 import { createGpcNavigationRecovery } from "../gpc-navigation-recovery";
 import { consentGeometryCheckpoint } from "../consent-geometry-checkpoint.js";
@@ -114,7 +115,7 @@ import { captureDocumentBoundValue, sameDocumentCaptureBinding, type DocumentBou
 import { retainCommittedConsentHttpStatus, type CommittedConsentResponse } from "../consent-committed-response.js";
 import { connectTlsThroughConfiguredProxy, proxyFetch } from "../proxy-fetch.js";
 import {
-  captureConsentControlGeometry,
+  capturePassiveConsentControlGeometry as captureConsentControlGeometry,
   type ConsentControlGeometryArtifact,
 } from "../consent-control-geometry.js";
 import {
@@ -8802,6 +8803,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       linkHref?: string;
       role?: string;
       selectorHint: string;
+      exactNativeButtonSelector?: string;
       tagName: string;
       semanticallyInteractive?: boolean;
       visible: true;
@@ -8828,6 +8830,9 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   onStage("main_inventory");
   // One self-contained browser call avoids installation/probe round trips and stale page globals.
   const inventorySource = String.raw`(input) => {
+    const __name = (fn) => fn;
+    const exactNativeButtonSelector = ${exactAcceptSelectorCaptureEnabled() || exactRejectSelectorCaptureEnabled()
+      ? exactNativeConsentButtonSelector.toString() : "undefined"};
     const isNonVisitorSurface = ${isNonVisitorConsentSurface.toString()};
     const nonVisitorSurfaces = ${JSON.stringify(CONSENT_NON_VISITOR_SURFACES)};
     const normalize = (value) => (value ?? "").replace(/\s+/g, " ").trim();
@@ -9038,6 +9043,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
         label,
         role: element.getAttribute("role") || undefined,
         selectorHint: selectorHintFor(element),
+        exactNativeButtonSelector: exactNativeButtonSelector?.(element),
         tagName: element.tagName.toLowerCase(),
         semanticallyInteractive: element.matches(semanticControlSelector) || element.hasAttribute("onclick") ||
           element.hasAttribute("tabindex") && Number(element.getAttribute("tabindex")) >= 0,
@@ -9159,9 +9165,13 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
         (actionType === "manage_preferences" || actionType === "save_preferences")
       )
     ) return [];
-    const { cmpScoped: _cmpScoped, scopeText: _scopeText, scopeKind: _scopeKind, contextText: _contextText, ...retainedControl } = control;
+    const { cmpScoped: _cmpScoped, scopeText: _scopeText, scopeKind: _scopeKind, contextText: _contextText,
+      exactNativeButtonSelector: exactSelector, ...retainedControl } = control;
+    const retainExactSelector = actionType === "accept_all" && exactAcceptSelectorCaptureEnabled() ||
+      actionType === "reject_all" && !classification.variant && exactRejectSelectorCaptureEnabled();
     return [{
       ...retainedControl,
+      ...(retainExactSelector && exactSelector ? { selectorHint: exactSelector } : {}),
       actionType,
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
@@ -10599,15 +10609,23 @@ export function consentControlsFromAccessibilityTree(
     if (contextText && textExcerpts.length < 4 && !textExcerpts.includes(contextText)) {
       textExcerpts.push(contextText.slice(0, 2_000));
     }
+    let domBinding = node.domBinding;
+    if ((domBinding?.exactAcceptSelector || domBinding?.exactRejectSelector) &&
+        (domBinding.documentUrl !== documentUrl || node.visibilityEvidence !== "box_model_verified" ||
+          (domBinding.exactAcceptSelector && classification.intent !== "accept") ||
+          (domBinding.exactRejectSelector && (classification.intent !== "reject" || classification.variant)))) {
+      const { exactAcceptSelector: _acceptSelector, exactRejectSelector: _rejectSelector, ...legacyBinding } = domBinding;
+      domBinding = { ...legacyBinding, version: "ax_backend_dom_binding.v1" };
+    }
     controls.push({
       actionType: "other",
       linkDestination,
       classifierReasonCodes: classification.reasonCodes,
       label,
       role,
-      selectorHint: `ax:${node.nodeId}`,
-      tagName: node.domBinding?.tagName ?? "ax-node",
-      domBinding: node.domBinding,
+      selectorHint: domBinding?.exactAcceptSelector ?? domBinding?.exactRejectSelector ?? `ax:${node.nodeId}`,
+      tagName: domBinding?.tagName ?? "ax-node",
+      domBinding,
       visible: node.visibilityEvidence === "box_model_verified",
       visibilityEvidence: node.visibilityEvidence ?? "unverified",
       consentContextEvidence: "local_surface",
@@ -11875,20 +11893,28 @@ function mergeConsentInventoryDiagnostics(
 function uniqueConsentObservationControls(
   controls: ConsentUiObservation["controls"],
 ): ConsentUiObservation["controls"] {
-  const seen = new Set<string>();
-  const uniqueControls: ConsentUiObservation["controls"] = [];
+  const uniqueControls = new Map<string, ConsentUiObservation["controls"][number]>();
   for (const control of controls) {
-    const key = [
-      control.actionType,
-      control.label.trim().toLowerCase(),
-    ].join("|");
-    if (seen.has(key)) {
+    const key = [control.actionType, control.label.trim().toLowerCase()].join("|");
+    const retained = uniqueControls.get(key);
+    if (!retained) {
+      uniqueControls.set(key, control);
       continue;
     }
-    seen.add(key);
-    uniqueControls.push(control);
+    const prior = retained.domBinding;
+    const current = control.domBinding;
+    // Keep a later exact selector only when CDP still identifies the same node
+    // under the same document loader. Label-only matches cannot upgrade proof.
+    if (control.visible && current?.version === "ax_backend_dom_binding.v3" &&
+        prior?.version === "ax_backend_dom_binding.v1" &&
+        prior.backendNodeId === current.backendNodeId && prior.axNodeId === current.axNodeId &&
+        prior.documentUrl === current.documentUrl && prior.tagName === current.tagName &&
+        prior.documentIdentity.token === current.documentIdentity.token &&
+        prior.documentIdentity.source === current.documentIdentity.source) {
+      uniqueControls.set(key, {...retained, selectorHint:control.selectorHint, domBinding:current});
+    }
   }
-  return uniqueControls.slice(0, 24);
+  return [...uniqueControls.values()].slice(0, 24);
 }
 
 function annotateConsentUiObservation(
