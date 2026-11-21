@@ -1,0 +1,138 @@
+{
+  "method": "Offline reporting replay using the hash-verified public export for each scan. Reconstructed reporting inputs from the retained visible rows and inspection states. Baseline labels, types and order matched the original exports. No browser session or consent action was executed.",
+  "cases": [
+    {
+      "domain": "hetzner.de",
+      "scanId": "593c34f9-9ee6-47c3-981a-1900ff2dcddd",
+      "source": "artifacts/daily-scan-audit/runs/20261120T153813Z-scheduled-v10/cache/evidence/593c34f9-9ee6-47c3-981a-1900ff2dcddd.json",
+      "sha256": "1ba04810a1e532c3c62f6c013f917be9ff3b78dbdf807acded75fa4d66a28117",
+      "before": [
+        [
+          "Alle Cookies erlauben",
+          "accept_all"
+        ],
+        [
+          "Notwendige Cookies erlauben",
+          "accept_all"
+        ],
+        [
+          "Alle Cookies erlauben",
+          "accept_all"
+        ],
+        [
+          "Notwendige Cookies erlauben",
+          "accept_all"
+        ]
+      ],
+      "after": [
+        [
+          "Alle Cookies erlauben",
+          "accept_all"
+        ],
+        [
+          "Notwendige Cookies erlauben",
+          "reject_all"
+        ],
+        [
+          "Alle Cookies erlauben",
+          "accept_all"
+        ],
+        [
+          "Notwendige Cookies erlauben",
+          "reject_all"
+        ]
+      ],
+      "rejectObservedBefore": false,
+      "rejectObservedAfter": true,
+      "acceptObservedBefore": true,
+      "acceptObservedAfter": true,
+      "actionModeComparisons": 2,
+      "actionModeDifferences": 0
+    },
+    {
+      "domain": "unibo.it",
+      "scanId": "d9af96c9-1dde-4497-ac5d-f5d93fa25040",
+      "source": "artifacts/daily-scan-audit/runs/20261120T153813Z-scheduled-v10/cache/evidence/d9af96c9-1dde-4497-ac5d-f5d93fa25040.json",
+      "sha256": "341ef9b8d30584db908240244b13169e5fafb81f2ad6497ab073b314e78d70ab",
+      "before": [
+        [
+          "SOLO COOKIE NECESSARI",
+          "reject_all"
+        ],
+        [
+          "PERSONALIZZA COOKIE",
+          "manage_preferences"
+        ],
+        [
+          "ACCETTA TUTTI I COOKIE",
+          "accept_all"
+        ],
+        [
+          "Accetta i cookie necessari e chiudi",
+          "accept_all"
+        ],
+        [
+          "SOLO COOKIE NECESSARI",
+          "reject_all"
+        ],
+        [
+          "PERSONALIZZA COOKIE",
+          "manage_preferences"
+        ],
+        [
+          "ACCETTA TUTTI I COOKIE",
+          "accept_all"
+        ],
+        [
+          "Accetta i cookie necessari e chiudi",
+          "accept_all"
+        ]
+      ],
+      "after": [
+        [
+          "SOLO COOKIE NECESSARI",
+          "reject_all"
+        ],
+        [
+          "PERSONALIZZA COOKIE",
+          "manage_preferences"
+        ],
+        [
+          "ACCETTA TUTTI I COOKIE",
+          "accept_all"
+        ],
+        [
+          "Accetta i cookie necessari e chiudi",
+          "reject_all"
+        ],
+        [
+          "SOLO COOKIE NECESSARI",
+          "reject_all"
+        ],
+        [
+          "PERSONALIZZA COOKIE",
+          "manage_preferences"
+        ],
+        [
+          "ACCETTA TUTTI I COOKIE",
+          "accept_all"
+        ],
+        [
+          "Accetta i cookie necessari e chiudi",
+          "reject_all"
+        ]
+      ],
+      "rejectObservedBefore": true,
+      "rejectObservedAfter": true,
+      "acceptObservedBefore": true,
+      "acceptObservedAfter": true,
+      "actionModeComparisons": 4,
+      "actionModeDifferences": 0
+    }
+  ],
+  "tests": {
+    "reportingAndScorePassed": 154,
+    "consentLabelClassifierPassed": 84,
+    "focusedTypecheck": "passed"
+  }
+}

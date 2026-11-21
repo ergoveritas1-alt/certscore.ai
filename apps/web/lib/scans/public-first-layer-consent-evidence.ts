@@ -61,6 +61,10 @@ export function projectDocumentMismatchFooterStatus(value: unknown, expectedScan
     sameVisitFooter:{coverage:"unavailable",otherControls:[]},sameVisitFooterCapture:{reason:"document_mismatch"}};
 }
 
+// The public inventory groups necessary-only choices with refusal of optional cookies.
+// Keep this interpretation at the report boundary, outside action and scoring policy.
+const necessaryOnlyLabels = new Set(["notwendige cookies erlauben", "accetta i cookie necessari e chiudi"]);
+
 /** Public evidence preserves canonical unknowns and control-specific inspection;
  * the binary customer summary and checklist verdicts are different projections. */
 export function projectPublicFirstLayerConsentEvidence(value: unknown, expectedScanId: string) {
@@ -70,12 +74,23 @@ export function projectPublicFirstLayerConsentEvidence(value: unknown, expectedS
   if (!expectedScanId || a.scan.scanId !== expectedScanId || a.scan.noGo ||
       a.document.identityStatus !== "matched") return null;
   const keys = ["accept", "reject", "options"] as const;
-  const state = (key: typeof keys[number] | "privacyOptOut") => a.controls[key].layer !== "first_layer" ? null :
+  const retainedState = (key: typeof keys[number] | "privacyOptOut") => a.controls[key].layer !== "first_layer" ? null :
     a.controls[key].state === "observed" ? true :
     hasVerifiedConsentControlAbsence(a, key) ? false : null;
-  const controls = a.evidence.filter(e => e.layer === "first_layer" && e.visible && e.actionable && e.label &&
-    ["accept", "reject", "options", "privacy_opt_out"].includes(e.intent) && !e.controlVariant)
-    .slice(0, 12).map(e => ({
+  const firstLayer = a.evidence.filter(e => e.layer === "first_layer" && e.visible && e.actionable && e.label &&
+    ["accept", "reject", "options", "privacy_opt_out"].includes(e.intent) && !e.controlVariant);
+  const necessaryOnly = firstLayer.filter(e => e.intent === "accept" && e.label &&
+    e.documentId && e.documentId === a.document.canonicalDocumentId &&
+    (!e.documentToken || !a.document.canonicalDocumentToken || e.documentToken === a.document.canonicalDocumentToken) &&
+    necessaryOnlyLabels.has(e.label.trim().toLowerCase().replace(/\s+/g, " ")));
+  const reported = firstLayer.map(e => necessaryOnly.includes(e) ? { ...e, intent: "reject" as const } : e);
+  const acceptStillObserved = reported.some(e => e.intent === "accept");
+  const state = (key: typeof keys[number] | "privacyOptOut") => {
+    if (necessaryOnly.length && key === "reject") return true;
+    if (necessaryOnly.length && key === "accept" && !acceptStillObserved && retainedState(key) === true) return null;
+    return retainedState(key);
+  };
+  const controls = reported.slice(0, 12).map(e => ({
       label: e.label,
       actionType: e.intent === "accept" ? "accept_all" : e.intent === "reject" ? "reject_all" :
         e.intent === "options" ? "manage_preferences" : "do_not_sell_share",
@@ -106,12 +121,24 @@ export function projectPublicFirstLayerConsentEvidence(value: unknown, expectedS
         Boolean(a.controls[key].inspection?.evidenceRefs.length) :
         a.assessmentStatus === "complete" && a.coverage.status === "complete"
     )),
-    controlInspection: Object.fromEntries([...keys, "privacyOptOut" as const].map(key => [key, {
-      state: state(key) === null ? "unknown" : state(key) ? "observed" : "not_observed",
-      status: a.controls[key].inspection?.status ?? "unavailable",
-      reasonCodes: a.controls[key].reasonCodes.slice(0, 16),
-      evidenceRefs: a.controls[key].inspection?.evidenceRefs.slice(0, 12) ?? [],
-    }])),
+    controlInspection: Object.fromEntries([...keys, "privacyOptOut" as const].map(key => {
+      const observed = state(key);
+      const result = a.controls[key];
+      let reasonCodes = result.reasonCodes;
+      let evidenceRefs = result.inspection?.evidenceRefs ?? [];
+      if (observed !== retainedState(key)) {
+        reasonCodes = ["variant_necessary_only", ...reasonCodes.filter(code =>
+          code !== "complete_first_layer_inventory_without_control" && code !== "same_document_first_layer_control_observed")];
+        if (observed) reasonCodes.unshift("same_document_first_layer_control_observed");
+        evidenceRefs = [...new Set([...necessaryOnly.map(e => e.evidenceId), ...evidenceRefs])];
+      }
+      return [key, {
+        state: observed === null ? "unknown" : observed ? "observed" : "not_observed",
+        status: result.inspection?.status ?? "unavailable",
+        reasonCodes: reasonCodes.slice(0, 16),
+        evidenceRefs: evidenceRefs.slice(0, 12),
+      }] as const;
+    })),
     controls,
     acceptLabels: controls.filter(c => c.actionType === "accept_all").map(c => c.label),
     rejectLabels: controls.filter(c => c.actionType === "reject_all").map(c => c.label),
