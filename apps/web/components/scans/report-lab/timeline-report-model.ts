@@ -518,7 +518,6 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const capturedAt = formatTimestamp(scanRecord.scan.completedAt ?? scanRecord.scan.createdAt);
   const evidenceRows = reportableChecklistRows.map((item) => mapChecklistRow(item, capturedAt));
   const consentControlSummary = canonical.consentControlSummary ?? null;
-  const controls = consentControlReportLabels(consentControlSummary);
   const findings = projectReportPriorityFindings(reportableChecklistRows, canonical.ownerUnifiedFindings);
   const { projection: inventoryProjection, resources: resourceInventory, inventorySummary } = projectReportRuntimeInventory(scanRecord, reviewedPolicies);
   const inventory = inventoryProjection.ungroupedRows.map((row) => ({
@@ -598,6 +597,27 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     : gpcObservationEnabled
       ? "unavailable" as const
       : "not_requested" as const;
+  // Reconcile presentation counts from the same canonical checklist rows used
+  // by this report. This keeps retained reports aligned when the versioned
+  // reportable-row policy changes after their persisted presentation summary.
+  const summaryCounts = summarizeEvidenceRows(evidenceRows);
+  const canonicalScore = deriveCanonicalOverallScoreForReport({ scanRecord: scanRecord,
+    checklistRows,
+    unifiedFindings: canonical.ownerUnifiedFindings,
+  });
+  const assessedScore = recordNumber(snapshot, ["certscore_overall"]) ?? canonicalScore;
+  const score = Math.max(0, Math.min(100, assessedScore ?? 0));
+  const forms = canonical.collectionSurfaceAssessment?.forms ?? [];
+  const formInventory = projectReportFormInventory(scanRecord, canonical);
+  const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
+  const scoreExplanation = projectScanScoreExplanation(scanRecord, score);
+  const californiaPrivacyReview = readCaliforniaPrivacyReviewFromConsent(retainedConsentAssessment(scanRecord));
+  const californiaScore = deriveCaliforniaRegulatoryScore({ assessment: californiaPrivacyReview,
+    checklistRows, unifiedFindings: canonical.ownerUnifiedFindings });
+  const cmpAudit = projectCmpAudit({ scanId: scanRecord.scan.id, normalizedConcerns: canonical.normalizedConcerns,
+    consentControlAssessment: retainedConsentAssessment(scanRecord), checklistRows: reportableChecklistRows,
+    unifiedFindings: canonical.ownerUnifiedFindings, scoreExplanation, consentVendor });
+  const controls = consentControlReportLabels(cmpAudit.experience?.controls ? { controls: cmpAudit.experience.controls } : consentControlSummary);
   const timeline: ShadowReportData["timeline"] = [
     { at: "0 s", atMs: 0, detail: "Public page observation began", label: "Scan start", tone: "neutral" },
     ...buildExecutiveTimelineEvents(scanRecord.runtimeArtifacts, reportableChecklistRows).map((event) => ({
@@ -620,26 +640,6 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   });
   timeline.sort((left, right) => left.atMs - right.atMs);
 
-  // Reconcile presentation counts from the same canonical checklist rows used
-  // by this report. This keeps retained reports aligned when the versioned
-  // reportable-row policy changes after their persisted presentation summary.
-  const summaryCounts = summarizeEvidenceRows(evidenceRows);
-  const canonicalScore = deriveCanonicalOverallScoreForReport({ scanRecord: scanRecord,
-    checklistRows,
-    unifiedFindings: canonical.ownerUnifiedFindings,
-  });
-  const assessedScore = recordNumber(snapshot, ["certscore_overall"]) ?? canonicalScore;
-  const score = Math.max(0, Math.min(100, assessedScore ?? 0));
-  const forms = canonical.collectionSurfaceAssessment?.forms ?? [];
-  const formInventory = projectReportFormInventory(scanRecord, canonical);
-  const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
-  const scoreExplanation = projectScanScoreExplanation(scanRecord, score);
-  const californiaPrivacyReview = readCaliforniaPrivacyReviewFromConsent(retainedConsentAssessment(scanRecord));
-  const californiaScore = deriveCaliforniaRegulatoryScore({ assessment: californiaPrivacyReview,
-    checklistRows, unifiedFindings: canonical.ownerUnifiedFindings });
-  const cmpAudit = projectCmpAudit({ scanId: scanRecord.scan.id, normalizedConcerns: canonical.normalizedConcerns,
-    consentControlAssessment: retainedConsentAssessment(scanRecord), checklistRows: reportableChecklistRows,
-    unifiedFindings: canonical.ownerUnifiedFindings, scoreExplanation, consentVendor });
   const rejectActivityCaptured = cmpAudit.version === "cmp_audit_report.v3" &&
     cmpAudit.rows.find(row => row.id === "implementation")?.supportingEvidence?.inventory?.choiceActivity?.some(activity => activity.action === "reject");
   const visibleLimitations = evidenceRows.filter(row => row.status === "Limited" && !HIDDEN_DETAILED_EVIDENCE_ROW_IDS.includes(row.id) &&

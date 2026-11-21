@@ -6,6 +6,7 @@ import type { PublicCmpAudit, ScanScoreExplanation } from "@certscore/api-contra
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { evaluateConsentControlReport, projectConsentControlReport } from "./consent-control-report";
+import { firstLayerReportingControls } from "./public-first-layer-consent-evidence";
 import {buildCmpAuditAvailability} from "./cmp-audit-availability";
 import { evidenceRowAnchor } from "./report-evidence-navigation";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
@@ -77,6 +78,17 @@ export function projectCmpAudit(input: {
   const availability = evaluateConsentControlReport(input.consentControlAssessment, input.scanId);
   const controlReport = availability.report;
   const assessment = parsed.success && controlReport ? parsed.data : null;
+  const firstLayer = assessment ? firstLayerReportingControls(assessment) : null;
+  const necessaryOnly = firstLayer?.necessaryOnly[0];
+  const correctedReject = necessaryOnly && (assessment?.controls.reject.state !== "observed" ||
+    assessment.controls.reject.layer !== "first_layer");
+  // Only the first-layer display uses this interpretation. After-action inventories
+  // below continue to require their original canonical control observations.
+  const displayControls = controlReport && firstLayer && necessaryOnly ? {
+    ...controlReport.controls,
+    accept: firstLayer.acceptStillObserved ? controlReport.controls.accept : "not_observed" as const,
+    reject: "observed" as const,
+  } : controlReport?.controls ?? null;
   if (assessment) {
     if (assessment.visualEvidence?.status === "withheld" && assessment.visualEvidence.reasonCodes.some(reason =>
       reason === "finalization_deadline_exceeded" || reason === "moderation_timeout")) {
@@ -93,7 +105,10 @@ export function projectCmpAudit(input: {
         evidenceAnchor: "consent-review-evidence", sourceIds: ["consentControlAssessment.surface"] });
     }
     const reject = assessment.controls.reject;
-    if (reject.state !== "unknown" && (reject.state !== "observed" || reject.layer === "first_layer")) {
+    if (correctedReject) {
+      set("reject", { status: "Observed", detail: "First-layer Reject or equivalent refusal control.",
+        evidenceAnchor: "consent-review-evidence", sourceIds: [necessaryOnly.evidenceId] });
+    } else if (reject.state !== "unknown" && (reject.state !== "observed" || reject.layer === "first_layer")) {
       set("reject", { status: reject.state === "observed" ? "Observed" : "Not observed",
         detail: reject.state === "observed" ? "First-layer Reject or equivalent refusal control."
           : "Reject or an equivalent refusal option was not observed during this visit.", evidenceAnchor: "consent-review-evidence",
@@ -265,7 +280,8 @@ export function projectCmpAudit(input: {
         limitation: { group: "visual", code: assessment.visualEvidence.reasonCodes[0] ?? "visual_evidence_withheld" }, sourceIds: ["consentControlAssessment.visualEvidence"] });
     }
     if (prominenceRow.status === "Not assessed" && assessment?.assessmentStatus === "complete" && assessment.coverage.status === "complete" &&
-      [assessment.controls.accept.state, assessment.controls.reject.state].includes("not_observed")) {
+      [assessment.controls.accept.state, assessment.controls.reject.state].includes("not_observed") &&
+      !(displayControls?.accept === "observed" && displayControls.reject === "observed")) {
       Object.assign(prominenceRow, { status: "Not applicable", detail: "A comparison requires both Accept and Reject controls; one was not observed in the complete inspection.", sourceIds: ["consentControlAssessment.controls"] });
     }
   }
@@ -292,7 +308,7 @@ export function projectCmpAudit(input: {
   return { version: audit && ["cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version) ? "cmp_audit_report.v3" : audit?.version === "cmp_audit_assessment.v5" ? "cmp_audit_report.v2" : CMP_AUDIT_REPORT_VERSION,
     ...(audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6", "cmp_audit_assessment.v7"].includes(audit.version) ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
     assessmentSourceHash: assessment?.provenance.sourceHash ?? null, ...(audit ? { inspectionSupport: audit.support } : {}), rows,
-    experience: projectCmpExperience({ assessment, controls: controlReport?.controls ?? null,
+    experience: projectCmpExperience({ assessment, controls: displayControls,
       availability:availability.reason==="usable" ? undefined : buildCmpAuditAvailability(availability.reason,parsed.success?parsed.data:null,input.scanId),
       explicitCustom: explicitlyCustomConsentVendor(input.consentVendor),
       provider: canonicalCmpProvider(input.consentVendor), rows }) };

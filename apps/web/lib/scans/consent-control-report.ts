@@ -51,7 +51,7 @@ export function projectConsentControlReport(value: unknown, expectedScanId?: str
   return evaluateConsentControlReport(value, expectedScanId).report;
 }
 
-export function consentControlReportLabels(report: ConsentControlReport | null) {
+export function consentControlReportLabels(report: Pick<ConsentControlReport, "controls"> | null) {
   const label = (key: "accept" | "reject" | "options") => !report ? "" :
     report.controls[key] === "observed" ? "Observed" : "Not observed";
   return { accept: label("accept"), reject: label("reject"), options: label("options") };

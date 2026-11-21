@@ -65,6 +65,19 @@ export function projectDocumentMismatchFooterStatus(value: unknown, expectedScan
 // Keep this interpretation at the report boundary, outside action and scoring policy.
 const necessaryOnlyLabels = new Set(["notwendige cookies erlauben", "accetta i cookie necessari e chiudi"]);
 
+/** Shared by report presentations after scan, document and visit validation. */
+export function firstLayerReportingControls(a: ConsentControlAssessment) {
+  const firstLayer = a.evidence.filter(e => e.layer === "first_layer" && e.visible && e.actionable && e.label &&
+    ["accept", "reject", "options", "privacy_opt_out"].includes(e.intent) && !e.controlVariant);
+  const necessaryOnly = firstLayer.filter(e => e.intent === "accept" && e.label &&
+    e.documentId && e.documentId === a.document.canonicalDocumentId &&
+    (!e.documentToken || !a.document.canonicalDocumentToken || e.documentToken === a.document.canonicalDocumentToken) &&
+    necessaryOnlyLabels.has(e.label.trim().toLowerCase().replace(/\s+/g, " ")));
+  const reported = firstLayer.map(e => necessaryOnly.includes(e) ? { ...e, intent: "reject" as const } : e);
+  const acceptStillObserved = reported.some(e => e.intent === "accept");
+  return { necessaryOnly, reported, acceptStillObserved };
+}
+
 /** Public evidence preserves canonical unknowns and control-specific inspection;
  * the binary customer summary and checklist verdicts are different projections. */
 export function projectPublicFirstLayerConsentEvidence(value: unknown, expectedScanId: string) {
@@ -77,14 +90,7 @@ export function projectPublicFirstLayerConsentEvidence(value: unknown, expectedS
   const retainedState = (key: typeof keys[number] | "privacyOptOut") => a.controls[key].layer !== "first_layer" ? null :
     a.controls[key].state === "observed" ? true :
     hasVerifiedConsentControlAbsence(a, key) ? false : null;
-  const firstLayer = a.evidence.filter(e => e.layer === "first_layer" && e.visible && e.actionable && e.label &&
-    ["accept", "reject", "options", "privacy_opt_out"].includes(e.intent) && !e.controlVariant);
-  const necessaryOnly = firstLayer.filter(e => e.intent === "accept" && e.label &&
-    e.documentId && e.documentId === a.document.canonicalDocumentId &&
-    (!e.documentToken || !a.document.canonicalDocumentToken || e.documentToken === a.document.canonicalDocumentToken) &&
-    necessaryOnlyLabels.has(e.label.trim().toLowerCase().replace(/\s+/g, " ")));
-  const reported = firstLayer.map(e => necessaryOnly.includes(e) ? { ...e, intent: "reject" as const } : e);
-  const acceptStillObserved = reported.some(e => e.intent === "accept");
+  const { necessaryOnly, reported, acceptStillObserved } = firstLayerReportingControls(a);
   const state = (key: typeof keys[number] | "privacyOptOut") => {
     if (necessaryOnly.length && key === "reject") return true;
     if (necessaryOnly.length && key === "accept" && !acceptStillObserved && retainedState(key) === true) return null;
