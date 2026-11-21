@@ -191,6 +191,11 @@ export async function assertReviewedRejectDispatchAllowed(input: {
 export type ConsentActionControlProofInput = {
   /** Retain the exact native element through proof and the one input command. */
   bindElement?: boolean;
+  /** During the final recheck, the recipe must still select this node. */
+  exactElement?: ElementHandle<HTMLElement | SVGElement>;
+  requireUniqueSelector?: boolean;
+  /** The passive Reject selector must resolve only to the resolver's bound native button. */
+  expectedNativeSelector?: string;
   signal?: AbortSignal;
   deadlineAtMs?: number;
   onLabelInspection?: (snapshot: Omit<NonNullable<PostRefusalInteractionDiagnostics["resolver"]>["snapshots"][number], "attempt" | "elapsedMs">) => void;
@@ -223,7 +228,10 @@ export async function buildConsentActionControlProof(input: ConsentActionControl
       // proof. Preserve the deadline/abort checkpoint and never retry a click.
       if (!available) return {status: "label_unverifiable", reason: "resolved_control_unavailable"};
       if (!element) return {status: "label_unverifiable", reason: "resolved_control_detached"};
-      const result = await buildConsentActionControlProofWithinBoundary({...input, control: element}, guard);
+      const result = await buildConsentActionControlProofWithinBoundary({
+        ...input, control: element,
+        ...(input.expectedNativeSelector ? {exactElement: element} : {}),
+      }, guard);
       guard.checkpoint();
       if (result.status !== "verified") return result;
       retained = true;
@@ -244,6 +252,10 @@ export async function buildConsentActionControlProof(input: ConsentActionControl
 
 async function buildConsentActionControlProofWithinBoundary(input: ConsentActionControlProofInput, guard: ConsentProofReadGuard): Promise<ConsentActionControlProofResolution> {
   guard.checkpoint();
+  if (input.expectedNativeSelector && (input.controlFrameUrl ||
+      input.expectedAccessibleControl || !input.exactElement)) {
+    return {status: "label_unverifiable", reason: `passive_${input.action}_button_binding_unverified`};
+  }
   if (input.signal?.aborted) return { status: "label_unverifiable", reason: "abort_requested_before_action" };
   if (input.authorizedTargetSha256 && sha256(normalizedTarget(input.page.url())) !== input.authorizedTargetSha256) {
     return { status: "label_unverifiable", reason: "redirect_target_not_authorized" };
@@ -379,9 +391,17 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       ? input.page.frames().filter((frame) => frame.url() === input.controlFrameUrl)
       : [input.page];
     if (frames.length !== 1) return { status: "label_unverifiable", reason: "resolved_control_scope_ambiguous" };
-    const liveLabels = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements) => {
-      if (elements.length > 32) return null;
-      return elements.filter((element) => {
+    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector}) => {
+      if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
+      if (passiveSelector) {
+        const document = exact?.ownerDocument;
+        const view = document?.defaultView;
+        if (!exact?.isConnected || exact.localName !== "button" || !document || exact.getRootNode() !== document ||
+            !view || view !== view.top) return null;
+        const matches = document.querySelectorAll(passiveSelector);
+        if (matches.length !== 1 || matches[0] !== exact) return null;
+      }
+      const labels = elements.filter((element) => {
         const rect = element.getBoundingClientRect();
         const style = getComputedStyle(element);
         return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" &&
@@ -391,9 +411,18 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         title: element.getAttribute("title") ?? undefined,
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
-    }).catch(() => null));
-    const matching = liveLabels?.filter((fields) => {
+      return { selectorMatchCount: elements.length, labels };
+    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector}).catch(() => null));
+    if (input.expectedNativeSelector && !liveSnapshot) {
+      return {status: "label_unverifiable", reason: `passive_${input.action}_button_binding_unverified`};
+    }
+    if (input.requireUniqueSelector && liveSnapshot?.selectorMatchCount !== 1) {
+      return { status: "label_unverifiable", reason: "exact_selector_no_longer_unique" };
+    }
+    const matching = liveSnapshot?.labels.filter((fields) => {
       const labels = boundFields(fields);
+      const liveLabel = preferredLabel(labels);
+      if (input.exactElement && (liveLabel?.source !== selected.source || liveLabel.value !== selected.value)) return false;
       if (sourceIntentConflict(labels, labelBoundNecessaryOnly?.contextText)) return false;
       if (labelBoundNecessaryOnly) {
         const classified = classifyConsentControlLabel({usage: "observation", classifierProfile: "multilingual_v1",
@@ -406,12 +435,12 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       if (contextualLabelVerified) return isRegisteredContextualAcceptLabel(
         preferredLabel(labels)?.value ?? "", contextualApproval!.expectedNormalizedLabel);
       const classified = classifyConsentControlLabel({ usage: "action", classifierProfile: "multilingual_v1",
-        label: preferredLabel(labels)?.value, hasConsentContext: true });
+        label: liveLabel?.value, hasConsentContext: true });
       return classified.intent === input.action && classified.confidence >= 0.8;
     });
     if (matching?.length !== 1) return { status: "label_unverifiable", reason: "resolved_control_no_longer_unique" };
   }
-  const selectorHint = bound(input.selectorHint, 500);
+  const selectorHint = bound(input.expectedNativeSelector ?? input.selectorHint, 500);
   if (!selectorHint) {
     return {
       status: "label_unverifiable",

@@ -69,7 +69,7 @@ export function rejectFirstLayerProofMatches(value: unknown, scanId: string, tar
 
 export function rejectGateControlMatches(binding: RejectBinding, proof: ConsentActionControlProof) {
   return proof.action === "reject" && proof.actionSemantics === "direct_label" &&
-    proof.authorizedTargetSha256 === binding.requestedTargetSha256 && proof.frameIdentitySha256 === binding.documentSha256 &&
+    proof.authorizedTargetSha256 === binding.documentSha256 && proof.frameIdentitySha256 === binding.documentSha256 &&
     sha(proof.selectorHint) === binding.selectorSha256 && sha(proof.accessibleLabel) === binding.labelSha256 &&
     proof.labelSource === (binding.labelSource ?? "visible_text");
 }

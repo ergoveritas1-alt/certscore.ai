@@ -96,6 +96,8 @@ import {
 import { readCmpApiConsentSnapshot, type CmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
 import { assertConsentActionDispatchAllowed, assertReviewedRejectDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
+import { localExactRejectControlEnabled } from "./exact-native-consent-button-selector.js";
+import { rejectFirstLayerProofMatches, rejectGateControlMatches, type RejectFirstLayerProof } from "./reject-gate-shadow-receipt.js";
 import { captureCookieYesConfirmationBaseline, matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
 import {
@@ -240,6 +242,8 @@ export interface PostRefusalObserverInput {
   allowCanonicalRejectDiscovery?: boolean;
   /** Default-off exact-element proof/dispatch hardening for paired calibration. */
   boundControlDispatch?: boolean;
+  /** Verified passive control for the local loopback dispatch prototype. */
+  firstLayerProof?: RejectFirstLayerProof;
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
@@ -257,6 +261,7 @@ export interface PostRefusalObserverInput {
   }) => void;
   /** Input attempt committed; notification runs after the dispatch call settles. */
   onActionDispatchCommitted?: (event: { type: "action_dispatched"; atMs: number }) => void;
+  onRejectGateFinalRecheck?: (outcome: "passed" | "failed") => void;
   /** Internal scanner artifact sink. Source bytes never enter the Reject packet. */
   onTrustArcResponseCapture?: (capture: TrustArcResponseCapture) => void;
   outDir?: string;
@@ -494,7 +499,10 @@ export async function runPostRefusalObserver(
   let actionDiscovery: ConsentActionDiscovery | undefined;
   let cancellationObservedAtMs: number | undefined;
   let actionDispatched = false;
-  const boundControlDispatch = input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1";
+  const recheckExactReject = !!input.firstLayerProof || (input.interactionAuthorization.kind === "loopback" &&
+    localExactRejectControlEnabled());
+  const boundControlDispatch = recheckExactReject ||
+    (input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1");
   let boundControlElement: import("playwright").ElementHandle<HTMLElement | SVGElement> | undefined;
   let refusalRegisteredAtEpochMs: number | undefined;
   let selectedRecipe: PostRefusalActionRecipe | undefined;
@@ -1449,6 +1457,7 @@ export async function runPostRefusalObserver(
     }
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
+      expectedNativeSelector: input.firstLayerProof?.exactSelector,
       deadlineAtMs: resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
@@ -1572,6 +1581,7 @@ export async function runPostRefusalObserver(
           );
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
+            expectedNativeSelector: input.firstLayerProof?.exactSelector,
             deadlineAtMs: resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
@@ -1624,12 +1634,27 @@ export async function runPostRefusalObserver(
     let actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     let clickError: unknown;
     try {
+      const passiveProof = input.firstLayerProof;
+      const assertPassiveBinding = () => {
+        if (!passiveProof) return;
+        if (!recheckExactReject || selectedRecipe!.controlFrameUrl || selectedRecipe!.accessibleControl ||
+            !rejectFirstLayerProofMatches(passiveProof, input.parentScanId ?? input.scanId, input.url,
+              passiveProof.binding.parentDispatchSha256, Date.now()) ||
+            !rejectGateControlMatches(passiveProof.binding, proofResolution.proof)) {
+          input.onRejectGateFinalRecheck?.("failed");
+          throw new Error("reject_first_layer_control_changed_or_expired");
+        }
+      };
       await dispatchRejectControl(
         page,
         control,
         selectedRecipe,
         useVerifiedGeometryDispatch,
-        () => { sourceFrameBinding.assertCurrent(); assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs); },
+        () => {
+          assertPassiveBinding();
+          sourceFrameBinding.assertCurrent();
+          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
+        },
         actionControlProof,
         effectiveSignal,
         () => {
@@ -1649,6 +1674,9 @@ export async function runPostRefusalObserver(
           sourceFrameBinding.assertCurrent();
           assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
         },
+        recheckExactReject,
+        input.onRejectGateFinalRecheck,
+        passiveProof?.exactSelector,
       );
     } catch (error) {
       clickError = error;
@@ -2791,11 +2819,42 @@ async function dispatchRejectControl(
   onDispatch?: () => void,
   readOptions?: ConsentControlReadOptions,
   onBeforeDispatch?: () => void,
+  recheckExactReject = false,
+  onExactRecheck?: (outcome: "passed" | "failed") => void,
+  exactSelector?: string,
 ) {
   assertDispatchAllowed?.();
   const boundControl = readOptions?.boundElement ?? control;
   await assertReviewedRejectDispatchAllowed({page,control:boundControl,proof,signal,controlFrameUrl:recipe.controlFrameUrl,deadlineAtMs:readOptions?.deadlineAtMs});
   assertDispatchAllowed?.();
+  if (recheckExactReject && !proof) throw new Error("reject_exact_control_proof_unavailable");
+  if (recheckExactReject && proof?.actionSemantics === "direct_label" && !recipe.accessibleControl) {
+    const element = readOptions?.boundElement;
+    const recordRecheck = recipe.controlFrameUrl ? undefined : onExactRecheck;
+    if (!element) throw new Error("reject_exact_control_unavailable");
+    onBeforeDispatch?.();
+    const deadlineAtMs = Math.min(readOptions?.deadlineAtMs ?? Infinity, Date.now() + 250);
+    const current = await buildConsentActionControlProof({
+      action: "reject", control: element, exactElement: element, requireUniqueSelector: true,
+      page, recipeId: recipe.recipeId, selectorHint: exactSelector ?? recipe.controlSelector, cmpId: recipe.cmpId,
+      controlFrameUrl: recipe.controlFrameUrl, authorizedTargetSha256: proof.authorizedTargetSha256,
+      observedAtMs: proof.observedAtMs, signal, deadlineAtMs,
+    });
+    if (current.status !== "verified" || current.proof.accessibleLabel !== proof.accessibleLabel ||
+        current.proof.labelSource !== proof.labelSource || current.proof.actionSemantics !== proof.actionSemantics ||
+        current.proof.frameIdentitySha256 !== proof.frameIdentitySha256) {
+      recordRecheck?.("failed");
+      throw new Error("reject_exact_control_changed");
+    }
+    assertDispatchAllowed?.();
+    assertConsentActionDispatchAllowed(page, signal, proof.authorizedTargetSha256, deadlineAtMs);
+    const timeout = Math.min(100, deadlineAtMs - Date.now());
+    if (timeout <= 0) throw new Error("reject_exact_control_recheck_expired");
+    recordRecheck?.("passed");
+    onDispatch?.();
+    await element.click({ timeout });
+    return;
+  }
   if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
     await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed, onBeforeDispatch, readOptions, onDispatch);
     return;

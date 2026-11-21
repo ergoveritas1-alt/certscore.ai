@@ -1,9 +1,15 @@
 export function exactAcceptSelectorCaptureEnabled(): boolean {
-  return process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW === "1";
+  return process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW === "1" ||
+    process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE === "1";
 }
 
 export function exactRejectSelectorCaptureEnabled(): boolean {
-  return process.env.CERTSCORE_REJECT_GATE_PRODUCTION_SHADOW === "1";
+  return process.env.CERTSCORE_REJECT_GATE_PRODUCTION_SHADOW === "1" ||
+    process.env.CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE === "1";
+}
+
+export function localExactRejectControlEnabled(): boolean {
+  return process.env.CERTSCORE_LOCAL_REJECT_EXACT_CONTROL === "1";
 }
 
 /** Runs as part of the existing passive browser reads. Only return a selector

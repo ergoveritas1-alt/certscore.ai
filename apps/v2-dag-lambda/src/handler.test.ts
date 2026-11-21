@@ -2322,6 +2322,8 @@ function coordinatorPostRefusalPacket(scanId: string) {
 
 async function runCoordinatorFixture(input: {
   scanId: string;
+  enforcementGeometry?: "ready" | "wrong_selector" | "missing";
+  gateDeadlineMs?: number;
   consentBundle: CanonicalEvidenceBundle;
   action: "none" | "hang" | "late" | "completed" | "validation_failed" | "completed_during_finalization" | "completed_after_finalization";
   dispatchDelayMs: number;
@@ -2393,14 +2395,53 @@ async function runCoordinatorFixture(input: {
   const pointers = new Map<string, { uri: string; body: Buffer; sha256: string; sizeBytes: number }>();
   for (const [lane, bundle] of passiveBundles) {
     const body = Buffer.from(input.encodedCanonicalArtifacts ? serializeCanonicalEvidenceBundle(bundle) : JSON.stringify(bundle));
-    const key = `workers/${input.scanId}/${lane}/CanonicalEvidenceBundle.json`;
+    const key = `workers/${input.scanId}/${input.enforcementGeometry ? "lanes/" : ""}${lane}/CanonicalEvidenceBundle.json`;
     const uri = `s3://test-bucket/${key}`;
     const metadata = { uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength };
     pointers.set(uri, metadata);
   }
   const actionLane = input.actionLane ?? "accept";
+  const enforcementAuthorization = input.enforcementGeometry ? {
+    kind:"scan_target" as const, authorizationId:"sharded_scan_exact_target.v1",
+    normalizedUrl:input.consentBundle.url, scanId:input.scanId,
+  } : undefined;
+  let consentManifest: {uri:string; sha256:string; sizeBytes:number} | undefined;
+  let geometryReleased = false;
+  if (input.enforcementGeometry && input.enforcementGeometry !== "missing") {
+    const source = [...pointers.values()].find(entry => entry.uri.endsWith("/consent_proof/CanonicalEvidenceBundle.json"))!;
+    const prefix = source.uri.slice(0,-"/CanonicalEvidenceBundle.json".length);
+    const retain = (uri:string,value:object) => {
+      const body = Buffer.from(JSON.stringify(value));
+      const metadata = {uri,sha256:createHash("sha256").update(body).digest("hex"),sizeBytes:body.byteLength};
+      pointers.set(uri,{...metadata,body});
+      return metadata;
+    };
+    const fileName = "ConsentControlGeometryEvidence.json";
+    const geometry = retain(`${prefix}/auxiliary/${fileName}`,{
+      artifactVersion:"consent_control_geometry.v1",sourceScanner:"consent_control_geometry_diagnostic",pageUrl:input.consentBundle.url,
+      documentIdentity:{source:"cdp_loader_id",token:"fixture-loader"},
+      candidates:[{
+        candidateId:actionLane, actionType:`${actionLane}_all`, label:actionLane === "accept" ? "Accept all" : "Reject all",
+        tagName:"button",selectorHint:input.enforcementGeometry === "ready" ? `#${actionLane}` : "#different",
+        ...(actionLane === "accept" ? {exactNativeAcceptSelectorVerified:true} : {exactNativeRejectSelectorVerified:true}),
+        layer:"first_layer",decisionStatus:"confirmed_visible",enabled:true,intersectsViewport:true,
+        occlusion:{center:true},consentContextConfirmed:true,boundingBox:{width:40,height:30},
+        frameContext:{frameKind:"main_frame",frameUrl:input.consentBundle.url},
+      }],
+      controlInspection:{version:"control_specific_inspection.v4",retainedCandidateCount:1,structuralCoverage:"complete",
+        captureCoverage:{inventoryTruncated:false,documentReadyState:"complete",mainFrameAvailable:true,
+          documentAndFramesStable:true,frameCount:1,capturedFrameCount:1},
+        candidates:[{candidateId:actionLane,role:"decision",unresolvedIntents:[]}],reasonCodes:[]},
+    });
+    consentManifest = retain(`${prefix}/LocalV2DagLambdaManifest.json`,{
+      contractVersion:"certscore.v2.lambda-dag-artifact-manifest.v1",scanId:input.scanId,targetUrl:input.consentBundle.url,
+      pointers:{scanArtifactUri:source.uri},auxiliaryArtifacts:[{...geometry,fileName}],
+    });
+  }
+  const productionConfig = enforcementAuthorization ? {interactionAuthorization:enforcementAuthorization,rolloutMode:"all_eligible"} : {};
   const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
     orchestrationMode: "sharded",
+    ...(enforcementAuthorization ? {targetEnvironment:"production",resultPurpose:"persisted_scan"} : {}),
     scanId: input.scanId,
     callbackCorrelationId: input.scanId,
     ...(input.presenceOnly?{privacyCaptureProfile:PRESENCE_ONLY_CAPTURE_PROFILE}:{}),
@@ -2416,8 +2457,8 @@ async function runCoordinatorFixture(input: {
     ...(input.gpcPair ? { targetUrl: input.gpcPair.baseline.url, hostname: new URL(input.gpcPair.baseline.url).hostname, gpcObservation: { contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true, pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc" } } : {}),
     ...(input.redHatOptOut?{targetUrl:"https://redhat.com/",hostname:"redhat.com",awsRegion:"us-west-1",functionName:"certscore-redhat-fixture:42",saleSharingOptOut:{policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:input.scanId,exactTargetUrl:"https://redhat.com/"}}:{}),
     ...(actionLane === "accept"
-      ? { postAcceptObservation: coordinatorPostAcceptConfig(input.dispatchDelayMs) }
-      : { postRefusalObservation: coordinatorPostRefusalConfig(input.dispatchDelayMs) }),
+      ? { postAcceptObservation: {...coordinatorPostAcceptConfig(input.dispatchDelayMs), ...productionConfig} }
+      : { postRefusalObservation: {...coordinatorPostRefusalConfig(input.dispatchDelayMs),...productionConfig} }),
   }));
   const packet = ["completed", "completed_during_finalization", "completed_after_finalization"].includes(input.action)
     ? actionLane === "accept"
@@ -2436,6 +2477,11 @@ async function runCoordinatorFixture(input: {
       const lane = String(workerPayload.workerLane);
       workerCalls.push(lane);
       workerPayloads.push(workerPayload);
+      if (input.enforcementGeometry && lane === `${actionLane}_observation`) {
+        assert.equal(geometryReleased,true,"No action before exact geometry is released");
+        assert.equal(parseLocalV2DagLambdaDispatchPayload(workerPayload)[`${actionLane}FirstLayerProof`]?.exactSelector,`#${actionLane}`);
+      }
+
       if(input.presenceOnly)assert.equal(workerPayload.privacyCaptureProfile,PRESENCE_ONLY_CAPTURE_PROFILE);
       if(input.bothActions && lane === "reject_observation") {actionCalls.push(lane);throw new Error("offline fixture: neutral Reject terminal failure");}
       if(input.bothActions && lane === "policy_evidence")await new Promise(resolve=>setTimeout(resolve,700));
@@ -2569,9 +2615,12 @@ async function runCoordinatorFixture(input: {
       return {
         StatusCode: 200,
         Payload: Buffer.from(JSON.stringify({
-          artifactMetadata: { scanArtifactUri: { sha256: uri.sha256, sizeBytes: uri.sizeBytes } },
-          artifactPointers: { scanArtifactUri: uri.uri },
-          ...(lane === "gpc_observation" ? { parentDispatchSha256: workerPayload.parentDispatchSha256 } : {}),
+          artifactMetadata: { scanArtifactUri: { sha256: uri.sha256, sizeBytes: uri.sizeBytes },
+            ...(lane === "consent_proof" && consentManifest ? {manifestUri:consentManifest} : {}) },
+          artifactPointers: { scanArtifactUri: uri.uri,
+            ...(lane === "consent_proof" && consentManifest ? {manifestUri:consentManifest.uri} : {}) },
+          ...(lane === "gpc_observation" || (lane === "consent_proof" && input.enforcementGeometry) ?
+            { parentDispatchSha256: workerPayload.parentDispatchSha256 } : {}),
           ...(lane === "consent_proof" ? { consentRejectAvailability: deriveConsentActionAvailability(bundle) } : {}),
           completedAt: bundle.completedAt,
           scanId: payload.scanId,
@@ -2588,6 +2637,12 @@ async function runCoordinatorFixture(input: {
       const uri = `s3://${String(command.input.Bucket)}/${key}`;
       const entry = pointers.get(uri);
       if (!entry) throw new Error(`missing fixture object ${uri}`);
+      if (input.enforcementGeometry && key.endsWith("/ConsentControlGeometryEvidence.json")) {
+        await new Promise(resolve => setTimeout(resolve,30));
+        assert.equal(workerPayloads.some(row => row.workerLane === `${actionLane}_observation`),false);
+        geometryReleased = true;
+      }
+
       if (input.action === "completed_during_finalization" && key.endsWith("/runtime_evidence/CanonicalEvidenceBundle.json")) {
         finalizationStarted();
         // This models the already-required GetObject's I/O turn, not a new
@@ -2601,6 +2656,7 @@ async function runCoordinatorFixture(input: {
   try {
     const result = await runLocalV2DagLambdaShardedArtifactChain(payload, {
       ...(input.conditionalOptOut?{deadlineAtMs:Date.now()+(input.conditionalDeadlineMs??60_000)}:{}),
+      ...(input.gateDeadlineMs === undefined ? {} : {deadlineAtMs:Date.now()+input.gateDeadlineMs}),
       artifactRoot,
       lambdaClient,
       s3Client,
@@ -6207,4 +6263,54 @@ test("a degraded runtime visit resolves a separate blank only with the reviewed 
     await rm(file);
     assert.equal(merge(runtime).scanNoGoAssessment?.decision, "no_go");
   } finally { await rm(root, {recursive: true, force: true}); }
+});
+
+test("production consent enforcement waits for verified same-scan controls and fails closed for both actions", async () => {
+  const keys = [POST_ACCEPT_WORKER_FEATURE_FLAG,POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
+    "CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE","CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE",
+    "CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET"];
+  const previous = new Map(keys.map(key=>[key,process.env[key]]));
+  for (const key of keys) process.env[key] = key.endsWith("BUCKET") ? "test-bucket" : "1";
+  try {
+    for (const action of ["accept","reject"] as const) {
+      for (const [index,mode] of (["ready","missing","wrong_selector","expired"] as const).entries()) {
+        const scanId = `00000000-0000-4000-8000-00000000000${index}`;
+        const consentBundle = coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:action==="accept",
+          rejectControlObserved:action==="reject"});
+        const documentIdentity = {source:"cdp_loader_id",token:"fixture-loader"} as const;
+        consentBundle.domSnapshots = [{...runtimeSnapshotFixture(),documentIdentity}];
+        const observation = consentBundle.consentUiObservations[0]!;
+        Object.assign(observation,{layerInspected:"first_layer",captureStatus:"observed",documentUrl:consentBundle.url,documentIdentity,
+          captureDiagnostics:{completedChannels:["dom_inventory","geometry"],failedChannels:[],timedOutChannels:[]}});
+        Object.assign(observation.controls[0]!,{tagName:"button",selectorHint:`#${action}`});
+        const output = await runCoordinatorFixture({scanId,consentBundle,actionLane:action,action:"validation_failed",dispatchDelayMs:0,
+          enforcementGeometry:mode==="expired" ? "ready" : mode, ...(mode==="expired" ? {gateDeadlineMs:0} : {})});
+        try {
+          const dispatched = output.workerPayloads.filter(row=>row.workerLane===`${action}_observation`);
+          assert.equal(dispatched.length,mode==="ready" ? 1 : 0,`${action} ${mode}`);
+          const manifest = JSON.parse(await readFile(path.join(output.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
+          const receipt = manifest[`${action}GateShadowReceipt`];
+          assert.equal(receipt.enforcementActive,true);
+          assert.equal(receipt.dispatch.outcome,mode==="ready" ? "would_allow" : "not_attempted");
+          if (mode === "ready") {
+            assert.notEqual(dispatched[0].contractVersion,LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION);
+            assert.throws(() => parseLocalV2DagLambdaDispatchPayload({...dispatched[0],
+              contractVersion:LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION}),/gate_proof_not_allowed/);
+            assert.throws(() => parseLocalV2DagLambdaDispatchPayload({...dispatched[0],
+              acceptFirstLayerProof:undefined,rejectFirstLayerProof:undefined}),/requires_exact_proof/);
+            const worker = parseLocalV2DagLambdaDispatchPayload(dispatched[0]);
+            const run = action==="accept" ? runLocalV2DagLambdaPostAcceptArtifactChain : runLocalV2DagLambdaPostRefusalArtifactChain;
+            for (const unavailable of [
+              {...worker,acceptFirstLayerProof:undefined,rejectFirstLayerProof:undefined},
+              {...worker,parentDispatchSha256:"0".repeat(64)},
+            ]) await assert.rejects(run(unavailable,{artifactRoot:output.artifactRoot}),/gate_worker_proof_missing_invalid_or_expired/);
+          }
+        } finally { await rm(output.artifactRoot,{recursive:true,force:true}); }
+      }
+    }
+  } finally {
+    for (const [key,value] of previous) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

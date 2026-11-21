@@ -92,6 +92,7 @@ import {
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
+import { acceptFirstLayerProofMatches, dispatchWithAcceptFirstLayerProof, type AcceptFirstLayerProof } from "./accept-first-layer-gate.js";
 import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
 import { captureCookieYesConfirmationBaseline, matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import {
@@ -219,6 +220,9 @@ export interface PostAcceptObserverInput {
   allowCanonicalAcceptDiscovery?: boolean;
   /** Default-off exact-element proof/dispatch hardening for paired calibration. */
   boundControlDispatch?: boolean;
+  /** Local coordinator proof for the fail-closed pre-click prototype. */
+  firstLayerProof?: AcceptFirstLayerProof;
+  onAcceptGateFinalRecheck?: (outcome: "passed" | "failed") => void;
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
@@ -330,6 +334,11 @@ export async function runPostAcceptObserver(
   const recipes = validatedRecipes(input);
   const recipeSetId = input.recipeSetId?.slice(0, 160) || recipes[0]!.recipeId;
   const authorizationScanId = input.parentScanId ?? input.scanId;
+  const firstLayerProof = input.firstLayerProof;
+  if (firstLayerProof && (!firstLayerProof.exactSelector ||
+    !acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, Date.now()))) {
+    throw new Error("accept_first_layer_proof_missing_invalid_or_expired");
+  }
   let effectiveAuthorization:
     | PostRefusalInteractionAuthorization
     | ResolvedPostRefusalScanTargetAuthorization = input.interactionAuthorization;
@@ -454,7 +463,8 @@ export async function runPostAcceptObserver(
   let acceptanceRegisteredAtEpochMs: number | undefined;
   let activeRequestIdsAtAcceptanceRegistration: string[] = [];
   let actionDispatched = false;
-  const boundControlDispatch = input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1";
+  const boundControlDispatch = firstLayerProof !== undefined ||
+    (input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1");
   let boundControlElement: import("playwright").ElementHandle<HTMLElement | SVGElement> | undefined;
   let cancellationObservedAtMs: number | undefined;
   let observationCoverageSufficient = false;
@@ -1118,6 +1128,7 @@ export async function runPostAcceptObserver(
     stage("control_proof");
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
+      expectedNativeSelector: firstLayerProof?.exactSelector,
       deadlineAtMs: resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
@@ -1207,6 +1218,7 @@ export async function runPostAcceptObserver(
           );
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
+            expectedNativeSelector: firstLayerProof?.exactSelector,
             deadlineAtMs: resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
@@ -1254,31 +1266,80 @@ export async function runPostAcceptObserver(
     const watchActionDocument = (frame: import("playwright").Frame) => { if (frame === page!.mainFrame()) actionDocumentChanged = true; };
     page.on("framenavigated", watchActionDocument);
     try {
-      await dispatchAcceptControl(
-        page,
-        control,
-        selectedRecipe,
-        useVerifiedGeometryDispatch,
-        () => { sourceFrameBinding.assertCurrent(); assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs); },
-        { deadlineAtMs: resultBudgetDeadlineAtMs, signal: effectiveSignal, scope: confirmationScope, boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
-        () => {
-          sourceFrameBinding.assertCurrent();
-          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
-          actionDispatchedAtEpochMs = Date.now();
-          actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
-          receiptCapture?.dispatch(actionDispatchedAtEpochMs, selectedRecipe?.controlFrameUrl
-            ? {controlFrame: actionControlProof?.frameIdentitySha256 && "page" in confirmationScope ? confirmationScope : undefined}
-            : undefined);
-          actionDispatched = true;
-          graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
-        },
-        () => {
-          try { input.onLifecycleEvent?.({type: "action_dispatched", atMs: elapsed(parentScanStartedAtMs)}); }
-          catch { limitations.push("lifecycle_listener_failed"); }
-          sourceFrameBinding.assertCurrent();
-          assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, resultBudgetDeadlineAtMs);
-        },
-      );
+      const assertDispatch = (deadline = resultBudgetDeadlineAtMs) => {
+        sourceFrameBinding.assertCurrent();
+        assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, deadline);
+      };
+      const commit = () => {
+        assertDispatch();
+        actionDispatchedAtEpochMs = Date.now();
+        actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
+        receiptCapture?.dispatch(actionDispatchedAtEpochMs, selectedRecipe?.controlFrameUrl
+          ? { controlFrame: actionControlProof?.frameIdentitySha256 && "page" in confirmationScope ? confirmationScope : undefined }
+          : undefined);
+        actionDispatched = true;
+        graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
+      };
+      const notifyBeforeDispatch = () => {
+        try { input.onLifecycleEvent?.({ type: "action_dispatched", atMs: elapsed(parentScanStartedAtMs) }); }
+        catch { limitations.push("lifecycle_listener_failed"); }
+        assertDispatch();
+      };
+      if (firstLayerProof) {
+        // An unbindable browser surface is outside this prototype. There is
+        // no forced/coordinate or replacement-locator fallback.
+        const element = boundControlElement;
+        if (!element || selectedRecipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
+          throw new Error("accept_first_layer_exact_element_unavailable");
+        }
+        if (firstLayerProof.geometrySha256 && confirmationScope !== page) {
+          throw new Error("accept_first_layer_control_mismatch");
+        }
+        const recipe = selectedRecipe;
+        const initial = actionControlProof;
+        const deadline = Math.min(resultBudgetDeadlineAtMs ?? Infinity, firstLayerProof.expiresAtMs, Date.now() + 250);
+        notifyBeforeDispatch();
+        await dispatchWithAcceptFirstLayerProof({
+          proof: firstLayerProof,
+          initial,
+          onFinalRecheck: input.onAcceptGateFinalRecheck,
+          assertCurrent: () => assertDispatch(deadline),
+          readCurrent: async () => {
+            const verified = await buildConsentActionControlProof({
+              action: "accept",
+              authorizedTargetSha256: initial.authorizedTargetSha256,
+              control: element,
+              exactElement: element,
+              requireUniqueSelector: firstLayerProof.geometrySha256 !== undefined,
+              ...(confirmationScope !== page ? { controlFrameUrl: confirmationScope.url() } : {}),
+              cmpId: recipe.cmpId,
+              deadlineAtMs: deadline,
+              expectedCustomControlBinding: recipe.customControlBinding,
+              observedAtMs: elapsed(parentScanStartedAtMs),
+              page: page!,
+              recipeId: recipe.recipeId,
+              selectorHint: firstLayerProof.exactSelector ?? recipe.controlSelector,
+              expectedNativeSelector: firstLayerProof.exactSelector,
+              signal: effectiveSignal,
+            });
+            return verified.status === "verified" ? verified.proof : undefined;
+          },
+          clickExact: () => {
+            assertDispatch(deadline);
+            const timeout = Math.min(100, deadline - Date.now());
+            if (timeout <= 0) throw new Error("accept_first_layer_proof_expired");
+            commit();
+            return element.click({ timeout });
+          },
+        });
+      } else {
+        await dispatchAcceptControl(
+          page, control, selectedRecipe, useVerifiedGeometryDispatch, () => assertDispatch(),
+          { deadlineAtMs: resultBudgetDeadlineAtMs, signal: effectiveSignal, scope: confirmationScope,
+            boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
+          commit, notifyBeforeDispatch,
+        );
+      }
     } catch (error) {
       clickError = error;
     } finally {

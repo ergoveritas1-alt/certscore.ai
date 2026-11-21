@@ -1,4 +1,8 @@
-import type { AcceptFirstLayerGeometrySource } from "@certscore/scan-core/accept-first-layer-gate";
+import { acceptFirstLayerProofMatches, readAcceptFirstLayerProof, type AcceptFirstLayerGeometrySource,
+  type AcceptFirstLayerProof } from "@certscore/scan-core/accept-first-layer-gate";
+import { acceptGateProofDigest, readAcceptGateWorkerRecheck, type AcceptGateWorkerRecheck } from "@certscore/scan-core/accept-gate-shadow-receipt";
+import { readRejectFirstLayerProof, readRejectGateWorkerRecheck, rejectFirstLayerProofMatches,
+  type RejectFirstLayerProof, type RejectGateWorkerRecheck } from "@certscore/scan-core/reject-gate-shadow-receipt";
 import { buildProductionConsentGateShadow, evaluateConsentGateShadow, type ProductionConsentGateShadowFields } from "./consent-gate-production-shadow.js";
 import type { PostRefusalObserverInput } from "@certscore/scan-core/post-refusal-observer";
 import { retainRuntimeCmsMetadataSnapshot } from "@certscore/contracts";
@@ -99,6 +103,7 @@ export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us
 export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1" satisfies LocalV2DagLambdaAwsRegion;
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
+const CONSENT_GATED_ACTION_DISPATCH_VERSION = "certscore.v2.lambda-dag-dispatch.gated-action.v1";
 export const LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 export const LOCAL_V2_DAG_LAMBDA_POLICY_EVIDENCE_MESSAGE_VERSION =
   "certscore.v2.lambda-policy-evidence-ready.v1" as const;
@@ -170,6 +175,9 @@ export type LocalV2DagLambdaDispatchPayload = {
     sourceScanId: string;
     url: string;
   }>;
+  /** Verified same-scan proof is permitted on its matching action worker only. */
+  acceptFirstLayerProof?: AcceptFirstLayerProof;
+  rejectFirstLayerProof?: RejectFirstLayerProof;
   /** Exact digest of the coordinator dispatch, propagated only to workers. */
   parentDispatchSha256?: string;
   saleSharingOptOut?: SaleSharingOptOutDispatch;
@@ -489,6 +497,8 @@ type LocalV2DagLambdaConsentActionRecipe = {
   }>;
 };
 type LocalV2DagLambdaShardResult = {
+  acceptGateWorkerRecheck?: AcceptGateWorkerRecheck;
+  rejectGateWorkerRecheck?: RejectGateWorkerRecheck;
   failureReason?: "gpc_worker_failed" | "gpc_artifact_unverifiable";
   artifactMetadata?: LocalV2DagLambdaArtifactMetadata;
   artifactPointers?: LocalV2DagLambdaArtifactPointers;
@@ -547,6 +557,8 @@ type LambdaInvokeClient = {
 };
 
 type ArtifactChainResult = {
+  acceptGateWorkerRecheck?: AcceptGateWorkerRecheck;
+  rejectGateWorkerRecheck?: RejectGateWorkerRecheck;
   artifactMetadata?: LocalV2DagLambdaResultMessage["artifactMetadata"];
   artifactPointers?: LocalV2DagLambdaResultMessage["artifactPointers"];
   laneTimingSummary?: LocalV2DagLambdaLaneTimingSummary;
@@ -867,7 +879,8 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     ...(isWorkerLane(record.workerLane) ? { workerLane: record.workerLane } : {})
   };
 
-  if (record.contractVersion !== LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION) {
+  const gatedActionDispatch = record.contractVersion === CONSENT_GATED_ACTION_DISPATCH_VERSION;
+  if (!gatedActionDispatch && record.contractVersion !== LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION) {
     throw new Error("Unsupported local v2 DAG Lambda dispatch contract version.");
   }
   if (record.processor !== LOCAL_V2_DAG_SCAN_PROCESSOR) {
@@ -903,6 +916,21 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     throw new Error("Conditional observation worker dispatch requires the exact parent dispatch checksum.");
   }
 
+  if (record.acceptFirstLayerProof !== undefined) {
+    const proof = readAcceptFirstLayerProof(record.acceptFirstLayerProof);
+    if (!gatedActionDispatch || !proof?.exactSelector || payload.orchestrationMode !== "worker" || payload.workerLane !== "accept_observation" ||
+        !productionConsentGateEnforced(payload,"accept")) throw new Error("accept_gate_proof_not_allowed");
+    payload.acceptFirstLayerProof = proof;
+  }
+  if (record.rejectFirstLayerProof !== undefined) {
+    const proof = readRejectFirstLayerProof(record.rejectFirstLayerProof);
+    if (!gatedActionDispatch || !proof || payload.orchestrationMode !== "worker" || payload.workerLane !== "reject_observation" ||
+        !productionConsentGateEnforced(payload,"reject")) throw new Error("reject_gate_proof_not_allowed");
+    payload.rejectFirstLayerProof = proof;
+  }
+  if (gatedActionDispatch && !payload.acceptFirstLayerProof && !payload.rejectFirstLayerProof) {
+    throw new Error("consent_gated_action_dispatch_requires_exact_proof");
+  }
   return payload;
 }
 
@@ -981,6 +1009,11 @@ function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
     value === "reject_manage" ||
     value === "reject_observation" ||
     value === "accept_observation";
+}
+
+function productionConsentGateEnforced(payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject") {
+  return payload.targetEnvironment === "production" &&
+    process.env[action === "accept" ? "CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE" : "CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE"] === "1";
 }
 
 function productionConsentGateShadowEnabled(payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject") {
@@ -2318,6 +2351,12 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   ) {
     throw new Error("Loopback post-refusal authorization requires the local target environment.");
   }
+  const firstLayerProof = payload.rejectFirstLayerProof;
+  const enforce = productionConsentGateEnforced(payload,"reject");
+  if ((enforce || firstLayerProof) && (!enforce || !rejectFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,payload.parentDispatchSha256,Date.now()))) {
+    throw new Error("reject_gate_worker_proof_missing_invalid_or_expired");
+  }
+  let gateRecheck: {outcome:"passed" | "failed"; observedAtMs:number} | undefined;
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   await mkdir(options.artifactRoot, { recursive: true });
   const checkpoint = actionWorkerCheckpoints(options.artifactRoot, "reject");
@@ -2339,6 +2378,9 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     }
     const { runPostRefusalObserver } = await import("@certscore/scan-core/post-refusal-observer");
     return runPostRefusalObserver({
+      ...(firstLayerProof ? {firstLayerProof, onRejectGateFinalRecheck: (outcome:"passed" | "failed") => {
+        gateRecheck = {outcome,observedAtMs:Date.now()};
+      }} : {}),
       runtimeGraph: payload.runtimeGraph,
       onTrustArcResponseCapture: capture => { trustArcSources = capture; },
       onActionDispatchCommitted: () => { void checkpoint("action_dispatched"); },
@@ -2419,6 +2461,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     },
     artifactPointers: { postRefusalPacketUri: packetPointer },
     phaseTimings,
+    ...(firstLayerProof && gateRecheck ? {rejectGateWorkerRecheck:{...gateRecheck,packetSha256:sha256}} : {}),
     postRefusalEvidence: descriptor,
   };
 }
@@ -2441,6 +2484,13 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
   if (config.interactionAuthorization.kind === "loopback" && payload.targetEnvironment !== "local") {
     throw new Error("Loopback post-accept authorization requires the local target environment.");
   }
+  const firstLayerProof = payload.acceptFirstLayerProof;
+  const enforce = productionConsentGateEnforced(payload,"accept");
+  if ((enforce || firstLayerProof) && (!enforce || (!firstLayerProof?.exactSelector || firstLayerProof.parentDispatchSha256 !== payload.parentDispatchSha256 ||
+        !acceptFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,Date.now())))) {
+    throw new Error("accept_gate_worker_proof_missing_invalid_or_expired");
+  }
+  let gateRecheck: {outcome:"passed" | "failed"; observedAtMs:number} | undefined;
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   await mkdir(options.artifactRoot, { recursive: true });
   const checkpoint = actionWorkerCheckpoints(options.artifactRoot, "accept");
@@ -2462,6 +2512,9 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
     }
     const { runPostAcceptObserver } = await import("@certscore/scan-core/post-accept-observer");
     return runPostAcceptObserver({
+      ...(firstLayerProof ? {firstLayerProof, onAcceptGateFinalRecheck: (outcome:"passed" | "failed") => {
+        gateRecheck = {outcome,observedAtMs:Date.now()};
+      }} : {}),
       onDiagnosticStage: stage => { void checkpoint.stage(stage); },
       formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
       runtimeGraph: payload.runtimeGraph,
@@ -2543,6 +2596,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
     },
     artifactPointers: { postAcceptPacketUri: packetPointer },
     phaseTimings,
+    ...(firstLayerProof && gateRecheck ? {acceptGateWorkerRecheck:{...gateRecheck,proofSha256:acceptGateProofDigest(firstLayerProof)}} : {}),
     postAcceptEvidence: descriptor,
   };
 }
@@ -2777,6 +2831,17 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           : signal.aborted || Date.now() - preferenceStartedAt >= CMP_PREFERENCE_JOIN_MS ? "preference_budget_exhausted" as const : "preference_worker_failed" as const,
         startedAt: new Date(preferenceStartedAt).toISOString(), completedAt: new Date().toISOString() }; }
     })() : undefined;
+  const enforced = {
+    accept: isPostAcceptWorkerEnabled(payload) && productionConsentGateEnforced(payload,"accept"),
+    reject: isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateEnforced(payload,"reject"),
+  };
+  let resolveConsentProof!: (value?: ReturnType<typeof evaluateConsentGateShadow>) => void;
+  const consentProofReady = new Promise<ReturnType<typeof evaluateConsentGateShadow> | undefined>(resolve => {
+    resolveConsentProof = resolve;
+  });
+  const gateDeclines: Partial<Record<"accept" | "reject", string>> = {};
+  const consentGateDispatchDeadlineMs = {accept:options.deadlineAtMs ?? Infinity,reject:options.deadlineAtMs ?? Infinity};
+  const consentParentSha256 = postRefusalParentDispatchSha256(payload);
   const postRefusalState: {
     passiveAbsence: boolean;
     passiveCoverageLimited?: boolean;
@@ -2809,18 +2874,32 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
       postRefusalWorkerSignal,
     )
-      .then(() => {
+      .then(async () => {
+        const decision = enforced.reject ? (await consentProofReady)?.reject : undefined;
+        const proof = decision?.outcome === "qualified" ? {...decision,scanId:payload.scanId} : undefined;
+
         postRefusalWorkerSignal.throwIfAborted();
-        postRefusalState.dispatchStartedAtMs = Date.now();
+        const nowMs = Date.now();
+        if (enforced.reject && (nowMs >= consentGateDispatchDeadlineMs.reject || !(rejectFirstLayerProofMatches(proof,payload.scanId,payload.targetUrl,consentParentSha256,nowMs)))) {
+          gateDeclines.reject = decision?.outcome === "blocked" ? decision.reason :
+            decision?.outcome === "qualified" ? "proof_expired" : "source_unavailable";
+          postRefusalState.error = gateDeclines.reject;
+          postRefusalState.outcomeObservedAtMs = nowMs;
+          postRefusalState.settled = true;
+          return undefined;
+        }
+        postRefusalState.dispatchStartedAtMs = nowMs;
         return invokeLocalV2DagLambdaWorker({
           lambdaClient: options.lambdaClient,
           parentPayload: payload,
           parentScanId: payload.scanId,
           signal: postRefusalWorkerSignal,
+          ...(proof ? {rejectFirstLayerProof:proof} : {}),
           workerLane: "reject_observation",
         });
       })
       .then((result) => {
+        if (!result) return;
         // RequestResponse cancellation stops the coordinator from accepting a
         // late lane result, but AWS may still finish an already-running worker.
         // Never let that late response reopen a terminal no-Reject or timeout
@@ -2872,18 +2951,33 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       payload.postAcceptObservation?.dispatchDelayMs ?? POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
       postAcceptWorkerSignal,
     )
-      .then(() => {
+      .then(async () => {
+        const decision = enforced.accept ? (await consentProofReady)?.accept : undefined;
+        const proof = decision?.outcome === "qualified" ? decision.proof : undefined;
+
         postAcceptWorkerSignal.throwIfAborted();
-        postAcceptState.dispatchStartedAtMs = Date.now();
+        const nowMs = Date.now();
+        if (enforced.accept && (nowMs >= consentGateDispatchDeadlineMs.accept || !(proof?.exactSelector && proof.parentDispatchSha256 === consentParentSha256 &&
+            acceptFirstLayerProofMatches(proof,payload.scanId,payload.targetUrl,nowMs)))) {
+          gateDeclines.accept = decision?.outcome === "blocked" ? decision.reason :
+            decision?.outcome === "qualified" ? "proof_expired" : "source_unavailable";
+          postAcceptState.error = gateDeclines.accept;
+          postAcceptState.outcomeObservedAtMs = nowMs;
+          postAcceptState.settled = true;
+          return undefined;
+        }
+        postAcceptState.dispatchStartedAtMs = nowMs;
         return invokeLocalV2DagLambdaWorker({
           lambdaClient: options.lambdaClient,
           parentPayload: payload,
           parentScanId: payload.scanId,
           signal: postAcceptWorkerSignal,
+          ...(proof ? {acceptFirstLayerProof:proof} : {}),
           workerLane: "accept_observation",
         });
       })
       .then((result) => {
+        if (!result) return;
         if (postAcceptState.cancelledNoAccept || postAcceptState.timedOut) return;
         postAcceptState.result = result;
         postAcceptState.outcomeObservedAtMs = Date.now();
@@ -2901,8 +2995,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       });
   }
   const shadowChannels = {
-    accept: isPostAcceptWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "accept"),
-    reject: isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "reject"),
+    accept: enforced.accept || isPostAcceptWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "accept"),
+    reject: enforced.reject || isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "reject"),
   };
   let shadowConsentResult: LocalV2DagLambdaShardResult | undefined;
   let earlyConsentMirror: ReturnType<typeof mirrorWorkerArtifactsIntoFinalArtifactRoot> | undefined;
@@ -2928,7 +3022,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         channels:shadowChannels, bundle, scanId:payload.scanId, targetUrl:payload.targetUrl,
         sourceSha256, parentDispatchSha256, nowMs:Date.now(), deadlineAtMs:options.deadlineAtMs ?? Infinity, geometry,
       });
-    }).catch(() => { /* Existing coordinator joins handle artifact failures. */ });
+    }).catch(() => { /* Existing coordinator joins handle artifact failures. */ })
+      .finally(() => resolveConsentProof(shadowPassive));
   };
   const workerResults = await timeLambdaPhase(phaseTimings, "worker_invocations", () =>
     invokeLocalV2DagLambdaWorkers({
@@ -2946,7 +3041,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           [postRefusalState, postRefusalAbortController, result.consentRejectAvailability.rejectPassiveBarrierOnly, "reject"],
           [postAcceptState, postAcceptAbortController, result.consentRejectAvailability.acceptPassiveBarrierOnly, "accept"],
         ] as const) {
-          if (!limited || !state.started || state.settled) continue;
+          if (enforced[action] || !limited || !state.started || state.settled) continue;
           state.passiveCoverageLimited = true;
           if (actionLanePassiveAbsenceDisposition({ ...state, passiveBarrierReached: false }) === "cancel_not_dispatched") {
             if (action === "reject") postRefusalState.cancelledNoReject = true;
@@ -2954,7 +3049,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             controller.abort(new Error(`${action}_path_incomplete_at_passive_barrier`));
           }
         }
-        if (postRefusalState.started && !postRefusalState.cancelledNoReject && !postRefusalState.timedOut) {
+        if (!enforced.reject && postRefusalState.started && !postRefusalState.cancelledNoReject && !postRefusalState.timedOut) {
           const returnedRejectStatus = postRefusalState.result?.postRefusalEvidence?.status;
           const rejectActionMayHaveDispatched = returnedRejectStatus !== undefined &&
             returnedRejectStatus !== "not_attempted" &&
@@ -2982,7 +3077,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           }
         }
         if (
-          postAcceptState.started &&
+          !enforced.accept && postAcceptState.started &&
           !postAcceptState.cancelledNoAccept &&
           !postAcceptState.timedOut &&
           result.consentRejectAvailability.inventoryComplete &&
@@ -3021,6 +3116,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     })
   );
   const passiveLaneBarrierCompletedAtMs = Date.now();
+  consentGateDispatchDeadlineMs.accept = Math.min(consentGateDispatchDeadlineMs.accept,passiveLaneBarrierCompletedAtMs+POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS);
+  consentGateDispatchDeadlineMs.reject = Math.min(consentGateDispatchDeadlineMs.reject,passiveLaneBarrierCompletedAtMs+POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS);
+  if (!shadowConsentResult) resolveConsentProof();
+
   const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", async () => {
     const settled = await Promise.allSettled(workerResults.map((result) => earlyConsentReads.get(result) ?? readLocalV2DagLambdaWorkerBundle(result, {
       awsRegion: payload.awsRegion, s3GetClient: options.s3GetClient,
@@ -3483,7 +3582,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   });
 
   const shadow = shadowChannels.accept || shadowChannels.reject ? buildProductionConsentGateShadow({
-    scanId:payload.scanId, channels:shadowChannels, passive:shadowPassive, nowMs:Date.now(),
+    scanId:payload.scanId, channels:shadowChannels, passive:shadowPassive, nowMs:Date.now(), enforced, gateDeclines,
+    acceptRecheck:postAcceptState.result?.acceptGateWorkerRecheck,
+    rejectRecheck:postRefusalState.result?.rejectGateWorkerRecheck,
+    rejectPacketSha256:postRefusalState.result?.artifactMetadata?.postRefusalPacketUri?.sha256,
+    acceptPacketBound:!!joinedPostAcceptPacket && postAcceptState.result?.parentDispatchSha256 === consentParentSha256,
+    rejectPacketBound:!!joinedPostRefusalPacket && postRefusalState.result?.parentDispatchSha256 === consentParentSha256,
     accept:{
       dispatchAtMs:postAcceptState.dispatchStartedAtMs, completedAtMs:postAcceptState.outcomeObservedAtMs,
       deadlineAtMs:Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + postAcceptMaxTailWaitMs),
@@ -3517,7 +3621,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     signal: options.artifactSignal ?? options.signal,
   });
   if (shadow) console.info(JSON.stringify({
-    event:"consent_gate_shadow.v1", scanId:payload.scanId, region:payload.awsRegion, buildGitSha:process.env.BUILD_GIT_SHA,
+    event:enforced.accept || enforced.reject ? "consent_gate_enforced.v1" : "consent_gate_shadow.v1", scanId:payload.scanId, region:payload.awsRegion, buildGitSha:process.env.BUILD_GIT_SHA,
     ...shadow.baseline, manifestUri:artifacts.artifactPointers.manifestUri,
     manifestSha256:artifacts.artifactMetadata.manifestUri?.sha256,
   }));
@@ -3771,6 +3875,8 @@ export async function invokeLocalV2DagLambdaWorkers(input: {
 }
 
 export async function invokeLocalV2DagLambdaWorker(input: {
+  acceptFirstLayerProof?: AcceptFirstLayerProof;
+  rejectFirstLayerProof?: RejectFirstLayerProof;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   lambdaClient?: LambdaInvokeClient;
   parentPayload: LocalV2DagLambdaDispatchPayload;
@@ -3779,19 +3885,26 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   workerLane: LocalV2DagLambdaWorkerLane;
 }): Promise<LocalV2DagLambdaShardResult> {
   assertPrivacyCaptureProfile(input.parentPayload, input.workerLane);
-  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,...((input.parentPayload.saleSharingOptOut?.canaryAuthorization || input.parentPayload.privacyCaptureProfile===CONDITIONAL_OPT_OUT_CAPTURE_PROFILE)?{maxAttempts:1}:{}) });
   const workerLane = input.workerLane;
-  const { gpcObservation: parentGpcObservation, ...parentPayloadWithoutGpcObservation } = input.parentPayload;
+  const enforceWorker = input.acceptFirstLayerProof !== undefined || input.rejectFirstLayerProof !== undefined;
+  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,
+    ...(enforceWorker || input.parentPayload.saleSharingOptOut?.canaryAuthorization ||
+      input.parentPayload.privacyCaptureProfile===CONDITIONAL_OPT_OUT_CAPTURE_PROFILE ? {maxAttempts:1} : {}) });
+  const { gpcObservation: parentGpcObservation, acceptFirstLayerProof: _acceptProof, rejectFirstLayerProof: _rejectProof,
+    ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
     ...parentPayloadWithoutGpcObservation,
     ...(["cmp_preferences", "sale_sharing_opt_out", "policy_evidence", "runtime_evidence"].includes(workerLane) ||
       (workerLane === "consent_proof" && (productionConsentGateShadowEnabled(input.parentPayload, "accept") ||
-        productionConsentGateShadowEnabled(input.parentPayload, "reject"))) ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
+        productionConsentGateShadowEnabled(input.parentPayload, "reject") ||
+        productionConsentGateEnforced(input.parentPayload, "accept") ||
+        productionConsentGateEnforced(input.parentPayload, "reject"))) ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
     callbackCorrelationId: input.parentScanId,
     ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
     ...(workerLane === "reject_observation" && input.parentPayload.postRefusalObservation
       ? {
           parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload),
+          ...(input.rejectFirstLayerProof ? {rejectFirstLayerProof:input.rejectFirstLayerProof} : {}),
           postRefusalObservation: {
             ...input.parentPayload.postRefusalObservation,
             dispatchDelayMs: 0,
@@ -3801,6 +3914,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
     ...(workerLane === "accept_observation" && input.parentPayload.postAcceptObservation
       ? {
           parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload),
+          ...(input.acceptFirstLayerProof ? {acceptFirstLayerProof:input.acceptFirstLayerProof} : {}),
           postAcceptObservation: {
             ...input.parentPayload.postAcceptObservation,
             dispatchDelayMs: 0,
@@ -3817,11 +3931,13 @@ export async function invokeLocalV2DagLambdaWorker(input: {
     scanId: input.parentScanId,
     workerLane
   };
+  // An older Lambda runtime rejects this worker-only envelope before browser startup.
+  const workerDispatch = enforceWorker ? {...workerPayload,contractVersion:CONSENT_GATED_ACTION_DISPATCH_VERSION} : workerPayload;
   const invocationStartedAtMs = Date.now();
   const response = await lambdaClient.send(new InvokeCommand({
     FunctionName: input.parentPayload.functionName,
     InvocationType: "RequestResponse",
-    Payload: Buffer.from(JSON.stringify(workerPayload))
+    Payload: Buffer.from(JSON.stringify(workerDispatch))
   }), { abortSignal: input.signal });
   const responseReceivedAtMs = Date.now();
   if ((response.StatusCode ?? 0) < 200 || (response.StatusCode ?? 0) >= 300) {
@@ -4148,6 +4264,8 @@ function parseLocalV2DagLambdaShardResult(
   ) {
     throw new Error(`Local v2 DAG Lambda worker ${expectedWorkerLane} did not return a scan artifact URI.`);
   }
+  const acceptGateWorkerRecheck = workerLane === "accept_observation" ? readAcceptGateWorkerRecheck(parsed.acceptGateWorkerRecheck) : undefined;
+  const rejectGateWorkerRecheck = workerLane === "reject_observation" ? readRejectGateWorkerRecheck(parsed.rejectGateWorkerRecheck) : undefined;
   return {
     artifactMetadata: parseArtifactMetadataRecord(parsed.artifactMetadata),
     artifactPointers,
@@ -4156,6 +4274,8 @@ function parseLocalV2DagLambdaShardResult(
     ...(parentDispatchSha256 ? { parentDispatchSha256 } : {}),
     phaseTimings: parsePhaseTimings(parsed.phaseTimings),
     ...(postRefusalEvidence ? { postRefusalEvidence } : {}),
+    ...(acceptGateWorkerRecheck ? {acceptGateWorkerRecheck} : {}),
+    ...(rejectGateWorkerRecheck ? {rejectGateWorkerRecheck} : {}),
     ...(postAcceptEvidence ? { postAcceptEvidence } : {}),
     ...(consentRejectAvailability ? { consentRejectAvailability } : {}),
     scanId: requireString(parsed, "scanId"),
@@ -6770,6 +6890,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         completedAt: completedAt.toISOString(),
         handlerTiming: workerHandlerTiming,
         phaseTimings: artifactResult.phaseTimings,
+        ...(artifactResult.acceptGateWorkerRecheck ? {acceptGateWorkerRecheck:artifactResult.acceptGateWorkerRecheck} : {}),
+        ...(artifactResult.rejectGateWorkerRecheck ? {rejectGateWorkerRecheck:artifactResult.rejectGateWorkerRecheck} : {}),
         ...(artifactResult.postRefusalEvidence
           ? { postRefusalEvidence: artifactResult.postRefusalEvidence }
           : {}),

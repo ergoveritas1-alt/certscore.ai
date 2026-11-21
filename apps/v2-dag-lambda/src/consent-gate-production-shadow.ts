@@ -1,6 +1,6 @@
 import { deriveAcceptFirstLayerProof, type AcceptFirstLayerGeometrySource, type AcceptGatePassiveDecision } from "@certscore/scan-core/accept-first-layer-gate";
-import { buildAcceptGateShadowReceipt } from "@certscore/scan-core/accept-gate-shadow-receipt";
-import { buildRejectGateShadowReceipt, evaluateRejectGate, type RejectGateDecision } from "@certscore/scan-core/reject-gate-shadow-receipt";
+import { buildAcceptGateShadowReceipt, type AcceptGateWorkerRecheck } from "@certscore/scan-core/accept-gate-shadow-receipt";
+import { buildRejectGateShadowReceipt, evaluateRejectGate, type RejectGateDecision, type RejectGateWorkerRecheck } from "@certscore/scan-core/reject-gate-shadow-receipt";
 import type { CanonicalEvidenceBundle, PostAcceptEvidencePacket, PostRefusalEvidencePacket } from "@certscore/contracts";
 
 export type ConsentGateShadowChannels = { accept: boolean; reject: boolean };
@@ -46,7 +46,7 @@ export function evaluateConsentGateShadow(input: {
 }
 
 function summarizeAction(action: "accept" | "reject", scanId: string, receipt: ReturnType<typeof buildAcceptGateShadowReceipt> |
-  ReturnType<typeof buildRejectGateShadowReceipt>, baseline: ShadowAction, axOnlyBinding?: boolean) {
+  ReturnType<typeof buildRejectGateShadowReceipt>, baseline: ShadowAction, axOnlyBinding?: boolean, gateDecline?: string) {
   const packet = baseline.packet?.parentScanId === scanId ? baseline.packet : undefined;
   const observed = packet?.interactionDiagnostics?.click.outcome;
   // A confirmation after a click error never substitutes for a completed input.
@@ -64,6 +64,8 @@ function summarizeAction(action: "accept" | "reject", scanId: string, receipt: R
     ? undefined : deadlineAtMs - shiftedStart - (completedAtMs - dispatchAtMs);
   return {
     click, boundControl, ...(axOnlyBinding ? { axOnlyBinding:true } : {}), dispatch: receipt.dispatch, passive: receipt.passive,
+    ...(receipt.enforcementActive ? { enforcementActive:true, finalRecheck:receipt.finalRecheck,
+      ...(gateDecline ? {gateDecline} : {}) } : {}),
     ...(proofIssuedAtMs !== undefined && dispatchAtMs !== undefined
       ? { proofDeltaFromDispatchMs: proofIssuedAtMs - dispatchAtMs } : {}),
     ...(projectedSlackMs !== undefined && shiftedStart !== undefined && proofExpiresAtMs !== undefined
@@ -78,19 +80,31 @@ export function buildProductionConsentGateShadow(input: {
   accept: ShadowAction;
   reject: ShadowAction;
   nowMs: number;
+  enforced?: ConsentGateShadowChannels;
+  gateDeclines?: Partial<Record<"accept" | "reject", string>>;
+  acceptPacketBound?: boolean;
+  rejectPacketBound?: boolean;
+  acceptRecheck?: AcceptGateWorkerRecheck;
+  rejectRecheck?: RejectGateWorkerRecheck;
+  rejectPacketSha256?: string;
 }) {
   const { scanId, channels, passive, accept, reject, nowMs } = input;
   const unavailable = { outcome: "blocked", reason: "source_unavailable", evaluatedAtMs: nowMs } as const;
   const acceptPassive = passive?.accept ?? unavailable;
   const rejectPassive = passive?.reject ?? unavailable;
   const acceptGateShadowReceipt = channels.accept ? buildAcceptGateShadowReceipt({
-    scanId, passive: acceptPassive, dispatchAtMs: accept.dispatchAtMs, packetVerified: false, enforcementActive: false,
+    scanId, passive: acceptPassive, dispatchAtMs: accept.dispatchAtMs,
+    packetVerified: input.acceptPacketBound === true, enforcementActive: input.enforced?.accept === true,
+    workerRecheck: input.acceptRecheck,
     ...(accept.dispatchAtMs !== undefined &&
       (acceptPassive.outcome === "qualified" ? acceptPassive.proof.issuedAtMs : acceptPassive.evaluatedAtMs) <= accept.dispatchAtMs
       ? { passiveAtDispatch: acceptPassive } : {}),
   }) : undefined;
   const rejectGateShadowReceipt = channels.reject ? buildRejectGateShadowReceipt({
-    scanId, passive: rejectPassive, dispatchAtMs: reject.dispatchAtMs, enforcementActive: false,
+    scanId, passive: rejectPassive, dispatchAtMs: reject.dispatchAtMs, enforcementActive: input.enforced?.reject === true, worker:input.rejectRecheck,
+    ...(input.rejectPacketBound && input.rejectPacketSha256 && reject.packet ? {
+      packet:{sha256:input.rejectPacketSha256,proof:reject.packet.actionControlProof},
+    } : {}),
     ...(reject.dispatchAtMs !== undefined &&
       (rejectPassive.outcome === "qualified" ? rejectPassive.issuedAtMs : rejectPassive.evaluatedAtMs) <= reject.dispatchAtMs
       ? { passiveAtDispatch: rejectPassive } : {}),
@@ -99,8 +113,8 @@ export function buildProductionConsentGateShadow(input: {
     ...(acceptGateShadowReceipt ? { acceptGateShadowReceipt } : {}),
     ...(rejectGateShadowReceipt ? { rejectGateShadowReceipt } : {}),
     baseline: {
-      ...(acceptGateShadowReceipt ? { accept: summarizeAction("accept", scanId, acceptGateShadowReceipt, accept, passive?.axOnly?.accept) } : {}),
-      ...(rejectGateShadowReceipt ? { reject: summarizeAction("reject", scanId, rejectGateShadowReceipt, reject, passive?.axOnly?.reject) } : {}),
+      ...(acceptGateShadowReceipt ? { accept: summarizeAction("accept", scanId, acceptGateShadowReceipt, accept, passive?.axOnly?.accept, input.gateDeclines?.accept) } : {}),
+      ...(rejectGateShadowReceipt ? { reject: summarizeAction("reject", scanId, rejectGateShadowReceipt, reject, passive?.axOnly?.reject, input.gateDeclines?.reject) } : {}),
     },
   };
 }

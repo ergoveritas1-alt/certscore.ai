@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {createHash} from "node:crypto";
 import {createServer} from "node:http";
 import {chromium, type Page} from "playwright";
 import {runPostAcceptObserver} from "./post-accept-observer";
 import {runPostRefusalObserver} from "./post-refusal-observer";
+import type {RejectFirstLayerProof} from "./reject-gate-shadow-receipt";
 
 for (const action of ["accept", "reject"] as const) {
   for (const dispatchMode of ["enabled", "unset"] as const) test(`${action}: ${dispatchMode} cancellation at the final lifecycle boundary sends no input command`, async () => {
@@ -23,7 +25,7 @@ for (const action of ["accept", "reject"] as const) {
       const input = {scanId: `cancel-boundary-${action}`, url: `http://127.0.0.1:${(server.address() as {port:number}).port}/`,
         ...(dispatchMode === "enabled" ? {boundControlDispatch: true} : {}),
         actionSearchTimeoutMs: 1500, confirmationTimeoutMs: 100, observationWindowMs: 150, signal: controller.signal,
-        interactionAuthorization: {kind: "loopback" as const, authorizationId: "loopback_local_lab"}, onLifecycleEvent: () => controller.abort()};
+        interactionAuthorization: {kind: "loopback", authorizationId: "loopback_local_lab"} as const, onLifecycleEvent: () => controller.abort()};
       const packet = action === "accept"
         ? await runPostAcceptObserver({...input, recipe: {...recipe, artifactVersion: "certscore.post_accept_action_recipe.v1"}})
         : await runPostRefusalObserver({...input, recipe: {...recipe, artifactVersion: "certscore.post_refusal_action_recipe.v1"}});
@@ -64,7 +66,7 @@ for (const action of ["accept", "reject"] as const) {
           confirmation: {kind: "local_storage_equals" as const, key: "consent", expectedValue: action === "accept" ? "granted" : "denied"}};
         const input = {browser, boundControlDispatch, url: `http://127.0.0.1:${(server.address() as {port: number}).port}/`,
           scanId: `bound-${action}-${boundControlDispatch}`, actionSearchTimeoutMs: 1500, confirmationTimeoutMs: 40, observationWindowMs: 80,
-          interactionAuthorization: {authorizationId: "loopback_local_lab", kind: "loopback" as const},
+          interactionAuthorization: {authorizationId: "loopback_local_lab", kind: "loopback"} as const,
           onLifecycleEvent: () => {
             mutation = page!.evaluate(opposite => {
               const replacement = document.createElement("button");replacement.id = "choice";replacement.type = "button";
@@ -88,3 +90,89 @@ for (const action of ["accept", "reject"] as const) {
     });
   }
 }
+
+test("local exact Reject rechecks the original element and label before committing input", async t => {
+  const flag = "CERTSCORE_LOCAL_REJECT_EXACT_CONTROL";
+  const previous = process.env[flag];
+  process.env[flag] = "1";
+  const url = "http://127.0.0.1:12345/";
+  const browser = await chromium.launch({headless: true, args: ["--disable-background-networking",
+    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"]});
+  try {
+    for (const mode of ["stable", "replacement", "relabel", "duplicate",
+      "proof_stable", "proof_replacement", "proof_selector_mismatch", "proof_selector_ambiguous"] as const) await t.test(mode, async subtest => {
+      const withProof = mode.startsWith("proof_");
+      if (withProof) delete process.env[flag]; else process.env[flag] = "1";
+      const change = mode.replace(/^proof_/, "");
+      let clicks = 0;
+      let committed = 0;
+      const rechecks: string[] = [];
+      let page: Page | undefined;
+      let mutation: Promise<void> | undefined;
+      const open = browser.newContext.bind(browser);
+      subtest.mock.method(browser, "newContext", async (...args: Parameters<typeof open>) => {
+        const context = await open({...args[0], serviceWorkers: "block"});
+        const newPage = context.newPage.bind(context);
+        await context.route("**/*", route => {
+          if (route.request().url() === url + "clicked") { clicks++; return route.fulfill({status:204}); }
+          if (route.request().url() !== url) return route.abort();
+          return route.fulfill({contentType:"text/html", body:`<section id="banner" role="dialog" aria-label="Cookie consent">
+            <p>Choose your optional cookies.</p><button id="choice" type="button" onclick="localStorage.setItem('consent','denied');fetch('/clicked')">Reject all</button>
+            <button id="other" type="button">Preferences</button>
+          </section>`});
+        });
+        context.newPage = async () => (page = await newPage());
+        return context;
+      });
+      const scanId = `exact-reject-${mode}`;
+      const now = Date.now();
+      const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+      const exactSelector = change === "selector_mismatch" ? "#other" :
+        change === "selector_ambiguous" ? "#banner button" : "#choice";
+      const firstLayerProof: RejectFirstLayerProof = {
+        outcome: "qualified", scanId, exactSelector, issuedAtMs: now, expiresAtMs: now + 6_000,
+        binding: {
+          parentDispatchSha256: hash("parent"), sourceSha256: hash("bundle"), geometrySha256: hash("geometry"),
+          requestedTargetSha256: hash(url), documentSha256: hash(url), documentTokenSha256: hash("passive-loader"),
+          selectorSha256: hash(exactSelector), selectorEvidence: "verified_geometry",
+          labelSha256: hash("Reject all"), labelMatch: "exact",
+        },
+      };
+      const packet = await runPostRefusalObserver({
+        browser, url, scanId,
+        ...(withProof ? {firstLayerProof} : {}),
+        actionSearchTimeoutMs: 1500, confirmationTimeoutMs: 300, observationWindowMs: 250,
+        interactionAuthorization: {kind:"loopback", authorizationId:"loopback_local_lab"},
+        recipe: {artifactVersion:"certscore.post_refusal_action_recipe.v1", recipeId:"reject-exact-fixture-v1",
+          resolverMethod:"local_fixture_recipe", controlSelector:withProof ? ":is(#choice):is(#banner, #banner *)" : "#choice", bannerSelector:"#banner",
+          confirmation:{kind:"local_storage_equals", key:"consent", expectedValue:"denied"}},
+        onLifecycleEvent: () => {
+          mutation = page!.evaluate(mode => {
+            const button = document.querySelector("#choice")!;
+            if (mode === "replacement") button.replaceWith(button.cloneNode(true));
+            if (mode === "relabel") button.textContent = "Reject optional cookies";
+            if (mode === "duplicate") button.after(button.cloneNode(true));
+          }, change);
+        },
+        onActionDispatchCommitted: () => { committed++; },
+        onRejectGateFinalRecheck: outcome => { rechecks.push(outcome); },
+      });
+      const unbound = change === "selector_mismatch" || change === "selector_ambiguous";
+      if (unbound) assert.equal(mutation, undefined);
+      else assert.ok(mutation, "reached the final lifecycle boundary");
+      await mutation;
+      assert.equal(clicks, change === "stable" ? 1 : 0);
+      assert.equal(committed, change === "stable" ? 1 : 0);
+      assert.deepEqual(rechecks,unbound ? [] : [change === "stable" ? "passed" : "failed"]);
+      if (change !== "stable") {
+        assert.ok(packet.limitations.includes(unbound ? "passive_reject_button_binding_unverified" : "reviewed_reject_dispatch_guard_failed"));
+        assert.equal(packet.refusalRegistration.actionDispatchedAtMs, undefined);
+      }
+      if (withProof && !unbound) assert.equal(packet.actionControlProof?.selectorHint,exactSelector);
+    });
+  } finally {
+    if (previous === undefined) delete process.env[flag];
+    else process.env[flag] = previous;
+    await browser.close();
+  }
+});
