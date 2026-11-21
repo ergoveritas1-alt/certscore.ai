@@ -33,7 +33,8 @@ function proofFixture(input: { hold?: "scope" | "labels" | "uniqueness" | "geome
     },
   } as unknown as Locator;
   const page = input.page ?? {url: () => "https://example.test/", mainFrame: () => frame, frames: () => [frame],
-    locator: () => ({evaluateAll: async () => read("uniqueness", [{visibleText: label}])})} as unknown as Page;
+    locator: () => ({evaluateAll: async () => read("uniqueness", {selectorMatchCount: 1,
+      labels: [{visibleText: label}]})})} as unknown as Page;
   let callbacks = 0;
   const request: Parameters<typeof buildConsentActionControlProof>[0] & {deadlineAtMs?: number} = {
     action: "accept", control, page, observedAtMs: 1, recipeId: "canonical-fixture", selectorHint: "#choice",
