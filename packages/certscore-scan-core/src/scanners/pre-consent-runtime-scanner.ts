@@ -10609,23 +10609,15 @@ export function consentControlsFromAccessibilityTree(
     if (contextText && textExcerpts.length < 4 && !textExcerpts.includes(contextText)) {
       textExcerpts.push(contextText.slice(0, 2_000));
     }
-    let domBinding = node.domBinding;
-    if ((domBinding?.exactAcceptSelector || domBinding?.exactRejectSelector) &&
-        (domBinding.documentUrl !== documentUrl || node.visibilityEvidence !== "box_model_verified" ||
-          (domBinding.exactAcceptSelector && classification.intent !== "accept") ||
-          (domBinding.exactRejectSelector && (classification.intent !== "reject" || classification.variant)))) {
-      const { exactAcceptSelector: _acceptSelector, exactRejectSelector: _rejectSelector, ...legacyBinding } = domBinding;
-      domBinding = { ...legacyBinding, version: "ax_backend_dom_binding.v1" };
-    }
     controls.push({
       actionType: "other",
       linkDestination,
       classifierReasonCodes: classification.reasonCodes,
       label,
       role,
-      selectorHint: domBinding?.exactAcceptSelector ?? domBinding?.exactRejectSelector ?? `ax:${node.nodeId}`,
-      tagName: domBinding?.tagName ?? "ax-node",
-      domBinding,
+      selectorHint: `ax:${node.nodeId}`,
+      tagName: node.domBinding?.tagName ?? "ax-node",
+      domBinding: node.domBinding,
       visible: node.visibilityEvidence === "box_model_verified",
       visibilityEvidence: node.visibilityEvidence ?? "unverified",
       consentContextEvidence: "local_surface",
@@ -11893,28 +11885,20 @@ function mergeConsentInventoryDiagnostics(
 function uniqueConsentObservationControls(
   controls: ConsentUiObservation["controls"],
 ): ConsentUiObservation["controls"] {
-  const uniqueControls = new Map<string, ConsentUiObservation["controls"][number]>();
+  const seen = new Set<string>();
+  const uniqueControls: ConsentUiObservation["controls"] = [];
   for (const control of controls) {
-    const key = [control.actionType, control.label.trim().toLowerCase()].join("|");
-    const retained = uniqueControls.get(key);
-    if (!retained) {
-      uniqueControls.set(key, control);
+    const key = [
+      control.actionType,
+      control.label.trim().toLowerCase(),
+    ].join("|");
+    if (seen.has(key)) {
       continue;
     }
-    const prior = retained.domBinding;
-    const current = control.domBinding;
-    // Keep a later exact selector only when CDP still identifies the same node
-    // under the same document loader. Label-only matches cannot upgrade proof.
-    if (control.visible && current?.version === "ax_backend_dom_binding.v3" &&
-        prior?.version === "ax_backend_dom_binding.v1" &&
-        prior.backendNodeId === current.backendNodeId && prior.axNodeId === current.axNodeId &&
-        prior.documentUrl === current.documentUrl && prior.tagName === current.tagName &&
-        prior.documentIdentity.token === current.documentIdentity.token &&
-        prior.documentIdentity.source === current.documentIdentity.source) {
-      uniqueControls.set(key, {...retained, selectorHint:control.selectorHint, domBinding:current});
-    }
+    seen.add(key);
+    uniqueControls.push(control);
   }
-  return [...uniqueControls.values()].slice(0, 24);
+  return uniqueControls.slice(0, 24);
 }
 
 function annotateConsentUiObservation(

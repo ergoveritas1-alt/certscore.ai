@@ -132,8 +132,7 @@ export function evaluateRejectGate(input: {
       control.selectorHint !== candidate.selectorHint || control.label !== (candidate.ariaLabel ?? candidate.label) ||
       !candidate.label || ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
         label === undefined || (typeof label === "string" && (!label || directReject(label)))) ||
-      (control.domBinding && (control.domBinding.documentUrl !== document.url ||
-        control.domBinding.documentIdentity.token !== identity.token || control.domBinding.exactRejectSelector !== candidate.selectorHint))) {
+      control.domBinding) {
     return block("control_binding_unverified");
   }
   const expiresAtMs = Math.min(input.deadlineAtMs ?? Infinity, nowMs + proofLifetimeMs);

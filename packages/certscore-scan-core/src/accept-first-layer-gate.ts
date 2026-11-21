@@ -267,7 +267,7 @@ export function deriveAcceptFirstLayerProof(input: {
         (control.consentContextEvidence === undefined || control.consentContextEvidence === "local_surface") &&
         control.label === nativeAccept.label && control.selectorHint === nativeAccept.selector &&
         control.tagName === nativeAccept.tagName &&
-        (!input.requireExactSelector || !control.domBinding || control.domBinding.exactAcceptSelector === nativeAccept.selector);
+        (!input.requireExactSelector || !control.domBinding);
       if ((!direct || input.requireExactSelector) && !handoff) {
         missing = "control_binding_unverified";
         if (control.layer === "first_layer") return block(missing);

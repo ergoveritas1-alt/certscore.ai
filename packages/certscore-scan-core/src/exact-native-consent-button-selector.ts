@@ -1,16 +1,9 @@
 export function exactAcceptSelectorCaptureEnabled(): boolean {
-  return process.env.CERTSCORE_LOCAL_ACCEPT_FIRST_LAYER_GATE === "1" ||
-    process.env.CERTSCORE_LOCAL_ACCEPT_GATE_SHADOW === "1" ||
-    process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW === "1";
-}
-
-export function localExactRejectControlEnabled(): boolean {
-  return process.env.CERTSCORE_LOCAL_REJECT_EXACT_CONTROL === "1";
+  return process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW === "1";
 }
 
 export function exactRejectSelectorCaptureEnabled(): boolean {
-  return localExactRejectControlEnabled() || process.env.CERTSCORE_LOCAL_REJECT_GATE_SHADOW === "1" ||
-    process.env.CERTSCORE_REJECT_GATE_PRODUCTION_SHADOW === "1";
+  return process.env.CERTSCORE_REJECT_GATE_PRODUCTION_SHADOW === "1";
 }
 
 /** Runs as part of the existing passive browser reads. Only return a selector
@@ -21,7 +14,7 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
   if (!view || view !== view.top || element.localName !== "button" || element.getRootNode() !== root) return undefined;
 
   const resolvesOnly = (selector: string, expected: Element) => {
-    if (selector.length > 512) return false;
+    if (selector.length > 160) return false;
     try {
       const matches = root.querySelectorAll(selector);
       return matches.length === 1 && matches[0] === expected;

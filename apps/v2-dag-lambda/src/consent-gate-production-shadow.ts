@@ -4,7 +4,7 @@ import { buildRejectGateShadowReceipt, evaluateRejectGate, type RejectGateDecisi
 import type { CanonicalEvidenceBundle, PostAcceptEvidencePacket, PostRefusalEvidencePacket } from "@certscore/contracts";
 
 export type ConsentGateShadowChannels = { accept: boolean; reject: boolean };
-type Passive = { accept?: AcceptGatePassiveDecision; reject?: RejectGateDecision };
+type Passive = { accept?: AcceptGatePassiveDecision; reject?: RejectGateDecision; axOnly?: ConsentGateShadowChannels };
 type Packet = PostAcceptEvidencePacket | PostRefusalEvidencePacket;
 type ShadowAction = {
   dispatchAtMs?: number;
@@ -31,11 +31,22 @@ export function evaluateConsentGateShadow(input: {
     });
   }
   if (input.channels.reject) passive.reject = evaluateRejectGate(input);
+  const document = input.bundle.domSnapshots.at(-1);
+  const axOnly = (action: "accept" | "reject") => {
+    const result = passive[action];
+    if (!document || result?.outcome !== "blocked" || result.reason !== "control_binding_unverified") return false;
+    const controls = input.bundle.consentUiObservations.filter(observation =>
+      observation.layerInspected === "first_layer" && observation.documentUrl === document.url &&
+      !!document.documentIdentity?.token && observation.documentIdentity?.token === document.documentIdentity.token
+    ).flatMap(observation => observation.controls.filter(control => control.visible && control.actionType === `${action}_all`));
+    return controls.length > 0 && controls.every(control => Boolean(control.domBinding));
+  };
+  passive.axOnly = {accept:axOnly("accept"),reject:axOnly("reject")};
   return passive;
 }
 
 function summarizeAction(action: "accept" | "reject", scanId: string, receipt: ReturnType<typeof buildAcceptGateShadowReceipt> |
-  ReturnType<typeof buildRejectGateShadowReceipt>, baseline: ShadowAction) {
+  ReturnType<typeof buildRejectGateShadowReceipt>, baseline: ShadowAction, axOnlyBinding?: boolean) {
   const packet = baseline.packet?.parentScanId === scanId ? baseline.packet : undefined;
   const observed = packet?.interactionDiagnostics?.click.outcome;
   // A confirmation after a click error never substitutes for a completed input.
@@ -52,7 +63,7 @@ function summarizeAction(action: "accept" | "reject", scanId: string, receipt: R
     dispatchAtMs === undefined || !Number.isSafeInteger(deadlineAtMs) || completedAtMs < dispatchAtMs
     ? undefined : deadlineAtMs - shiftedStart - (completedAtMs - dispatchAtMs);
   return {
-    click, boundControl, dispatch: receipt.dispatch, passive: receipt.passive,
+    click, boundControl, ...(axOnlyBinding ? { axOnlyBinding:true } : {}), dispatch: receipt.dispatch, passive: receipt.passive,
     ...(proofIssuedAtMs !== undefined && dispatchAtMs !== undefined
       ? { proofDeltaFromDispatchMs: proofIssuedAtMs - dispatchAtMs } : {}),
     ...(projectedSlackMs !== undefined && shiftedStart !== undefined && proofExpiresAtMs !== undefined
@@ -88,8 +99,8 @@ export function buildProductionConsentGateShadow(input: {
     ...(acceptGateShadowReceipt ? { acceptGateShadowReceipt } : {}),
     ...(rejectGateShadowReceipt ? { rejectGateShadowReceipt } : {}),
     baseline: {
-      ...(acceptGateShadowReceipt ? { accept: summarizeAction("accept", scanId, acceptGateShadowReceipt, accept) } : {}),
-      ...(rejectGateShadowReceipt ? { reject: summarizeAction("reject", scanId, rejectGateShadowReceipt, reject) } : {}),
+      ...(acceptGateShadowReceipt ? { accept: summarizeAction("accept", scanId, acceptGateShadowReceipt, accept, passive?.axOnly?.accept) } : {}),
+      ...(rejectGateShadowReceipt ? { reject: summarizeAction("reject", scanId, rejectGateShadowReceipt, reject, passive?.axOnly?.reject) } : {}),
     },
   };
 }

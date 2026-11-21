@@ -4,10 +4,8 @@ import { z } from "zod";
 /** Native DOM identity read from the same CDP backend node as an AX record.
  * This is corroborating observation provenance, never an action authorization. */
 export const consentAccessibilityDomBindingSchema = z.object({
-  version: z.enum(["ax_backend_dom_binding.v1", "ax_backend_dom_binding.v2", "ax_backend_dom_binding.v3"]),
+  version: z.enum(["ax_backend_dom_binding.v1", "ax_backend_dom_binding.v2"]),
   optOutControl: boundOptOutControlSchema.optional(),
-  exactAcceptSelector: z.string().min(1).max(160).refine(value => !/^ax:|^button$/i.test(value)).optional(),
-  exactRejectSelector: z.string().min(1).max(160).refine(value => !/^ax:|^button$/i.test(value)).optional(),
   axNodeId: z.string().min(1).max(80),
   backendNodeId: z.number().int().positive().max(2_147_483_647),
   nodeType: z.literal(1),
@@ -17,10 +15,6 @@ export const consentAccessibilityDomBindingSchema = z.object({
 }).strict().superRefine((row,ctx)=>{
   if((row.version === "ax_backend_dom_binding.v2") !== Boolean(row.optOutControl) || row.optOutControl && row.optOutControl.selector.split(/[.#]/)[0]!==row.tagName)
     ctx.addIssue({code:"custom",message:"Opt-out metadata must bind the native element under v2."});
-  const exactSelector = row.exactAcceptSelector ?? row.exactRejectSelector;
-  if ((row.version === "ax_backend_dom_binding.v3") !== Boolean(exactSelector) ||
-      (exactSelector && row.tagName !== "button") || (row.exactAcceptSelector && row.exactRejectSelector))
-    ctx.addIssue({code:"custom",message:"Exact selector metadata must bind one native consent button under v3."});
 });
 
 export type ConsentAccessibilityDomBinding = z.infer<typeof consentAccessibilityDomBindingSchema>;
