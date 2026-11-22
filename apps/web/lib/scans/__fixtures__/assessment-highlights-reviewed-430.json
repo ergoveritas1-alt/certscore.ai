@@ -816,24 +816,16 @@
     }
   },
   "targeted:linear.app:ccpa_cpra": {
-    "text": "“Non-discrimination disclosure not found in the inspected policy”. Other findings: “Keyboard navigation accessibility issue and other accessibility checks”. Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+    "text": "“Keyboard navigation accessibility issue and other accessibility checks”: Scrollable regions lacked keyboard access. Buttons lacked discernible accessible names; Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (16 element failures). Enable keyboard access to flagged scrollable regions, name the flagged buttons and links and fix the flagged contrast or color-only cues; then retest.",
     "links": [
-      {
-        "label": "“Non-discrimination disclosure not found in the inspected policy”",
-        "targetId": "evidence"
-      },
       {
         "label": "“Keyboard navigation accessibility issue and other accessibility checks”",
         "targetId": "accessibility-evidence"
       }
     ],
     "expanded": {
-      "text": "“Non-discrimination disclosure not found in the inspected policy”: A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused. “Keyboard navigation accessibility issue and other accessibility checks”: Scrollable regions lacked keyboard access. Buttons lacked discernible accessible names; Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (16 element failures). Retained examples measured 3.45:1 (required 4.5:1); 1.88:1 (required 4.5:1). Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+      "text": "“Keyboard navigation accessibility issue and other accessibility checks”: Automated accessibility checks found failures on 1 tested page (1 element failure). Scrollable regions lacked keyboard access. Automated accessibility checks found failures on 1 tested page (2 element failures). Buttons lacked discernible accessible names; Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (16 element failures). Retained examples measured 3.45:1 (required 4.5:1); 1.88:1 (required 4.5:1). Enable keyboard access to flagged scrollable regions, name the flagged buttons and links and fix the flagged contrast or color-only cues; then retest.",
       "links": [
-        {
-          "label": "“Non-discrimination disclosure not found in the inspected policy”",
-          "targetId": "evidence"
-        },
         {
           "label": "“Keyboard navigation accessibility issue and other accessibility checks”",
           "targetId": "accessibility-evidence"
@@ -872,35 +864,27 @@
     }
   },
   "targeted:www.vianet.ca:ccpa_cpra": {
-    "text": "“Privacy-rights disclosure not found in the inspected policy”. Other findings: “Semantic labeling accessibility issue and Low text contrast” and “No named sale/sharing choice found in the inspected page”. Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+    "text": "“No named sale/sharing choice found in the inspected page”. “Semantic labeling accessibility issue and Low text contrast”: Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (2 element failures). Check applicable sale/sharing obligations and permitted alternatives. If a page control is required, provide a clearly named, accessible choice and verify its operation.",
     "links": [
       {
-        "label": "“Privacy-rights disclosure not found in the inspected policy”",
-        "targetId": "evidence"
+        "label": "“No named sale/sharing choice found in the inspected page”",
+        "targetId": "california-privacy-evidence"
       },
       {
         "label": "“Semantic labeling accessibility issue and Low text contrast”",
         "targetId": "accessibility-evidence"
-      },
-      {
-        "label": "“No named sale/sharing choice found in the inspected page”",
-        "targetId": "california-privacy-evidence"
       }
     ],
     "expanded": {
-      "text": "“Privacy-rights disclosure not found in the inspected policy”: A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for the right to delete and non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused. “Semantic labeling accessibility issue and Low text contrast”: Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (2 element failures). “No named sale/sharing choice found in the inspected page”: The completed inspection did not identify a named sale/sharing choice among the rendered links and buttons. Review whether an opt-out method is required and whether an alternative method applies. Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+      "text": "“No named sale/sharing choice found in the inspected page”: The completed inspection did not identify a named sale/sharing choice among the rendered links and buttons. Review whether an opt-out method is required and whether an alternative method applies. “Semantic labeling accessibility issue and Low text contrast”: Automated accessibility checks found failures on 1 tested page (2 element failures). Links lacked discernible accessible names. Low-contrast text was detected on 1 tested page (2 element failures). Retained examples measured 3.15:1 (required 4.5:1). Check applicable sale/sharing obligations and permitted alternatives. If a page control is required, provide a clearly named, accessible choice and verify its operation.",
       "links": [
         {
-          "label": "“Privacy-rights disclosure not found in the inspected policy”",
-          "targetId": "evidence"
+          "label": "“No named sale/sharing choice found in the inspected page”",
+          "targetId": "california-privacy-evidence"
         },
         {
           "label": "“Semantic labeling accessibility issue and Low text contrast”",
           "targetId": "accessibility-evidence"
-        },
-        {
-          "label": "“No named sale/sharing choice found in the inspected page”",
-          "targetId": "california-privacy-evidence"
         }
       ]
     }
@@ -1053,32 +1037,54 @@
       ]
     }
   },
+  "targeted:www.gatech.edu:ccpa_cpra": {
+    "text": "“Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (2 element failures). Links lacked discernible accessible names. Repair labels, accessible names, role/ARIA usage, and semantic structure for the retained axe examples, then rerun the accessibility scan.",
+    "links": [
+      {
+        "label": "“Semantic labeling accessibility issue”",
+        "targetId": "accessibility-evidence"
+      }
+    ],
+    "expanded": {
+      "text": "“Semantic labeling accessibility issue”: Automated accessibility checks found failures on 1 tested page (2 element failures). Links lacked discernible accessible names. “Non-discrimination disclosure not found in the inspected policy”: A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused. Repair labels, accessible names, role/ARIA usage, and semantic structure for the retained axe examples, then rerun the accessibility scan.",
+      "links": [
+        {
+          "label": "“Semantic labeling accessibility issue”",
+          "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Non-discrimination disclosure not found in the inspected policy”",
+          "targetId": "evidence"
+        }
+      ]
+    }
+  },
   "targeted:www.plannedparenthood.org:ccpa_cpra": {
-    "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 35 tracking requests; 32 collected data. Other findings: “Non-discrimination disclosure not found in the inspected policy”. Check that GPC sets the sale/sharing opt-out and controls advertising collection.",
+    "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 35 tracking requests; 32 collected data. “Low text contrast”: Low-contrast text was detected on 1 tested page (6 element failures). Check that GPC sets the sale/sharing opt-out and controls advertising collection.",
     "links": [
       {
         "label": "“GPC choice-enforcement risk observed”",
         "targetId": "gpc-evidence"
       },
       {
-        "label": "“Non-discrimination disclosure not found in the inspected policy”",
-        "targetId": "evidence"
+        "label": "“Low text contrast”",
+        "targetId": "accessibility-evidence"
       }
     ],
     "expanded": {
-      "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 35 tracking requests; 32 collected data. “Non-discrimination disclosure not found in the inspected policy”: A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused. “Low text contrast”: Low-contrast text was detected on 1 tested page (6 element failures). Retained examples measured 3.3:1 (required 4.5:1); 3.19:1 (required 4.5:1); 3.9:1 (required 4.5:1). Check that GPC sets the sale/sharing opt-out and controls advertising collection.",
+      "text": "“GPC choice-enforcement risk observed”: Global Privacy Control (GPC) was verified in the page request and browser setting. Samples include 35 tracking requests; 32 collected data. “Low text contrast”: Low-contrast text was detected on 1 tested page (6 element failures). “Non-discrimination disclosure not found in the inspected policy”: A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for non-discrimination when exercising privacy rights. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused. Check that GPC sets the sale/sharing opt-out and controls advertising collection.",
       "links": [
         {
           "label": "“GPC choice-enforcement risk observed”",
           "targetId": "gpc-evidence"
         },
         {
-          "label": "“Non-discrimination disclosure not found in the inspected policy”",
-          "targetId": "evidence"
-        },
-        {
           "label": "“Low text contrast”",
           "targetId": "accessibility-evidence"
+        },
+        {
+          "label": "“Non-discrimination disclosure not found in the inspected policy”",
+          "targetId": "evidence"
         }
       ]
     }
