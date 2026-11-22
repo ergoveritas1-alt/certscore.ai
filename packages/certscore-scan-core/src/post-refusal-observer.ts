@@ -1146,9 +1146,22 @@ export async function runPostRefusalObserver(
       : 0;
     const initialActionSearchTimeoutMs = actionSearchTimeoutMs - adaptiveExtensionMs;
     const initialSearchDeadline = resolverStartedAtMs + initialActionSearchTimeoutMs;
+    const passiveProof = input.firstLayerProof;
+    const exactCookieInformation = passiveProof?.exactSelector === "#declineButton" && authorizedExactTargetUrl &&
+      passiveProof.binding.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
+      rejectFirstLayerProofMatches(passiveProof, input.parentScanId ?? input.scanId, input.url,
+        passiveProof.binding.parentDispatchSha256, resolverStartedAtMs)
+      ? actionRecipes.find(recipe => recipe.cmpId === "Cookie Information" && isRegisteredLoadingConsentRecipe(recipe, "reject"))
+      : undefined;
+    const probeExactCookieInformation = (sliceMs: number, signal: AbortSignal) => exactCookieInformation && passiveProof
+      ? probeCookieInformationReject(page!, exactCookieInformation,
+          Math.min(Date.now() + sliceMs, initialSearchDeadline, passiveProof.expiresAtMs, resultBudgetDeadlineAtMs ?? Infinity), signal)
+      : undefined;
     const readiness = initialActionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
       await waitForConsentDocumentOrNamedControl<DeterministicRecipeResolution>({page,deadlineAtMs:initialSearchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
         probe:async (sliceMs,probeSignal)=>{
+          const exact = await probeExactCookieInformation(sliceMs, probeSignal);
+          if (exact) return exact;
           const active=await resolveActiveRuntimeRecipes(page!,actionRecipes,actionDiscovery);
           if(active.length!==1 || !isRegisteredLoadingConsentRecipe(active[0]!,"reject"))return undefined;
           const candidate=await waitForDeterministicRecipe(page!,active,sliceMs,probeSignal,recordResolverSnapshot,actionDiscovery,true);
@@ -1158,7 +1171,9 @@ export async function runPostRefusalObserver(
     const searchEnded=effectiveSignal?.aborted || (initialActionSearchTimeoutMs>0 && Date.now()>=initialSearchDeadline);
     if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot(emptyResolverSnapshot("named_recipe", documentReady ? "binding_budget_exhausted" : "document_loading"));
     const searchRemaining = () => initialActionSearchTimeoutMs === 0 ? 0 : Math.max(1, initialSearchDeadline - Date.now());
-    let resolution: DeterministicRecipeResolution = readiness.resolution ?? ((!documentReady || searchEnded)
+    const exactResolution = !readiness.resolution && documentReady && !searchEnded
+      ? await probeExactCookieInformation(250, effectiveSignal) : undefined;
+    let resolution: DeterministicRecipeResolution = readiness.resolution ?? exactResolution ?? ((!documentReady || searchEnded)
       ? { status: effectiveSignal?.aborted ? "aborted" : "not_found" }
       : input.allowCanonicalRejectDiscovery
       ? await waitForDeterministicOrCanonicalRecipe(
@@ -1644,7 +1659,6 @@ export async function runPostRefusalObserver(
     let actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     let clickError: unknown;
     try {
-      const passiveProof = input.firstLayerProof;
       const assertPassiveBinding = () => {
         if (!passiveProof) return;
         if (!recheckExactReject || selectedRecipe!.controlFrameUrl || selectedRecipe!.accessibleControl ||
@@ -2924,6 +2938,31 @@ async function resolveActiveRuntimeRecipes(
 
 function normalizeControlLabel(value: string) {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** A current passive proof identifies one native control in this document.
+ * Probe it inside the existing search while unrelated scripts still load. */
+async function probeCookieInformationReject(
+  page: Page,
+  recipe: PostRefusalActionRecipe,
+  deadlineAtMs: number,
+  signal: AbortSignal,
+): Promise<DeterministicRecipeResolution | undefined> {
+  const selector = "#coiOverlay #coi-banner-wrapper #declineButton";
+  const control = page.locator(selector).and(page.locator(recipe.controlSelector));
+  const owned = await readWithinActionBoundary(() => page.evaluate(selector => {
+    const button = document.querySelector(selector);
+    const api = (window as Window & {CookieInformation?: {getConsentGivenFor?: unknown}}).CookieInformation;
+    return button instanceof HTMLButtonElement && button.getRootNode() === document &&
+      document.querySelectorAll("#coiOverlay").length === 1 &&
+      document.querySelectorAll("#declineButton").length === 1 &&
+      typeof api?.getConsentGivenFor === "function";
+  }, selector).catch(() => false), false, deadlineAtMs, signal);
+  if (!owned) return undefined;
+  const readiness = await inspectLocatorConsentReadiness(control, {deadlineAtMs, signal, scope:page});
+  if (signal.aborted || Date.now() >= deadlineAtMs || !readiness.scopeInteractive ||
+      !locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) return undefined;
+  return {status:"found",recipe,control};
 }
 
 export function scopedAncestorSelector(selector: string): string | undefined {

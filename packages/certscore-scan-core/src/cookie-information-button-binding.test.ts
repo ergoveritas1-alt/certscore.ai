@@ -21,36 +21,44 @@ for (const action of ["accept", "reject"] as const) {
     const accept = action === "accept";
     const ariaLabel = accept ? "Accept all" : "Decline all";
     const className = accept ? "coi-banner__accept" : "coi-banner__decline";
+    const buttonId = accept ? "choice" : "declineButton";
+    const selector = "#" + buttonId;
     const browser = await chromium.launch({args:["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
     t.after(() => browser.close());
     let page: Page;
     let clicks = 0;
+    let contexts = 0;
     const newContext = browser.newContext.bind(browser);
     t.mock.method(browser, "newContext", async (options: Parameters<typeof newContext>[0]) => {
       const context = await newContext({...options, serviceWorkers:"block"});
+      const passiveCapture = ++contexts === 1;
       context.on("page", opened => {page = opened;});
       await context.route("**/*", route => {
         if (route.request().url() === url + "click") {
           clicks++;
           return route.fulfill({status:204});
         }
+        if (route.request().url() === url + "hold.js") {
+          if (passiveCapture) return route.fulfill({contentType:"text/javascript",body:""});
+          return; // Leave the worker's unrelated deferred script pending.
+        }
         if (route.request().url() !== url) return route.abort();
         return route.fulfill({contentType:"text/html", body:`<!doctype html>
           <div id="coiOverlay" role="banner" style="padding: 24px"><div id="coi-banner-wrapper" class="coi-banner__wrapper" style="width: 420px"
               role="dialog" aria-modal="true" aria-label="Cookie preferences">
           <p>We use optional cookies to measure website performance.</p>
-          <button id="choice" class="${className}" aria-label="${ariaLabel}">${ariaLabel.toUpperCase()}</button>
+          <button id="${buttonId}" class="${className}" aria-label="${ariaLabel}">${ariaLabel.toUpperCase()}</button>
           </div></div><aside id="cookie-information-help" hidden>Cookie information</aside><script>
           window.cicl=['cookie_cat_necessary','cookie_cat_functional'];
           window.cicc={cookie_cat_necessary:true};
           window.CookieInformation={getConsentGivenFor:key=>window.cicc[key]};
-          document.addEventListener('click',e=>{if(e.target.id==='choice'){
+          document.addEventListener('click',e=>{if(e.target.id==='${buttonId}'){
             fetch('/click');
             window.cicc.cookie_cat_functional=${accept};
             document.querySelector('#coiOverlay').remove();
             dispatchEvent(new Event('CookieInformationConsentGiven'));
           }});
-          </script>`});
+          </script>${accept ? "" : '<script defer src="/hold.js"></script>'}`});
       });
       return context;
     });
@@ -62,13 +70,13 @@ for (const action of ["accept", "reject"] as const) {
     const observation = await readRapidFirstLayerConsentUiObservation(capturedPage, Date.now(), 1500);
     const geometry = await capturePassiveConsentControlGeometry(capturedPage, {documentIdentity, timeoutMs:1500});
     await passive.close();
-    const candidate = geometry.candidates.find(row => row.selectorHint === "#choice");
+    const candidate = geometry.candidates.find(row => row.selectorHint === selector);
     assert.equal(candidate?.label, ariaLabel.toUpperCase());
     assert.equal(candidate.ariaLabel, ariaLabel);
     assert.equal(candidate.containerSelectorHint, "#coi-banner-wrapper");
-    assert.ok(observation.controls.some(row => row.selectorHint === "#choice"));
+    assert.ok(observation.controls.some(row => row.selectorHint === selector));
     // The retained Appodeal inventory used the rendered caption for this selector.
-    const controls = observation.controls.map(row => row.selectorHint === "#choice" ? {...row,label:candidate.label} : row);
+    const controls = observation.controls.map(row => row.selectorHint === selector ? {...row,label:candidate.label} : row);
     const scanId = `cookie-information-${action}`;
     const bundle = {
       url, scanId, domSnapshots:[{url,documentIdentity,artifactId:"dom_text_pre_consent",consentStateAtTime:"pre_consent"}],
@@ -84,13 +92,15 @@ for (const action of ["accept", "reject"] as const) {
         deadlineAtMs:nowMs+6000,requireExactSelector:true,geometry:{bytes,sha256:hash(bytes),sizeBytes:bytes.length}};
       const checks: string[] = [];
       let replaced: Promise<void> | undefined;
+      let readinessAtDispatch: Promise<string> | undefined;
       const baselineClicks = clicks;
       const options = {
         browser,url,scanId,parentScanId:scanId,
         interactionAuthorization:{kind:"scan_target" as const,normalizedUrl:url,scanId,authorizationId:"sharded_scan_exact_target.v1" as const},
         actionSearchTimeoutMs:2500,resultBudgetMs:6500,confirmationTimeoutMs:400,observationWindowMs:300,
         onLifecycleEvent:() => {
-          if (replacement && !replaced) replaced = page.locator("#choice").evaluate(button => button.replaceWith(button.cloneNode(true)));
+          if (!accept && !readinessAtDispatch) readinessAtDispatch = page.evaluate(() => document.readyState);
+          if (replacement && !replaced) replaced = page.locator(selector).evaluate(button => button.replaceWith(button.cloneNode(true)));
         },
       };
       const packet = await (async () => {
@@ -112,11 +122,13 @@ for (const action of ["accept", "reject"] as const) {
         return runPostRefusalObserver({...options,recipe,firstLayerProof:proof,onRejectGateFinalRecheck:value=>checks.push(value)});
       })();
       await replaced;
+      if (!accept) assert.equal(await readinessAtDispatch, "interactive");
       assert.deepEqual(checks,[replacement ? "failed" : "passed"],JSON.stringify(packet.limitations));
       assert.equal(packet.interactionDiagnostics?.click.outcome,replacement ? "not_attempted" : "completed");
       assert.equal(clicks-baselineClicks,replacement ? 0 : 1);
       const registration = "acceptanceRegistration" in packet ? packet.acceptanceRegistration : packet.refusalRegistration;
       if (!replacement) {
+        assert.ok(registration.actionDispatchedAtMs! < 6000);
         assert.equal(registration.status,"confirmed",JSON.stringify(packet.confirmationDiagnostics));
         assert.ok(registration.witnesses.some(witness=>witness.witnessType==="cmp_api_state" && witness.key==="cookie_information"));
       }
