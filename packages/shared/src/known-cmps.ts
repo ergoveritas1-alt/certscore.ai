@@ -1171,6 +1171,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     domMarkerPatterns: [/(?:^|\s)#cookiescript_(?:injected|accept|reject)(?=$|[\s>+~.#\[:])/],
     evidenceTreatment: "cmp_infrastructure", role: "consent management platform", recipeVersion: "v1",
     interactionDocumentationUrls: ["https://help.cookie-script.com/en/articles/30246-custom-functions", "https://help.cookie-script.com/en/articles/30242-custom-events"],
+    acceptConfirmation: {kind: "cmp_api_consent_state_changed", provider: "cookiescript"},
     rejectConfirmation: {kind: "cmp_api_consent_state_changed", provider: "cookiescript"},
   },
   {

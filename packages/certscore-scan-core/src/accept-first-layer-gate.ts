@@ -1,3 +1,4 @@
+import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
 import type { CanonicalEvidenceBundle, ConsentActionControlProof, ConsentUiObservation } from "@certscore/contracts";
 import {
@@ -140,8 +141,11 @@ function exactGeometryAccept(
     candidate.actionType === "accept_all" && candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible");
   if (candidates.length !== 1) return undefined;
   const candidate = candidates[0]!;
+  const cookieScriptRole = requireExactSelector && candidate.exactCookieScriptAcceptVerified === true &&
+    candidate.selectorHint === "#cookiescript_accept" && candidate.tagName === "div" && candidate.role === "button" &&
+    geometry.cmp?.detections?.some(cmp => cmp.canonicalName === "CookieScript") === true;
   if ((requireExactSelector && (inspection.structuralCoverage !== "complete" ||
-      candidate.tagName !== "button" || candidate.exactNativeAcceptSelectorVerified !== true)) ||
+      (!cookieScriptRole && (candidate.tagName !== "button" || candidate.exactNativeAcceptSelectorVerified !== true)))) ||
     candidate.enabled !== true || candidate.intersectsViewport !== true || candidate.occlusion?.center !== true ||
     candidate.consentContextConfirmed !== true || candidate.frameContext?.frameKind !== "main_frame" ||
     candidate.frameContext.frameUrl !== document.url || !candidate.label || !candidate.selectorHint || !candidate.tagName ||
@@ -154,7 +158,10 @@ function exactGeometryAccept(
     geometry.candidates.filter(row => row.selectorHint === candidate.selectorHint).length === 1 &&
     conflicts.every(conflict => isSeparateNonAcceptConflict(conflict, candidate, geometry.candidates))
     ? conflicts : undefined;
-  const binding = { selector: candidate.selectorHint, tagName: candidate.tagName, separateConflicts };
+  const binding = { cookieScriptRole,
+    selector: cookieScriptRole ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : candidate.selectorHint, inventorySelector: candidate.selectorHint,
+    sourceLabel: cookieScriptRole && !candidate.ariaLabel && candidate.cookieScriptUppercaseSourceLabel?.toUpperCase() === candidate.label
+      ? candidate.cookieScriptUppercaseSourceLabel : undefined, tagName: candidate.tagName, separateConflicts };
   if (candidate.ariaLabel) {
     // AX inventory can report the accessible name while geometry records the
     // rendered caption. Both must independently support Accept. The receipt
@@ -265,7 +272,8 @@ export function deriveAcceptFirstLayerProof(input: {
         observation.documentIdentity.source === "cdp_loader_id" &&
         (control.layer === undefined || control.layer === "first_layer") &&
         (control.consentContextEvidence === undefined || control.consentContextEvidence === "local_surface") &&
-        control.label === nativeAccept.label && control.selectorHint === nativeAccept.selector &&
+        (control.label === nativeAccept.label || control.label === nativeAccept.sourceLabel) &&
+        (!nativeAccept.cookieScriptRole || (control.role === "button" && !control.domBinding)) && control.selectorHint === nativeAccept.inventorySelector &&
         control.tagName === nativeAccept.tagName &&
         (!input.requireExactSelector || !control.domBinding);
       if ((!direct || input.requireExactSelector) && !handoff) {
@@ -279,7 +287,7 @@ export function deriveAcceptFirstLayerProof(input: {
           control.domBinding.documentIdentity.token !== observation.documentIdentity.token))) return block("control_binding_unverified");
       if (!isActionableAcceptLabel(control.label)) return block("control_binding_unverified");
       matches.push(handoff
-        ? { document, label: hash(control.label), selector: hash(nativeAccept.selector), labelSource: nativeAccept.labelSource,
+        ? { document, label: hash(nativeAccept.label), selector: hash(nativeAccept.selector), labelSource: nativeAccept.labelSource,
             ...(scopedLabelConflict ? { scopedLabelConflict: true } : {}) }
         : { document, label: labelHash(control.label), passiveSelector: control.selectorHint });
     }

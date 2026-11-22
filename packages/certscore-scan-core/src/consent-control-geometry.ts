@@ -1,4 +1,4 @@
-import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
+import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import { exactNativeConsentButtonSelector, exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled } from "./exact-native-consent-button-selector.js";
 import type { Frame, Page } from "playwright";
 import { AEM_LEGAL_FOOTER_LINK_SELECTOR } from "./consent-footer-opt-out.js";
@@ -160,6 +160,7 @@ export interface ConsentControlCandidateEvidence {
   selectorHint: string;
   exactNativeAcceptSelectorVerified?: true;
   exactNativeRejectSelectorVerified?: true;
+  exactCookieScriptAcceptVerified?: true;
   exactCookieScriptRejectVerified?: true;
   cookieScriptUppercaseSourceLabel?: string;
   containerSelectorHint?: string;
@@ -301,6 +302,7 @@ interface RawGeometryCandidate {
   initialSwitchRow?: {label:string; bounds:ConsentControlRect};
   selectorHint: string;
   exactNativeButtonSelector?: string;
+  exactCookieScriptAcceptVerified?: true;
   exactCookieScriptRejectVerified?: true;
   cookieScriptUppercaseSourceLabel?: string;
   containerSelectorHint?: string;
@@ -401,7 +403,10 @@ export async function captureConsentControlGeometry(
 ): Promise<ConsentControlGeometryArtifact> {
   const registrySelectors = KNOWN_CMP_REGISTRY.flatMap((entry) => entry.domSelectors ?? []);
   const exactRejectSelectorCapture = passive && exactRejectSelectorCaptureEnabled();
+  const exactAcceptSelectorCapture = passive && exactAcceptSelectorCaptureEnabled();
   const frameInput = {
+    cookieScriptAccept: exactAcceptSelectorCapture
+      ? {selector: COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, ids: COOKIE_SCRIPT_ACCEPT_IDS} : undefined,
     cookieScriptReject: exactRejectSelectorCapture
       ? {selector: COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, ids: COOKIE_SCRIPT_REJECT_IDS} : undefined,
     candidateLimit: options.candidateLimit ?? DEFAULT_CANDIDATE_LIMIT,
@@ -425,7 +430,6 @@ export async function captureConsentControlGeometry(
     nonFirstLayerSurfaceSelector: KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(","),
     aemFooterLinkSelector: AEM_LEGAL_FOOTER_LINK_SELECTOR,
   };
-  const exactAcceptSelectorCapture = passive && exactAcceptSelectorCaptureEnabled();
   const exactSelectorCapture = exactAcceptSelectorCapture || exactRejectSelectorCapture;
   const geometrySource = exactSelectorCapture
     ? `(input) => { const __name = (fn) => fn; return (${collectConsentGeometryInPage.toString()})(input, (${exactNativeConsentButtonSelector.toString()})); }`
@@ -1083,6 +1087,10 @@ function buildCandidateEvidence(
       ? { exactNativeAcceptSelectorVerified: true as const } : {}),
     ...(actionType === "reject_all" && retainExactSelector && candidate.exactNativeButtonSelector
       ? { exactNativeRejectSelectorVerified: true as const } : {}),
+    ...(actionType === "accept_all" && retainExactSelector && candidate.exactCookieScriptAcceptVerified &&
+        candidate.captureFrameSlot === 0 && candidate.layer === "first_layer" && decisionStatus === "confirmed_visible"
+      ? {exactCookieScriptAcceptVerified: true as const,
+          cookieScriptUppercaseSourceLabel: candidate.cookieScriptUppercaseSourceLabel} : {}),
     ...(actionType === "reject_all" && retainExactSelector && candidate.exactCookieScriptRejectVerified &&
         candidate.captureFrameSlot === 0 && candidate.layer === "first_layer" && decisionStatus === "confirmed_visible"
       ? {exactCookieScriptRejectVerified: true as const,
@@ -1489,6 +1497,7 @@ function normalizeLabel(label: string): string {
 }
 
 function collectConsentGeometryInPage(input: {
+  cookieScriptAccept?: {selector: string; ids: string};
   cookieScriptReject?: {selector: string; ids: string};
   candidateLimit: number;
   containerLimit: number;
@@ -1796,6 +1805,8 @@ function collectConsentGeometryInPage(input: {
       return null;
     }
     const label = labelFor(element);
+    const cookieScript = element.id === "cookiescript_accept" ? input.cookieScriptAccept
+      : element.id === "cookiescript_reject" ? input.cookieScriptReject : undefined;
     const aemFooterLink = Boolean(element.closest(input.aemFooterLinkSelector));
     const containerIndex = aemFooterLink ? undefined : nearestContainerIndex(element, containerItems);
     const contextRoot = typeof containerIndex === "number" ? containerItems[containerIndex]?.element : nearestContextRoot(element, contextPattern);
@@ -1892,10 +1903,11 @@ function collectConsentGeometryInPage(input: {
       })(),
       selectorHint: selectorHintFor(element),
       exactNativeButtonSelector: selectExactButton?.(element),
-      ...(input.cookieScriptReject && element.id === "cookiescript_reject" && window === window.top &&
-          element.getRootNode() === document && element.matches(input.cookieScriptReject.selector) &&
-          document.querySelectorAll(input.cookieScriptReject.ids).length === 2
-        ? {exactCookieScriptRejectVerified: true as const,
+      ...(cookieScript && window === window.top &&
+          element.getRootNode() === document && element.matches(cookieScript.selector) &&
+          document.querySelectorAll(cookieScript.ids).length === 2
+        ? {...(element.id === "cookiescript_accept"
+            ? {exactCookieScriptAcceptVerified: true as const} : {exactCookieScriptRejectVerified: true as const}),
             cookieScriptUppercaseSourceLabel: getComputedStyle(element).textTransform === "uppercase" &&
               !element.hasAttribute("aria-label") && label.length <= 160 &&
               compactText(element.textContent ?? "").toUpperCase() === label

@@ -1,3 +1,4 @@
+import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
 import { choiceRequestRole } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
 import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
@@ -2250,6 +2251,9 @@ async function waitForCanonicalAcceptControlRecipe(
         return {status:sawAmbiguousCanonicalControl?"ambiguous":"not_found"};
       }
       const registeredCmpRecipe = selectCanonicalAcceptConfirmationRecipe(registeredRecipes, candidateCmpName);
+      const cookieScriptConfirmation = candidateCmpName === "CookieScript" && !controlFrameUrl &&
+        candidate.selectorHint === "#cookiescript_accept" && candidate.tagName === "div" && candidate.role === "button"
+        ? getKnownCmpDefinitionByName(candidateCmpName)?.acceptConfirmation : undefined;
       const recipe: PostAcceptActionRecipe = {
         artifactVersion: "certscore.post_accept_action_recipe.v1",
         recipeId: `canonical-control:accept:${customControlBinding ? "custom-v1" : "v1"}:${hashValue([
@@ -2257,7 +2261,7 @@ async function waitForCanonicalAcceptControlRecipe(
           candidate.selectorHint,
           containerSelector,
           controlFrameUrl ?? "main_frame",
-          registeredCmpRecipe?.recipeId ?? "generic_confirmation",
+          registeredCmpRecipe?.recipeId ?? cookieScriptConfirmation?.kind ?? "generic_confirmation",
         ].join("\n")).slice(0, 24)}`,
         ...(registeredCmpRecipe?.cmpId
           ? { cmpId: registeredCmpRecipe.cmpId }
@@ -2272,13 +2276,13 @@ async function waitForCanonicalAcceptControlRecipe(
         ...(controlFrameUrl ? { controlFrameUrl } : {}),
         bannerSelector: containerSelector,
         ...(controlFrameUrl ? { bannerFrameUrl: controlFrameUrl } : {}),
-        confirmation: registeredCmpRecipe?.confirmation ?? {
+        confirmation: registeredCmpRecipe?.confirmation ?? (cookieScriptConfirmation?.kind === "cmp_api_consent_state_changed" ? cookieScriptConfirmation : {
           kind: "canonical_accept_transition",
           controlSelector,
           ...(controlFrameUrl ? { controlFrameUrl } : {}),
           bannerSelector: containerSelector,
           ...(controlFrameUrl ? { bannerFrameUrl: controlFrameUrl } : {}),
-        },
+        }),
       };
       // Finish the full frame/selector uniqueness sweep using remaining outer
       // search time. The former 100 ms slice could repeatedly discard a valid

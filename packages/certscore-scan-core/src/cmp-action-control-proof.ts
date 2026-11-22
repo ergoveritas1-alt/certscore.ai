@@ -1,4 +1,4 @@
-import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
+import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import {
   CONSENT_ACTION_CONTROL_PROOF_VERSION,
   classifyConsentControlLabel,
@@ -392,8 +392,9 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       ? input.page.frames().filter((frame) => frame.url() === input.controlFrameUrl)
       : [input.page];
     if (frames.length !== 1) return { status: "label_unverifiable", reason: "resolved_control_scope_ambiguous" };
-    const roleButtonIds = input.expectedNativeSelector === COOKIE_SCRIPT_REJECT_ROLE_SELECTOR &&
-      input.action === "reject" && input.cmpId === "CookieScript" ? COOKIE_SCRIPT_REJECT_IDS : undefined;
+    const cookieScriptSelector = input.action === "accept" ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : COOKIE_SCRIPT_REJECT_ROLE_SELECTOR;
+    const roleButtonIds = input.cmpId === "CookieScript" && input.expectedNativeSelector === cookieScriptSelector
+      ? (input.action === "accept" ? COOKIE_SCRIPT_ACCEPT_IDS : COOKIE_SCRIPT_REJECT_IDS) : undefined;
     const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds}) => {
       if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
       if (passiveSelector) {
