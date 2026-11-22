@@ -2629,7 +2629,8 @@ async function readCaptureConfirmationBaseline(
   }
   if (confirmation.kind === "cmp_api_consent_state_changed") {
     const [snapshot, osanoReceiptBaseline] = await Promise.all([
-      readCmpApiConsentSnapshot(confirmationScope, confirmation.provider),
+      readCmpApiConsentSnapshot(confirmationScope, confirmation.provider, onDiagnostic,
+        confirmation.provider === "cookie_information" ? {control} : undefined),
       confirmation.provider === "osano" ? captureOsanoReceiptBaseline(context, confirmationScope, control) : undefined,
     ]);
     return {
@@ -2647,7 +2648,7 @@ async function readCaptureConfirmationBaseline(
       readTcfData(page).catch(() => undefined),
       isCookieInformation ? undefined : cookieState(context, confirmation.cookieName),
       confirmation.cookieName === "OptanonConsent" ? captureOneTrustBaseline(context, confirmationScope) : undefined,
-      isCookieInformation ? readCmpApiConsentSnapshot(confirmationScope, "cookie_information", onDiagnostic) : undefined,
+      isCookieInformation ? readCmpApiConsentSnapshot(confirmationScope, "cookie_information", onDiagnostic, {control}) : undefined,
     ]);
     return { kind: confirmation.kind, snapshot, cookieStateHash, oneTrustBaseline, cookieInformationBaseline };
   }
@@ -2806,7 +2807,8 @@ async function waitForAcceptanceConfirmation(
       confirmation.kind === "cmp_api_consent_state_changed" &&
       baseline.kind === confirmation.kind
     ) {
-      const snapshot = await readCmpApiConsentSnapshot(confirmationScope, confirmation.provider, diagnostics?.reason);
+      const snapshot = await readCmpApiConsentSnapshot(confirmationScope, confirmation.provider, diagnostics?.reason,
+        confirmation.provider === "cookie_information" ? {actionDispatchedAtEpochMs} : undefined);
       if (confirmation.provider === "hubspot") diagnostics?.apiSnapshot?.(snapshot);
       const eligibility = snapshot && evaluateCmpApiConfirmation({provider: confirmation.provider,
         baseline, snapshot, decision: "granted", actionDispatchedAtEpochMs});
@@ -2848,7 +2850,7 @@ async function waitForAcceptanceConfirmation(
             diagnostics?.reason("api_unavailable");
             return undefined;
           }
-          const current = await readCmpApiConsentSnapshot(confirmationScope, "cookie_information", diagnostics?.reason);
+          const current = await readCmpApiConsentSnapshot(confirmationScope, "cookie_information", diagnostics?.reason, {actionDispatchedAtEpochMs});
           if (!current) return undefined;
           const eligibility = evaluateCmpApiConfirmation({
             provider: "cookie_information", baseline: before, snapshot: current,

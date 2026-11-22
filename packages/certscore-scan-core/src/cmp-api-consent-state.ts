@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {receiptCaptureToken,retainReceiptApi,retainReceiptApiPartial} from './consent-receipt-capture.js';
-import { readDocumentedConsentApi, type DocumentedConsentProvider } from "./documented-consent-api.js";
+import { readDocumentedConsentApi, type CookieInformationReadBinding, type DocumentedConsentProvider } from "./documented-consent-api.js";
 import type { Frame, Page } from "playwright";
 import { readDidomiConsentSnapshot } from "./didomi-consent-state.js";
 import type { ConsentConfirmationReason } from "@certscore/contracts";
@@ -24,9 +24,10 @@ async function readCmpApiConsentSnapshotInternal(
   provider: CmpApiConsentProvider,
   onDiagnostic?: (reason: ConsentConfirmationReason) => void,
   onPartial?: (value: PartialApiReceipt) => void,
+  cookieInformationBinding?: CookieInformationReadBinding,
 ): Promise<CmpApiConsentSnapshot | undefined> {
   if (provider === "cookie_information" || provider === "cookiescript" || provider === "finsweet") {
-    return readDocumentedConsentApi(scope, provider, onDiagnostic);
+    return readDocumentedConsentApi(scope, provider, onDiagnostic, cookieInformationBinding);
   }
   if (provider === "didomi") {
     const snapshot = await readDidomiConsentSnapshot(scope);
@@ -293,9 +294,10 @@ async function readCmpApiConsentSnapshotInternal(
     .update(JSON.stringify([`${provider}-api-instance.v1`, instanceGeneration])).digest("hex") };
 }
 
-export async function readCmpApiConsentSnapshot(scope:Page|Frame,provider:CmpApiConsentProvider,onDiagnostic?:(reason:ConsentConfirmationReason)=>void):Promise<CmpApiConsentSnapshot|undefined>{
+export async function readCmpApiConsentSnapshot(scope:Page|Frame,provider:CmpApiConsentProvider,onDiagnostic?:(reason:ConsentConfirmationReason)=>void,
+ cookieInformationBinding?:CookieInformationReadBinding):Promise<CmpApiConsentSnapshot|undefined>{
  const token=receiptCaptureToken(scope);
- const snapshot=await readCmpApiConsentSnapshotInternal(scope,provider,onDiagnostic,partial=>{try{retainReceiptApiPartial(token,provider,partial);}catch{/* Retention is optional. */}});
+ const snapshot=await readCmpApiConsentSnapshotInternal(scope,provider,onDiagnostic,partial=>{try{retainReceiptApiPartial(token,provider,partial);}catch{/* Retention is optional. */}},cookieInformationBinding);
  try{retainReceiptApi(token,provider,snapshot);}catch{/* Optional retention cannot change the existing decision. */}
  return snapshot;
 }

@@ -3899,7 +3899,8 @@ async function waitForRefusalConfirmation(
       firstRead = false;
       diagnostics?.pass();
       if (signal?.aborted) { diagnostics?.reason("confirmation_aborted"); return undefined; }
-      const snapshot = await readCmpApiConsentSnapshot(semanticScope, confirmation.provider, diagnostics?.reason);
+      const snapshot = await readCmpApiConsentSnapshot(semanticScope, confirmation.provider, diagnostics?.reason,
+        confirmation.provider === "cookie_information" ? {actionDispatchedAtEpochMs} : undefined);
       const eligibility = snapshot && evaluateCmpApiConfirmation({provider: confirmation.provider,
         baseline, snapshot, decision: "denied", actionDispatchedAtEpochMs});
       if (eligibility && !eligibility.eligible) diagnostics?.reason(eligibility.reason);
@@ -3977,7 +3978,7 @@ async function waitForRefusalConfirmation(
       if (confirmation.cookieName === "CookieInformationConsent") {
         const before = baseline.cookieInformationBaseline;
         if (!before) return undefined;
-        const current = await readCmpApiConsentSnapshot(semanticScope, "cookie_information", diagnostics?.reason);
+        const current = await readCmpApiConsentSnapshot(semanticScope, "cookie_information", diagnostics?.reason, {actionDispatchedAtEpochMs});
         if (!current) return undefined;
         const eligibility = evaluateCmpApiConfirmation({
           provider: "cookie_information", baseline: before, snapshot: current, decision: "denied", actionDispatchedAtEpochMs,
@@ -4165,7 +4166,8 @@ async function readCaptureRefusalConfirmationBaseline(
   }
   if (confirmation.kind === "cmp_api_consent_state_changed") {
     const [snapshot, osanoReceiptBaseline] = await Promise.all([
-      readCmpApiConsentSnapshot(semanticScope, confirmation.provider),
+      readCmpApiConsentSnapshot(semanticScope, confirmation.provider, onDiagnostic,
+        confirmation.provider === "cookie_information" ? {control} : undefined),
       confirmation.provider === "osano" ? captureOsanoReceiptBaseline(context, semanticScope, control) : undefined,
     ]);
     return {
@@ -4187,7 +4189,7 @@ async function readCaptureRefusalConfirmationBaseline(
       readTcfData(semanticScope).catch(() => undefined),
       cmpCookieState(context, confirmation.cookieName).then((state) => state?.stateHash),
       confirmation.cookieName === "OptanonConsent" ? captureOneTrustBaseline(context, semanticScope) : undefined,
-      confirmation.cookieName === "CookieInformationConsent" ? readCmpApiConsentSnapshot(semanticScope, "cookie_information", onDiagnostic) : undefined,
+      confirmation.cookieName === "CookieInformationConsent" ? readCmpApiConsentSnapshot(semanticScope, "cookie_information", onDiagnostic, {control}) : undefined,
     ]);
     return {
       kind: "tcf_purposes_denied_or_cmp_cookie_changed",

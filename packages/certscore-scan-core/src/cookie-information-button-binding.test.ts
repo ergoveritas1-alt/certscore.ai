@@ -5,6 +5,7 @@ import { chromium, type Page } from "playwright";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveAcceptFirstLayerProof } from "./accept-first-layer-gate.js";
 import { capturePassiveConsentControlGeometry } from "./consent-control-geometry.js";
+import { readDocumentedConsentApi } from "./documented-consent-api.js";
 import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
 import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes.js";
@@ -39,13 +40,14 @@ for (const action of ["accept", "reject"] as const) {
               role="dialog" aria-modal="true" aria-label="Cookie preferences">
           <p>We use optional cookies to measure website performance.</p>
           <button id="choice" class="${className}" aria-label="${ariaLabel}">${ariaLabel.toUpperCase()}</button>
-          </div></div><script>
+          </div></div><aside id="cookie-information-help" hidden>Cookie information</aside><script>
           window.cicl=['cookie_cat_necessary','cookie_cat_functional'];
           window.cicc={cookie_cat_necessary:true};
           window.CookieInformation={getConsentGivenFor:key=>window.cicc[key]};
           document.addEventListener('click',e=>{if(e.target.id==='choice'){
             fetch('/click');
             window.cicc.cookie_cat_functional=${accept};
+            document.querySelector('#coiOverlay').remove();
             dispatchEvent(new Event('CookieInformationConsentGiven'));
           }});
           </script>`});
@@ -121,3 +123,44 @@ for (const action of ["accept", "reject"] as const) {
     }
   });
 }
+
+test("Cookie Information SDK state must follow a trusted click on the original owning button", async t => {
+  const browser = await chromium.launch({args:["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.route("**/*", route => route.abort());
+  await page.setContent(`
+    <div id="coiOverlay"><button id="choice">Accept all</button></div>
+    <div id="cookie-information-help"><button id="other">Accept all</button></div>
+    <script>
+      window.cicl=['cookie_cat_necessary','cookie_cat_functional'];
+      window.cicc={cookie_cat_necessary:true};
+      window.CookieInformation={getConsentGivenFor:key=>window.cicc[key]};
+      document.addEventListener('click',event=>{
+        if(event.target.id==='choice') document.querySelector('#coiOverlay').remove();
+        window.cicc.cookie_cat_functional=true;
+        dispatchEvent(new Event('CookieInformationConsentGiven'));
+      });
+    </script>`);
+  const read = (actionDispatchedAtEpochMs: number) =>
+    readDocumentedConsentApi(page, "cookie_information", undefined, {actionDispatchedAtEpochMs});
+  const choice = page.locator("#choice");
+  const other = page.locator("#other");
+  assert.equal(await readDocumentedConsentApi(page, "cookie_information", undefined, {control:other}), undefined);
+  const baseline = await readDocumentedConsentApi(page, "cookie_information", undefined, {control:choice});
+  assert.equal(baseline?.eventSequence, 0);
+  const dispatchTime = Date.now();
+  await other.click();
+  assert.equal(await read(dispatchTime), undefined);
+  await choice.evaluate(button => button.dispatchEvent(new MouseEvent("click", {bubbles:true})));
+  assert.equal(await read(dispatchTime), undefined);
+  // The synthetic click removed the original owner. A new matching node cannot inherit the binding.
+  await page.locator("body").evaluate(body => body.insertAdjacentHTML("afterbegin", '<div id="coiOverlay"><button id="choice">Accept all</button></div>'));
+  await choice.click();
+  assert.equal(await read(dispatchTime), undefined);
+  await page.evaluate(() => document.body.insertAdjacentHTML("afterbegin",
+    '<div id="coiOverlay"><button id="choice">Accept all</button></div><div id="coiOverlay"></div>'));
+  const reasons: string[] = [];
+  assert.equal(await readDocumentedConsentApi(page, "cookie_information", reason => reasons.push(reason), {control:choice}), undefined);
+  assert.deepEqual(reasons, ["receipt_ambiguous"]);
+});
