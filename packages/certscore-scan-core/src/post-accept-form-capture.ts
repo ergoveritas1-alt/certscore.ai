@@ -281,7 +281,7 @@ export function startPostAcceptFormCapture(input: {
       if (capture.version !== "post_accept_form_capture.v4") capture.version = "post_accept_form_capture.v3";
     },
     continueThrough(confirmedAtMs: number, windowMs: number) {
-      if (frozen || input.signal?.aborted) return;
+      if (frozen || (input.signal?.aborted && !mainChanged)) return;
       deadline = input.parentScanStartedAtMs + confirmedAtMs + windowMs;
       capture.window = { startedAtMs: confirmedAtMs, endedAtMs: deadline - input.parentScanStartedAtMs, terminalSampleCompleted: false };
       // Preserve a limited artifact under the confirmed action's clock even

@@ -2,6 +2,7 @@ import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
 import { observeCookieScriptReload } from "./cookiescript-reload-persistence.js";
 import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
+import {armOsanoNavigationAccept} from "./osano-navigation-accept.js";
 import { choiceRequestRole } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
 import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
@@ -1294,6 +1295,12 @@ export async function runPostAcceptObserver(
     actionControlProof = proofResolution.proof;
     boundControlElement = proofResolution.boundElement;
     sourceFrameBinding.setElement(boundControlElement, resultBudgetDeadlineAtMs);
+    const osanoOriginalRead = firstLayerProof && boundControlElement && selectedRecipe.cmpId === "Osano" &&
+      actionControlProof.actionSemantics === "direct_label" && confirmationScope === page &&
+      page.url() === "https://you.com/" && authorizedExactTargetUrl === page.url()
+      ? await readWithinAcceptDeadline(() => armOsanoNavigationAccept(boundControlElement!, "https://you.com/").catch(() => undefined),
+          undefined, Math.min(firstLayerProof.expiresAtMs, Date.now()+150), effectiveSignal)
+      : undefined;
     stage("click");
     let actionDispatchedAtEpochMs = Date.now();
     let actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
@@ -1426,7 +1433,13 @@ export async function runPostAcceptObserver(
         timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write" }; },
       { pass: () => confirmationDiagnostic.pass(false), reason: confirmationDiagnostic.reason, apiSnapshot:recordHubSpotRead },
     )).catch(() => { limitations.push("acceptance_confirmation_read_failed"); return undefined; });
-    if (confirmedState) confirmationDiagnostic.reason("verified_decision");
+    // Navigation ends observation on this page. Only an already-armed read in the
+    // original realm can finish registration after that boundary.
+    const saved = !confirmedState && !clickError && sourceDocumentChanged && sourceFrameBinding.signal.aborted &&
+      !baseSignal?.aborted && osanoOriginalRead
+      ? await osanoOriginalRead(actionDispatchedAtEpochMs, Math.min(actionDispatchedAtEpochMs + confirmationTimeoutMs,
+          resultBudgetDeadlineAtMs ?? Infinity), baseSignal) : undefined;
+    if (confirmedState || saved) confirmationDiagnostic.reason("verified_decision");
     timing.confirmationMs = Math.max(0, Date.now() - confirmationStartedAtMs);
     if (clickError) {
       diagnostics.click = {
@@ -1452,7 +1465,19 @@ export async function runPostAcceptObserver(
         !sourceDocumentChanged && sourceFrameBinding.current),
       read: () => sourceFrameBinding.read(0, () => waitForAcceptanceConfirmation(context!, page!, confirmationScope, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal, undefined, { pass: () => { receiptCapture?.phase('terminal'); confirmationDiagnostic.pass(true); }, reason: confirmationDiagnostic.terminalReason, apiSnapshot:recordHubSpotRead })) });
     if (!confirmedState) {
-      limitations.push("acceptance_registration_not_confirmed");
+      let navigationRegistration: PostAcceptRegistration | undefined;
+      if (saved) {
+        const observedAtMs = elapsed(parentScanStartedAtMs, saved.observedAtEpochMs);
+        decisionEvidence = {policyVersion:"semantic_consent_registration.v2", decision:"granted", basis:"verified_state",
+          observedStateSha256:saved.stateHash, observedAtMs, timestampBasis:"verified_state_observed"};
+        navigationRegistration = {status:"confirmed", acceptanceExercised:true, actionDispatchedAtMs, acceptanceRegisteredAtMs:observedAtMs,
+          witnesses:[{witnessType:"cmp_api_state", key:"osano", expectedState:"all_configurable_purposes_granted_after_accept",
+            observedAtMs, observedStateHash:saved.stateHash, corroboratingOnly:false}]};
+        formCaptureHandle?.continueThrough(observedAtMs, observationWindowMs);
+        limitations.push("observation_window_aborted_after_confirmed_acceptance","osano_saved_event_and_sdk_read_in_original_document");
+      } else {
+        limitations.push("acceptance_registration_not_confirmed");
+      }
       const captureStartedAtMs = Date.now();
       if (input.formSnapshotReviewer && diagnostics.click.outcome === "completed" && !actionDocumentChanged &&
         targetStillAuthorized() && !effectiveSignal?.aborted) {
@@ -1517,7 +1542,7 @@ export async function runPostAcceptObserver(
       }
       return await finalize({
         resolverFound: true,
-        registration: {
+        registration: navigationRegistration ?? {
           status: cancellation() ? "aborted" : "unconfirmed",
           acceptanceExercised: false,
           actionDispatchedAtMs,
