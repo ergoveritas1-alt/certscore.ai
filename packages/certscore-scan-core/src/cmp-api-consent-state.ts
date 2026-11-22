@@ -84,12 +84,12 @@ async function readCmpApiConsentSnapshotInternal(
       if (provider === "hubspot" && typeof target._hsp?.push !== "function") return undefined;
       if (!target.__certscoreDocumentedConsentEvents) Object.defineProperty(target, "__certscoreDocumentedConsentEvents", { value: {}, enumerable: false });
       let tracker = target.__certscoreDocumentedConsentEvents![provider];
-      // A new SDK can replace Osano.cm without replacing the document. Its
-      // listener and state must never inherit the previous instance's witness.
-      if (!tracker || provider === "osano" && tracker.api !== target.Osano!.cm) {
-        tracker = { sequence: 0, ...(provider === "osano" ? {
-          api: target.Osano!.cm, instanceGeneration: (tracker?.instanceGeneration ?? 0) + 1,
-        } : {}) }; target.__certscoreDocumentedConsentEvents![provider] = tracker;
+      // Each exposed SDK object owns its listener. A replacement in the same
+      // document needs a new subscription and a distinct confirmation baseline.
+      const api = provider === "osano" ? target.Osano!.cm! : target._hsp!;
+      if (!tracker || tracker.api !== api) {
+        tracker = { sequence: 0, api, instanceGeneration: (tracker?.instanceGeneration ?? 0) + 1 };
+        target.__certscoreDocumentedConsentEvents![provider] = tracker;
         const handlers = { listener(data: unknown) {
           const raw = provider === "hubspot" && data && typeof data === "object" ? (data as { categories?: unknown }).categories : data;
           const state = decoder.decode(raw);
@@ -112,7 +112,7 @@ async function readCmpApiConsentSnapshotInternal(
         if (tracker.sequence > 0 && tracker.state !== live.canonicalState) return { diagnosticReason: "receipt_readback_mismatch" as const,receiptPartial:tracker.partial?{...tracker.partial,apiReadKind:'saved_event' as const,readbackMatched:false,eventSequence:tracker.sequence,eventObservedAtEpochMs:tracker.observedAtEpochMs}:{...partialCapture.read(value),apiReadKind:'get_state' as const,readbackMatched:false} };
         return { ...live, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs, instanceGeneration: tracker.instanceGeneration };
       }
-      return { canonicalState: tracker.state ?? "unregistered", decision: tracker.decision ?? "unknown" as const, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs,
+      return { instanceGeneration: tracker.instanceGeneration, canonicalState: tracker.state ?? "unregistered", decision: tracker.decision ?? "unknown" as const, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs,
         ...(tracker.sequence > 0 && !tracker.state ? { diagnosticReason: "receipt_format_unsupported" as const,receiptPartial:tracker.partial?{...tracker.partial,apiReadKind:'saved_event' as const,eventSequence:tracker.sequence,eventObservedAtEpochMs:tracker.observedAtEpochMs}:undefined } : {}) };
     }
     if (provider === "drupal_eu_cookie") {
@@ -281,17 +281,13 @@ async function readCmpApiConsentSnapshotInternal(
   }, { provider }).catch(() => undefined);
   if (!result) { onDiagnostic?.("api_unavailable"); return undefined; }
   if('receiptPartial'in result&&result.receiptPartial)onPartial?.(result.receiptPartial);
-  if ("diagnosticReason" in result) {
-    if (result.diagnosticReason) onDiagnostic?.(result.diagnosticReason);
-    const { diagnosticReason: _reason, receiptPartial: _partial, ...snapshot } = result as typeof result&{receiptPartial?:unknown};
-    return "canonicalState" in snapshot ? snapshot : undefined;
-  }
-  if ("instanceGeneration" in result) {
-    const { instanceGeneration, ...snapshot } = result;
-    return { ...snapshot, configurationSha256: createHash("sha256")
-      .update(JSON.stringify(["osano-api-instance.v1", instanceGeneration])).digest("hex") };
-  }
-  return result;
+  if ("diagnosticReason" in result && result.diagnosticReason) onDiagnostic?.(result.diagnosticReason);
+  if (!("canonicalState" in result)) return undefined;
+  const { diagnosticReason: _reason, receiptPartial: _partial, instanceGeneration, ...snapshot } =
+    result as typeof result & { receiptPartial?: PartialApiReceipt };
+  if (instanceGeneration === undefined) return snapshot;
+  return { ...snapshot, configurationSha256: createHash("sha256")
+    .update(JSON.stringify([`${provider}-api-instance.v1`, instanceGeneration])).digest("hex") };
 }
 
 export async function readCmpApiConsentSnapshot(scope:Page|Frame,provider:CmpApiConsentProvider,onDiagnostic?:(reason:ConsentConfirmationReason)=>void):Promise<CmpApiConsentSnapshot|undefined>{

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "playwright";
+import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 
 // Termly documents consent events as { categories, cookies, uuid }, rather than
@@ -213,6 +214,44 @@ test("HubSpot queues one read-only listener before bootstrap without accepting a
     assert.equal(await page.evaluate(()=>(window as any)._hsp.length),1);
   } finally {await browser.close();}
 });
+
+for (const decision of ["granted", "denied"] as const) {
+  test(`HubSpot ${decision} binds the listener and baseline to the current queue`, async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.route("**/*", route => route.abort());
+      await page.setContent(`<button id="choice">Choice</button><script>
+        window.firstQueue = window._hsp = [];
+        window.secondQueue = [];
+        const choice = ${decision === "granted"};
+        window.publish = queue => queue.forEach(([, callback]) => {
+          callback({ categories: { analytics: choice, advertisement: choice, functionality: choice } });
+        });
+        document.querySelector("button").onclick = () => window.publish(window._hsp);
+      </script>`);
+      const original = await readCmpApiConsentSnapshot(page, "hubspot");
+      assert.ok(original);
+      await page.evaluate(() => { (window as any)._hsp = (window as any).secondQueue; });
+      const baseline = await readCmpApiConsentSnapshot(page, "hubspot");
+      assert.ok(baseline);
+      await page.evaluate(() => (window as any).publish((window as any).firstQueue));
+      assert.equal((await readCmpApiConsentSnapshot(page, "hubspot"))?.eventSequence, 0);
+      const dispatched = await page.evaluate(() => Date.now());
+      await page.click("#choice");
+      const snapshot = await readCmpApiConsentSnapshot(page, "hubspot");
+      assert.ok(snapshot);
+      const input = { provider: "hubspot" as const, decision, snapshot, actionDispatchedAtEpochMs: dispatched };
+      assert.deepEqual(evaluateCmpApiConfirmation({ ...input, baseline }), { eligible: true });
+      assert.deepEqual(evaluateCmpApiConfirmation({ ...input, baseline: original }), {
+        eligible: false, reason: "configuration_changed",
+      });
+      assert.equal(await page.evaluate(() => (window as any).secondQueue.length), 1);
+    } finally {
+      await browser.close();
+    }
+  });
+}
 
 test("HubSpot: served necessary category preserves optional decisions and rejects unsupported extensions", async () => {
   const browser = await chromium.launch({ headless: true });
