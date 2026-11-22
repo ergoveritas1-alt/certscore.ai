@@ -1421,6 +1421,7 @@ export async function runPostRefusalObserver(
       control,
       selectedRecipe.controlFrameUrl,
       boundControlDispatch,
+      confirmationDiagnostic.reason,
     ).catch(() => undefined);
     if (confirmationBaseline && "oneTrustBaseline" in confirmationBaseline) {
       for (const reason of confirmationBaseline.oneTrustBaseline?.diagnosticReasons ?? []) confirmationDiagnostic.reason(reason);
@@ -1586,6 +1587,7 @@ export async function runPostRefusalObserver(
             control,
             selectedRecipe.controlFrameUrl,
             boundControlDispatch,
+            confirmationDiagnostic.reason,
           );
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
@@ -3974,13 +3976,16 @@ async function waitForRefusalConfirmation(
       if (confirmation.kind !== "tcf_purposes_denied_or_cmp_cookie_changed" || baseline.kind !== confirmation.kind) return undefined;
       if (confirmation.cookieName === "CookieInformationConsent") {
         const before = baseline.cookieInformationBaseline;
-        const current = await readCmpApiConsentSnapshot(semanticScope, "cookie_information");
-        if (!before || !current) diagnostics?.reason("api_unavailable");
-        else if (current.decision !== "denied") diagnostics?.reason(current.decision === "unknown" ? "no_registered_complete_decision" : "opposite_or_mixed_decision");
-        else if (current.eventSequence <= before.eventSequence || current.eventObservedAtEpochMs === undefined || current.eventObservedAtEpochMs < actionDispatchedAtEpochMs) diagnostics?.reason("api_saved_event_unverified");
-        if (!before || current?.decision !== "denied" || current.configurationSha256 !== before.configurationSha256 ||
-          current.eventSequence <= before.eventSequence || current.eventObservedAtEpochMs === undefined ||
-          current.eventObservedAtEpochMs < actionDispatchedAtEpochMs) return undefined;
+        if (!before) return undefined;
+        const current = await readCmpApiConsentSnapshot(semanticScope, "cookie_information", diagnostics?.reason);
+        if (!current) return undefined;
+        const eligibility = evaluateCmpApiConfirmation({
+          provider: "cookie_information", baseline: before, snapshot: current, decision: "denied", actionDispatchedAtEpochMs,
+        });
+        if (!eligibility.eligible) {
+          diagnostics?.reason(eligibility.reason);
+          return undefined;
+        }
         return {stateHash: hashValue(current.canonicalState), witnessType: "cmp_api_state", key: "cookie_information",
           expectedState: "all_configurable_purposes_denied_after_reject"};
       }
@@ -4103,6 +4108,7 @@ async function readCaptureRefusalConfirmationBaseline(
   control: Locator,
   controlFrameUrl?: string,
   boundStorageScope = false,
+  onDiagnostic?: (reason: import("@certscore/contracts").ConsentConfirmationReason) => void,
 ): Promise<RefusalConfirmationBaseline> {
   const boundScope = exactSelectorScope(page, controlFrameUrl);
   if (boundScope.status !== "found") throw new Error("confirmation_control_frame_unavailable");
@@ -4181,7 +4187,7 @@ async function readCaptureRefusalConfirmationBaseline(
       readTcfData(semanticScope).catch(() => undefined),
       cmpCookieState(context, confirmation.cookieName).then((state) => state?.stateHash),
       confirmation.cookieName === "OptanonConsent" ? captureOneTrustBaseline(context, semanticScope) : undefined,
-      confirmation.cookieName === "CookieInformationConsent" ? readCmpApiConsentSnapshot(semanticScope, "cookie_information") : undefined,
+      confirmation.cookieName === "CookieInformationConsent" ? readCmpApiConsentSnapshot(semanticScope, "cookie_information", onDiagnostic) : undefined,
     ]);
     return {
       kind: "tcf_purposes_denied_or_cmp_cookie_changed",

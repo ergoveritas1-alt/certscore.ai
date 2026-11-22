@@ -1,4 +1,4 @@
-import { passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
+import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
 import type { CanonicalEvidenceBundle, ConsentActionControlProof, ConsentUiObservation } from "@certscore/contracts";
@@ -170,7 +170,8 @@ function exactGeometryAccept(
     if (![candidate.label, candidate.ariaLabel, candidate.title, candidate.value]
       .filter((label): label is string => typeof label === "string" && label.length > 0)
       .every(isActionableAcceptLabel)) return undefined;
-    return { ...binding, label: candidate.ariaLabel, labelSource: "aria_label" as const };
+    return { ...binding, sourceLabel: cookieInformationRenderedLabel(candidate, geometry.cmp),
+      label: candidate.ariaLabel, labelSource: "aria_label" as const };
   }
   return { ...binding, label: candidate.label, labelSource: undefined };
 }

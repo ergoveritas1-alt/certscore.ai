@@ -12,14 +12,33 @@ function fixture(active: string[], state: Record<string, unknown>) {
   const window: Record<string, any> = {cicl: [...active], cicc: {...state}, CookieInformation: {
     getConsentGivenFor: (key: string) => {calls++; return window.cicc[key];},
   }, addEventListener: (name: string, callback: () => void) => listeners.set(name, [...(listeners.get(name) ?? []), callback])};
-  const document = {querySelectorAll: () => [{}]};
+  let banners = 1;
+  const document = {querySelectorAll: () => Array.from({length: banners}, () => ({}))};
   const sandbox = {window, document, Date: {now: () => now}};
   const scope = {evaluate: async (fn: Function, argument: unknown) => {
     evaluations++; return runInNewContext(`(${fn.toString()})(argument)`, {...sandbox, argument});
   }} as unknown as Page;
   return {scope, window, calls: () => calls, evaluations: () => evaluations,
+    setBanners: (count: number) => {banners = count;},
     emit: () => {now = 100; for (const callback of listeners.get("CookieInformationConsentGiven") ?? []) callback();}};
 }
+
+test("Cookie Information distinguishes ambiguous scope, TCF and unusable category state", async () => {
+  const source = fixtures.cases[0]!;
+  const f = fixture(source.activeCategories, source.loadedState);
+  const reasons: string[] = [];
+  const read = () => readDocumentedConsentApi(f.scope, "cookie_information", reason => reasons.push(reason));
+  f.setBanners(2);
+  assert.equal(await read(), undefined);
+  f.setBanners(1);
+  f.window.__tcfapi = () => {throw Error("Must not call the TCF API");};
+  assert.equal(await read(), undefined);
+  delete f.window.__tcfapi;
+  delete f.window.cicl;
+  assert.equal(await read(), undefined);
+  assert.deepEqual(reasons, ["receipt_ambiguous", "category_iab_unsupported", "configuration_or_groups_unverified"]);
+  assert.equal(f.calls(), 0);
+});
 
 test("Cookie Information current active categories include Unclassified and configured subsets", async () => {
   for (const source of fixtures.cases) {

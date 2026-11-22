@@ -2,6 +2,7 @@ import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR,
 import type { CDPSession } from "playwright";
 import { consentAccessibilityDomBindingSchema, boundOptOutControlFromAttributes, type BrowserDocumentIdentity, type ConsentAccessibilityDomBinding } from "@certscore/contracts";
 import type { ConsentAccessibilityTreeNode } from "./scanners/pre-consent-runtime-scanner.js";
+import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 
 export const AX_DOM_BINDING_BUDGET_MS = 50;
 export const AX_DOM_BINDING_MAX_NODES = 12;
@@ -85,4 +86,20 @@ export function passiveButtonSelectorMatches(control: {
     control.selectorHint === `ax:${binding.axNodeId}` && binding.documentUrl === documentUrl &&
     binding.documentIdentity.token === loader && binding.documentIdentity.source === "cdp_loader_id" &&
     binding.verifiedButtonSelector === selector;
+}
+
+/** The passive inventory can retain the uppercase caption of a native
+ * Cookie Information button. The worker must still recheck its exact ARIA label. */
+export function cookieInformationRenderedLabel(
+  candidate: ConsentControlCandidateEvidence,
+  cmp: ConsentControlGeometryArtifact["cmp"],
+): string | undefined {
+  const { label, ariaLabel } = candidate;
+  if (candidate.tagName !== "button" || candidate.containerSelectorHint !== "#coi-banner-wrapper" ||
+      !label || !ariaLabel || !/^[A-Za-z ]+$/.test(ariaLabel) || label === ariaLabel ||
+      label !== ariaLabel.toUpperCase() ||
+      !cmp?.detections?.some(detection => detection.canonicalName === "Cookie Information" &&
+        detection.matchedSignals.some(signal => signal.source === "dom" && signal.value === "#coiOverlay") &&
+        detection.matchedSignals.some(signal => signal.source === "global" && signal.value === "CookieInformation"))) return undefined;
+  return label;
 }

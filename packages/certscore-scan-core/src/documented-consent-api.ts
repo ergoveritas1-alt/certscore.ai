@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Frame, Page } from "playwright";
+import type { ConsentConfirmationReason } from "@certscore/contracts";
 import type { CmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 
 export type DocumentedConsentProvider = "cookie_information" | "cookiescript" | "finsweet";
@@ -9,7 +10,11 @@ export const COOKIE_INFORMATION_STATE_POLICY = "cookie_information_active_catego
  * initialization, consent setters, UI actions or network calls are invoked.
  * Callers must bind the provider to the live control's canonical CMP scope.
  */
-export async function readDocumentedConsentApi(scope: Page | Frame, provider: DocumentedConsentProvider): Promise<CmpApiConsentSnapshot | undefined> {
+export async function readDocumentedConsentApi(
+  scope: Page | Frame,
+  provider: DocumentedConsentProvider,
+  onDiagnostic?: (reason: ConsentConfirmationReason) => void,
+): Promise<CmpApiConsentSnapshot | undefined> {
   let timer: NodeJS.Timeout | undefined;
   const raw = await Promise.race([scope.evaluate(({ provider, cookieInformationPolicy }) => {
     type State = { canonicalState: string; decision: "granted" | "denied" | "mixed" | "unknown"; configuration: string };
@@ -21,10 +26,17 @@ export async function readDocumentedConsentApi(scope: Page | Frame, provider: Do
       FinsweetConsentPro?: { consents?: { get?: () => unknown } };
       __certscoreDocumentedDecisionReaders?: Partial<Record<typeof provider, Tracker>>;
     };
-    if (provider === "cookie_information" && typeof target.__tcfapi === "function") return undefined;
+    if (provider === "cookie_information" && typeof target.__tcfapi === "function") {
+      return { diagnostic: "category_iab_unsupported" as const };
+    }
     const bannerSelector = provider === "finsweet" ? '[fs-consent-element="banner"]'
       : provider === "cookiescript" ? "#cookiescript_injected" : "#coiOverlay, [id*='cookie-information' i]";
-    if (document.querySelectorAll(bannerSelector).length !== 1) return undefined;
+    const bannerCount = document.querySelectorAll(bannerSelector).length;
+    if (bannerCount !== 1) {
+      return provider === "cookie_information"
+        ? { diagnostic: bannerCount ? "receipt_ambiguous" as const : "receipt_missing" as const }
+        : undefined;
+    }
     const api = provider === "cookie_information" ? target.CookieInformation
       : provider === "cookiescript" ? target.CookieScript?.instance : target.FinsweetConsentPro?.consents;
     if (!api || (provider === "cookie_information" && typeof target.CookieInformation?.getConsentGivenFor !== "function") ||
@@ -114,15 +126,20 @@ export async function readDocumentedConsentApi(scope: Page | Frame, provider: Do
       else for (const event of provider === "cookie_information" ? ["CookieInformationConsentGiven"] : ["CookieScriptReject", "CookieScriptAcceptAll", "CookieScriptAccept"]) window.addEventListener(event, handler.listener);
     }
     const live = reader.read();
-    if (provider === "cookie_information" && !live) return undefined;
+    if (provider === "cookie_information" && !live) return { diagnostic: "configuration_or_groups_unverified" as const };
     // A malformed latest event or a changed live API cannot reuse old proof.
-    if (tracker.sequence && (!live || !tracker.state || tracker.state.canonicalState !== live.canonicalState || tracker.state.configuration !== live.configuration)) return undefined;
+    if (tracker.sequence && (!live || !tracker.state || tracker.state.canonicalState !== live.canonicalState || tracker.state.configuration !== live.configuration)) {
+      return provider === "cookie_information" ? { diagnostic: "receipt_readback_mismatch" as const } : undefined;
+    }
     return { canonicalState: live?.canonicalState ?? (cookieScriptConfiguration ? "unknown" : "unregistered"), decision: live?.decision ?? "unknown" as const,
       configuration: live?.configuration ?? cookieScriptConfiguration, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.at };
   }, { provider, cookieInformationPolicy: COOKIE_INFORMATION_STATE_POLICY }).catch(() => undefined),
     new Promise<undefined>(resolve => {timer = setTimeout(() => resolve(undefined), 150);}),
   ]).finally(() => {if (timer) clearTimeout(timer);});
-  if (!raw) return undefined;
-  const { configuration, ...state } = raw;
+  if (!raw || raw.diagnostic) {
+    onDiagnostic?.(raw?.diagnostic ?? "api_unavailable");
+    return undefined;
+  }
+  const { configuration, diagnostic: _diagnostic, ...state } = raw;
   return { ...state, ...(configuration ? {configurationSha256: createHash("sha256").update(configuration).digest("hex")} : {}) };
 }

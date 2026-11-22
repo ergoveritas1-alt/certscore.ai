@@ -1148,7 +1148,7 @@ export async function runPostAcceptObserver(
     }
 
     stage("confirmation_baseline");
-    const baseline = () => captureConfirmationBaseline(context!, page!, confirmationScope, selectedRecipe!.confirmation, control);
+    const baseline = () => captureConfirmationBaseline(context!, page!, confirmationScope, selectedRecipe!.confirmation, control, confirmationDiagnostic.reason);
     let confirmationBaseline = exactCookieScriptRecipe
       ? await readWithinAcceptDeadline(baseline, undefined, exactActionDeadline, effectiveSignal)
       : await baseline();
@@ -1253,6 +1253,7 @@ export async function runPostAcceptObserver(
             confirmationScope,
             selectedRecipe.confirmation,
             control,
+            confirmationDiagnostic.reason,
           );
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
@@ -2568,6 +2569,7 @@ async function readCaptureConfirmationBaseline(
   confirmationScope: Page | Frame,
   confirmation: PostAcceptActionRecipe["confirmation"],
   control: Locator,
+  onDiagnostic?: (reason: import("@certscore/contracts").ConsentConfirmationReason) => void,
 ): Promise<ConfirmationBaseline> {
   if (confirmation.kind === "canonical_accept_transition") {
     const [controlVisible, surfacePresent, bannerStateHash] = await Promise.all([
@@ -2645,7 +2647,7 @@ async function readCaptureConfirmationBaseline(
       readTcfData(page).catch(() => undefined),
       isCookieInformation ? undefined : cookieState(context, confirmation.cookieName),
       confirmation.cookieName === "OptanonConsent" ? captureOneTrustBaseline(context, confirmationScope) : undefined,
-      isCookieInformation ? readCmpApiConsentSnapshot(confirmationScope, "cookie_information") : undefined,
+      isCookieInformation ? readCmpApiConsentSnapshot(confirmationScope, "cookie_information", onDiagnostic) : undefined,
     ]);
     return { kind: confirmation.kind, snapshot, cookieStateHash, oneTrustBaseline, cookieInformationBaseline };
   }

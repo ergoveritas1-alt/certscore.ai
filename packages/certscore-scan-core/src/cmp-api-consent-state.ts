@@ -25,8 +25,11 @@ async function readCmpApiConsentSnapshotInternal(
   onDiagnostic?: (reason: ConsentConfirmationReason) => void,
   onPartial?: (value: PartialApiReceipt) => void,
 ): Promise<CmpApiConsentSnapshot | undefined> {
-  if (provider === "cookie_information" || provider === "cookiescript" || provider === "finsweet" || provider === "didomi") {
-    const snapshot = provider === "didomi" ? await readDidomiConsentSnapshot(scope) : await readDocumentedConsentApi(scope, provider);
+  if (provider === "cookie_information" || provider === "cookiescript" || provider === "finsweet") {
+    return readDocumentedConsentApi(scope, provider, onDiagnostic);
+  }
+  if (provider === "didomi") {
+    const snapshot = await readDidomiConsentSnapshot(scope);
     if (!snapshot) onDiagnostic?.("api_unavailable");
     return snapshot;
   }

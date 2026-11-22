@@ -1,4 +1,4 @@
-import { passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
+import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
 import { classifyConsentControlLabel, consentSessionAccessLimited, isConsentControlInteractionEligible, verifyConsentControlInspection,
@@ -133,6 +133,7 @@ export function evaluateRejectGate(input: {
     control.label === candidate.cookieScriptUppercaseSourceLabel && control.label.toUpperCase() === candidate.label;
   const nativeButton = candidate?.exactNativeRejectSelectorVerified === true &&
     candidate.tagName === "button" && control?.tagName === "button";
+  const cookieInformationLabel = candidate && cookieInformationRenderedLabel(candidate, artifact.cmp);
   if (!control || !candidate || candidate.frameContext?.frameKind !== "main_frame" ||
       candidate.frameContext.frameUrl !== document.url || (!nativeButton && !cookieScriptRole) ||
       !validExactSelector(candidate.selectorHint) || candidate.enabled !== true || candidate.intersectsViewport !== true || candidate.occlusion?.center !== true ||
@@ -140,7 +141,8 @@ export function evaluateRejectGate(input: {
       !isConsentControlInteractionEligible(candidate) || !isConsentControlInteractionEligible(control) ||
       !inspection.candidates.some(row => row.candidateId === candidate.candidateId && row.role === "decision" &&
         !row.unresolvedIntents.includes("reject")) ||
-      !passiveButtonSelectorMatches(control, candidate.selectorHint, "reject", document.url, identity.token) || (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label)) ||
+      !passiveButtonSelectorMatches(control, candidate.selectorHint, "reject", document.url, identity.token) ||
+      (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label) && control.label !== cookieInformationLabel) ||
       !candidate.label || ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
         label === undefined || (typeof label === "string" && (!label || directReject(label)))) ||
       (control.domBinding && !cookieScriptRole)) {
@@ -152,7 +154,7 @@ export function evaluateRejectGate(input: {
   return {outcome:"qualified",exactSelector,issuedAtMs:nowMs,expiresAtMs,binding:{
     parentDispatchSha256:input.parentDispatchSha256,sourceSha256:input.sourceSha256,geometrySha256:geometry.sha256,
     requestedTargetSha256:target,documentSha256,documentTokenSha256:sha(identity.token),selectorSha256:sha(exactSelector),
-    selectorEvidence:"verified_geometry",labelSha256:sha(exactUppercaseLabel ? candidate.label : control.label),labelMatch:"exact",
+    selectorEvidence:"verified_geometry",labelSha256:sha(candidate.ariaLabel ?? (exactUppercaseLabel ? candidate.label : control.label)),labelMatch:"exact",
     ...(candidate.ariaLabel ? {labelSource:"aria_label" as const} : {}),
   }};
 }
