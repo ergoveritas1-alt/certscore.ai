@@ -1,3 +1,4 @@
+import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
 import { classifyConsentControlLabel, consentSessionAccessLimited, isConsentControlInteractionEligible, verifyConsentControlInspection,
   type CanonicalEvidenceBundle, type ConsentActionControlProof } from "@certscore/contracts";
@@ -122,14 +123,23 @@ export function evaluateRejectGate(input: {
       c.classifierReasonCodes?.includes("visible_accessible_intent_conflict") &&
       [c.label,c.ariaLabel,c.title,c.value].some(label => label && directReject(label)))) return block("label_conflict_unresolved");
   const control = controls[0], candidate = candidates[0];
+  const cookieScriptRole = candidate?.exactCookieScriptRejectVerified === true &&
+    candidate.selectorHint === "#cookiescript_reject" && candidate.tagName === "div" && candidate.role === "button" &&
+    control?.tagName === "div" && control.role === "button" && control.selectorHint === candidate.selectorHint &&
+    artifact.cmp?.detections?.some(cmp => cmp.canonicalName === "CookieScript");
+  // DOM inventory can read source text while geometry and the worker read rendered text.
+  const exactUppercaseLabel = cookieScriptRole && !candidate.ariaLabel &&
+    control.label === candidate.cookieScriptUppercaseSourceLabel && control.label.toUpperCase() === candidate.label;
+  const nativeButton = candidate?.exactNativeRejectSelectorVerified === true &&
+    candidate.tagName === "button" && control?.tagName === "button";
   if (!control || !candidate || candidate.frameContext?.frameKind !== "main_frame" ||
-      candidate.frameContext.frameUrl !== document.url || candidate.exactNativeRejectSelectorVerified !== true ||
+      candidate.frameContext.frameUrl !== document.url || (!nativeButton && !cookieScriptRole) ||
       !validExactSelector(candidate.selectorHint) || candidate.enabled !== true || candidate.intersectsViewport !== true || candidate.occlusion?.center !== true ||
-      candidate.consentContextConfirmed !== true || candidate.tagName !== "button" || control.tagName !== "button" ||
+      candidate.consentContextConfirmed !== true ||
       !isConsentControlInteractionEligible(candidate) || !isConsentControlInteractionEligible(control) ||
       !inspection.candidates.some(row => row.candidateId === candidate.candidateId && row.role === "decision" &&
         !row.unresolvedIntents.includes("reject")) ||
-      control.selectorHint !== candidate.selectorHint || control.label !== (candidate.ariaLabel ?? candidate.label) ||
+      control.selectorHint !== candidate.selectorHint || (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label)) ||
       !candidate.label || ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
         label === undefined || (typeof label === "string" && (!label || directReject(label)))) ||
       control.domBinding) {
@@ -137,10 +147,11 @@ export function evaluateRejectGate(input: {
   }
   const expiresAtMs = Math.min(input.deadlineAtMs ?? Infinity, nowMs + proofLifetimeMs);
   if (expiresAtMs <= nowMs) return block("proof_expired");
-  return {outcome:"qualified",exactSelector:candidate.selectorHint,issuedAtMs:nowMs,expiresAtMs,binding:{
+  const exactSelector = cookieScriptRole ? COOKIE_SCRIPT_REJECT_ROLE_SELECTOR : candidate.selectorHint;
+  return {outcome:"qualified",exactSelector,issuedAtMs:nowMs,expiresAtMs,binding:{
     parentDispatchSha256:input.parentDispatchSha256,sourceSha256:input.sourceSha256,geometrySha256:geometry.sha256,
-    requestedTargetSha256:target,documentSha256,documentTokenSha256:sha(identity.token),selectorSha256:sha(candidate.selectorHint),
-    selectorEvidence:"verified_geometry",labelSha256:sha(control.label),labelMatch:"exact",
+    requestedTargetSha256:target,documentSha256,documentTokenSha256:sha(identity.token),selectorSha256:sha(exactSelector),
+    selectorEvidence:"verified_geometry",labelSha256:sha(exactUppercaseLabel ? candidate.label : control.label),labelMatch:"exact",
     ...(candidate.ariaLabel ? {labelSource:"aria_label" as const} : {}),
   }};
 }

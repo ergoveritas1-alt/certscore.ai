@@ -1,3 +1,4 @@
+import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import {
   CONSENT_ACTION_CONTROL_PROOF_VERSION,
   classifyConsentControlLabel,
@@ -391,13 +392,16 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       ? input.page.frames().filter((frame) => frame.url() === input.controlFrameUrl)
       : [input.page];
     if (frames.length !== 1) return { status: "label_unverifiable", reason: "resolved_control_scope_ambiguous" };
-    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector}) => {
+    const roleButtonIds = input.expectedNativeSelector === COOKIE_SCRIPT_REJECT_ROLE_SELECTOR &&
+      input.action === "reject" && input.cmpId === "CookieScript" ? COOKIE_SCRIPT_REJECT_IDS : undefined;
+    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds}) => {
       if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
       if (passiveSelector) {
         const document = exact?.ownerDocument;
         const view = document?.defaultView;
-        if (!exact?.isConnected || exact.localName !== "button" || !document || exact.getRootNode() !== document ||
+        if (!exact?.isConnected || exact.localName !== (roleButtonIds ? "div" : "button") || !document || exact.getRootNode() !== document ||
             !view || view !== view.top) return null;
+        if (roleButtonIds && document.querySelectorAll(roleButtonIds).length !== 2) return null;
         const matches = document.querySelectorAll(passiveSelector);
         if (matches.length !== 1 || matches[0] !== exact) return null;
       }
@@ -412,7 +416,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
       return { selectorMatchCount: elements.length, labels };
-    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector}).catch(() => null));
+    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds}).catch(() => null));
     if (input.expectedNativeSelector && !liveSnapshot) {
       return {status: "label_unverifiable", reason: `passive_${input.action}_button_binding_unverified`};
     }
