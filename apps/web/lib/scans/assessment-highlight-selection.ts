@@ -22,5 +22,6 @@ export function selectAssessmentHighlightFindings<T extends Finding>(findings: r
 /** Within narrative support, qualified collection reviews precede routine
  * low-severity observations. This ordering is independent of score effects. */
 export function supportingAssessmentHighlightOrder(finding: Finding) {
+  if (finding.id === "california_rights_disclosure_not_observed") return 2;
   return finding.id === "california_collection_review" ? 0 : 1;
 }

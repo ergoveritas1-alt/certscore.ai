@@ -9,7 +9,7 @@ export function FindingApplicabilityNote({ findingId, reviewFocus, presentationG
 }) {
   const note = findingApplicabilityContext(findingId, reviewFocus, presentationGroup);
   return <details className="group/finding-disclosure" aria-label="Regulatory applicability">
-    <FindingDisclosureSummary>Applicability</FindingDisclosureSummary>
+    <FindingDisclosureSummary>{note.key === "california-rights" ? "CCPA applicability undetermined · Who qualifies?" : "Applicability"}</FindingDisclosureSummary>
     <div className="space-y-3 pb-4 pt-1 text-sm leading-6 text-zinc-600" data-applicability-key={note.key ?? "unmapped"}>
       <div>
         <h4 className="font-semibold text-zinc-900">When this matters</h4>
@@ -27,7 +27,7 @@ export function FindingApplicabilityNote({ findingId, reviewFocus, presentationG
         {note.sources.length ? <ul aria-label="Applicability sources" className="mt-2 flex flex-wrap gap-x-4 gap-y-1">{note.sources.map(link => <li key={link.url}>
           <a href={link.url} target="_blank" rel="noreferrer" className="text-xs text-sky-800 underline underline-offset-2 hover:text-sky-950">{link.label} ↗</a>
         </li>)}</ul> : null}
-        <p className="mt-2 text-[0.65rem] text-zinc-500">Guidance reviewed {APPLICABILITY_REVIEWED_AT}</p>
+        <p className="mt-2 text-[0.65rem] text-zinc-500">Guidance reviewed {note.key === "california-rights" ? "2026-11-22" : APPLICABILITY_REVIEWED_AT}</p>
       </div>
     </div>
   </details>;

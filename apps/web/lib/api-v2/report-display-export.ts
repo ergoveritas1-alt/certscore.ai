@@ -1,3 +1,5 @@
+import { CALIFORNIA_RIGHTS_DISCLOSURE_ID } from "@certscore/contracts";
+import { findingApplicabilityContext } from "../scans/finding-applicability-context";
 import {apiV2GpcResponseSchema} from "@certscore/api-contracts";
 import { visibleFullSiteReport, visibleResourceInventory } from "./report-visible-fields";
 import { apiFormSnapshotExport } from "./form-snapshot-export";
@@ -28,6 +30,10 @@ export function buildReportDisplayExport(report: Record<string, unknown>, option
     return { ...value, inventory: visibleResourceInventory(value.inventory, `${path}/inventory/resources`) };
   };
   report = { ...report,
+    ...(report.reviewFocus === "ccpa_cpra" && Array.isArray(report.findings) ? {
+      findings: report.findings.map(row => row?.id === CALIFORNIA_RIGHTS_DISCLOSURE_ID
+        ? { ...row, applicabilityGuidance: findingApplicabilityContext(row.id, "ccpa_cpra") } : row),
+    } : {}),
     ...(report.actionInventories ? {actionInventories:Object.fromEntries(Object.entries(report.actionInventories as Record<string,unknown>).map(([key,value])=>[key,phaseInventory(value, `/actionInventories/${pointer(key)}`)]))} : {}),
     ...(report.gpcResourceInventory ? {gpcResourceInventory:phaseInventory(report.gpcResourceInventory, "/gpcResourceInventory")} : {}),
     ...(report.collectionTableRows ? { collectionTableRows: formRows(report.collectionTableRows) } : {}),

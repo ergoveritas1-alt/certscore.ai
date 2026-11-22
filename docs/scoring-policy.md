@@ -325,6 +325,10 @@ choice-enforcement union as GPC and explicit opt-out. The existing 47-point shar
 cap and separate GPP family remain unchanged; EU presence scoring is independent.
 Historical requests without the required capture facts remain neutral.
 
+## California rights-disclosure review — November 22, 2026
+
+For captures marked `california-regulatory-posture.v27-rights-review`, a verified omission of the right to know, delete or correct from the completely inspected policy counts **4 points once per scan** while business applicability is undetermined. Multiple omitted rights share that effect. A sole non-discrimination omission counts **3**, and incomplete inspection or no supported omission contributes **0**. Historical scores retain their recorded policy. Customer reports show the score and a conditional review item. [Versioned policy](certscore-v2/california-disclosure-choice-scoring-policy-2026-10-23.md)
+
 ## California disclosure and required-link scoring — October 23, 2026
 
 The [versioned disclosure/choice policy](certscore-v2/california-disclosure-choice-scoring-policy-2026-10-23.md)

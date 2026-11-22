@@ -11,7 +11,7 @@ export function accessibilityContextRows(finding: Finding) {
 /** Probe-only transport and incompletely contextualized contrast stay review items.
  * A separate insecure-navigation/form finding remains independently prioritized. */
 export function isContextualReviewFinding(finding: Finding): boolean {
-  if (finding.id === HTTP_ID) return true;
+  if (finding.id === HTTP_ID || finding.id === "california_rights_disclosure_not_observed") return true;
   if (finding.id === "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage") return finding.status === "Partial concern";
   if (finding.id === "accessibility_priority_group") {
     const members = finding.evidenceJson?.findings;

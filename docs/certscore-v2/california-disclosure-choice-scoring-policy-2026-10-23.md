@@ -38,3 +38,7 @@ Positive eligibility is demonstrated by offline fixtures, not live scans. The re
 Six worker lanes, existing Lambda settings, absolute capture and action budgets, current flags and the shared $10 within $50 allowance remain unchanged. Local recurring cost is $0. Future bounded report processing and metadata are estimated below $0.10/month at 100,000 scans, within the existing allowance; this is a planning estimate, not measured AWS billing. No production activation is authorized by local completion.
 
 Verification is recorded in `artifacts/california-disclosure-choice-scoring-2026-10-23/`: canonical persistence/scoring tests, legacy compatibility replay, negative exception/provenance cases, Lambda marker handoff/merge, six-lane orchestration, source integrity checks, browser bundling and affected package typechecks.
+
+## November 22, 2026 calibration
+
+For new captures marked `california-regulatory-posture.v27-rights-review`, a verified omission of the right to know, delete or correct costs four points once per scan while business applicability is undetermined. A sole non-discrimination omission keeps its three-point treatment. The broader omission appears as a lower-priority Review item, with business coverage criteria in its Applicability disclosure. Other priority findings lead the executive synopsis. Earlier captures use their original scoring policy.

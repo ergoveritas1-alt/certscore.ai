@@ -222,7 +222,7 @@ test("known finding families have concrete fallback steps at every severity", ()
     ["regulatory_gap__gdpr_eprivacy__session_replay_fingerprinting_review", /replay activation and sensitive-field masking/],
     ["regulatory_gap__gdpr_eprivacy__device_identification_fingerprinting_signal_observed", /scripts and their purpose/],
     ["transport_security_tls_certificate", /certificate or chain configuration/],
-    ["california_rights_disclosure_not_observed", /which California privacy rights apply/],
+    ["california_rights_disclosure_not_observed", /Confirm whether the CCPA covers the business/],
     ["text_alternative_accessibility_issue", /text alternatives.*decorative images/],
   ] as const;
   for (const [id, expected] of cases) for (const severity of ["critical", "high", "medium", "low"] as const) {

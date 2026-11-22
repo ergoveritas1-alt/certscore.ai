@@ -96,6 +96,7 @@ function render(brief: AssessmentBrief, limit: number, required?: Rendered): Ren
     if (selected.length >= maxFindings) break;
     if (finding.prominence !== "supporting" || selected.includes(finding) || finding.readerTitle.length > 100) continue;
     if (!finding.readerSummary || isAssessmentReferral(finding.readerSummary)) continue;
+    if (!required && finding.id === "california_rights_disclosure_not_observed" && brief.secondary.length) continue;
     selected.push(finding);
     let fits = false;
     const tryWholeFacts = () => {

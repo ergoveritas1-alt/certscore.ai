@@ -125,7 +125,7 @@ export async function executiveDocxChildren(report: CanonicalReportExport, timeZ
     metricCells.push(cell([p(metric.value, 34, true, warm ? orange : ink), p(metric.label, 18, true), p(executiveFindingExcerpt(metric.note, 80), 16, false, warm ? orange : muted, 0)], 2580, warm ? "FFF4E7" : "F3F4F6"));
   });
   children.push(table([2580, 160, 2580, 160, 2580, 160, 2580], [metricCells]), p("", 3, false, ink, 70),
-    p(`Report findings | ${m.priorityCount} selected ${m.priorityCount === 1 ? "priority" : "priorities"}; ${m.findings.length} findings`, 22, true, ink, 90));
+    p(`Report findings | ${m.findingCountLabel}`, 22, true, ink, 90));
   const units = (value: string) => [...value].reduce((sum, character) => sum + (character.charCodeAt(0) > 255 ? 2 : /[MW]/.test(character) ? 1.4 : 1), 0);
   const budget = Math.max(140, 320 - Math.max(0, Math.ceil(units(domain) / 42) - 1) * 26);
   let used = 0, visible = 0;
@@ -138,7 +138,7 @@ export async function executiveDocxChildren(report: CanonicalReportExport, timeZ
     const warm = ["medium", "high", "critical"].includes(f.impact.toLowerCase());
     children.push(table([600, 8000, 2200], [[cell([p(String(index + 1), 25, true)], 600, warm ? "FFFAF4" : "FFFFFF", false, warm ? "C96A15" : "9CA3AF"),
       cell([p(executiveFindingExcerpt(f.title, 100), 20, true, ink, 50), p(executiveFindingExcerpt(f.summary, 220), 18, false, muted, 0)], 8000, warm ? "FFFAF4" : "FFFFFF"),
-      cell([p(f.priority ? "Selected priority" : f.status === "For information" ? "For information" : "Other finding", 16, true, f.priority ? orange : muted), p(`${f.impact[0]?.toUpperCase()}${f.impact.slice(1)} impact`, 16, true), p(f.confidence, 16, false, muted, 20), details(f.target)], 2200, warm ? "FFFAF4" : "FFFFFF")]]), p("", 2, false, ink, 60));
+      cell([p(f.selectionLabel, 16, true, f.priority ? orange : muted), p(`${f.impact[0]?.toUpperCase()}${f.impact.slice(1)} impact`, 16, true), p(f.confidence, 16, false, muted, 20), details(f.target)], 2200, warm ? "FFFAF4" : "FFFFFF")]]), p("", 2, false, ink, 60));
   }
   if (!m.findings.length) children.push(p("No priority findings selected. See the topic assessments and detailed evidence.", 18, false, muted, 100));
   if (m.findings.length > visible) children.push(p(`Showing ${visible} of ${m.findings.length} findings. All findings remain in Detailed evidence.`, 16, false, muted));

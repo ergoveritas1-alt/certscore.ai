@@ -10,7 +10,7 @@ CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/m
 | Transport | Streamable HTTP |
 | Authentication | None |
 | Tools | `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page` |
-| Package version | `0.2.35` |
+| Package version | `0.2.36` |
 
 [Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
 
@@ -545,3 +545,8 @@ or `"ccpa_cpra"` to match that web/PDF/Word view of the same retained scan. Keep
 it with the same section and cursor during continuation. Download links preserve
 the framework. Omitting it retains the scan default; it cannot be combined with
 `workpaper`. Existing read quotas and capture/proof requirements are unchanged.
+
+For a California policy review, use `section: "policy"` with `reviewFocus: "ccpa_cpra"`
+in either MCP profile. Use the returned California score and policy version. Describe
+`california_rights_disclosure_not_observed` as a low-priority review item. Its
+`applicabilityGuidance`, when present, explains how to check business coverage.

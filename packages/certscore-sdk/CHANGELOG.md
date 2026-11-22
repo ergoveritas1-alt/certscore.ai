@@ -1,5 +1,9 @@
 # @certscore/sdk
 
+## 0.2.28
+
+- Expose optional CCPA applicability guidance on retained report findings.
+
 ## 0.2.27
 
 - Add main-document GPC/CMP comparison v2 types while preserving v1, and expose runtime-capture limitations in no-go reason types.

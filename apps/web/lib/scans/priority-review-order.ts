@@ -1,3 +1,4 @@
+import { CALIFORNIA_RIGHTS_DISCLOSURE_ID } from "@certscore/contracts";
 import { CERT_SCORE_FINDING_REGISTRY } from "./finding-registry";
 import { ACCESSIBILITY_PRIORITY_GROUP_ID } from "./accessibility-priority-group";
 
@@ -10,6 +11,7 @@ export function comparePriorityReviewFindings(
   // impact rating alone does not establish a task-blocking accessibility barrier.
   const leftAccessibility = left.id === ACCESSIBILITY_PRIORITY_GROUP_ID || CERT_SCORE_FINDING_REGISTRY[left.id]?.section === "Accessibility";
   const rightAccessibility = right.id === ACCESSIBILITY_PRIORITY_GROUP_ID || CERT_SCORE_FINDING_REGISTRY[right.id]?.section === "Accessibility";
-  return Number(leftAccessibility) - Number(rightAccessibility)
+  return Number(left.id === CALIFORNIA_RIGHTS_DISCLOSURE_ID) - Number(right.id === CALIFORNIA_RIGHTS_DISCLOSURE_ID)
+    || Number(leftAccessibility) - Number(rightAccessibility)
     || Number(right.priority === "high") - Number(left.priority === "high");
 }

@@ -70,8 +70,8 @@ export const REGULATORY_REVIEW_TOPICS: RegulatoryReviewTopic[] = [
     why: "People should be able to read the applicable notice when information is collected. A confirmed missing named destination calls for repair and a check of the actual collection point.",
     rule: "CCPA §1798.100; regulations §7012", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf", cases: ["tractorSupply"], priority: 98 } } },
   { id: "california-rights-disclosure", title:"Core rights disclosure not identified", findingIds:["california_rights_disclosure_not_observed"], contexts:{ccpa_cpra:{
-    why:"A business covered by CCPA/CPRA must explain applicable consumer rights. The retained inspection identifies rights not described as consumer rights in the complete policy; it does not establish how the business handles requests.",
-    rule:"CCPA §1798.130; regulations §7011",ruleUrl:"https://cppa.ca.gov/regulations/",cases:[],priority:98}}},
+    why:"A covered business must explain which privacy rights consumers have and how to exercise them.",
+    rule:"CCPA §1798.130; regulations §7011",ruleUrl:"https://cppa.ca.gov/regulations/",cases:[],priority:35}}},
   { id: "california-agent-registration", title: "Authorized-agent registration requirement", findingIds: ["california_agent_registration_required"], contexts: { ccpa_cpra: {
     why: "The retained instructions impose a registration condition on an authorized agent. Review that condition and the available authorization routes for individuals.",
     rule: "CCPA regulations §7063", ruleUrl: "https://cppa.ca.gov/regulations/", cases: [], priority: 70 } } },
@@ -147,7 +147,10 @@ export function isRegulatoryFindingRelevant(id: string, focus: ReportReviewFocus
 
 /** Rank existing entries for one issue list; framework-specific context stays separate. */
 export function selectRegulatoryReview<T extends { id: string; status: string; rank: number; evidenceJson?: Record<string, unknown> }>(findings: readonly T[], focus: ReportReviewFocus) {
-  const scoped = findings.filter(finding => isRegulatoryFindingRelevant(finding.id, focus));
+  const scoped = findings.filter(finding => isRegulatoryFindingRelevant(finding.id, focus)).map(finding =>
+    finding.id === "california_rights_disclosure_not_observed"
+      ? { ...finding, status: "Review" as const, severity: "low" as const, priority: undefined }
+      : finding);
   const priorityFindings = focus === "ccpa_cpra" ? selectCaliforniaPriorityFindings(scoped) : scoped;
   const relevant = priorityFindings.filter(finding => regulatoryReviewContext(finding.id, focus));
   const regulatory = [...relevant].sort((a, b) =>

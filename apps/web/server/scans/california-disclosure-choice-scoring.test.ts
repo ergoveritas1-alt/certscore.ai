@@ -2,7 +2,7 @@ import {californiaPriorityGpcFixture,ANALYTICS_URL,QUALIFIED_URL} from "../../li
 import {assessGpcPotentialRisk} from "../../lib/scans/california-potential-risk-policy";
 import assert from "node:assert/strict";
 import test from "node:test";
-import {CALIFORNIA_DISCLOSURE_CHOICE_POLICY,californiaPrivacyReviewSchema,consentControlAssessmentSchema,
+import {CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION,CALIFORNIA_DISCLOSURE_CHOICE_POLICY,californiaPrivacyReviewSchema,consentControlAssessmentSchema,
   deriveConsentControlAssessment,derivePolicySurfaceInspectionOutcome, type CaliforniaPrivacyReview} from "@certscore/contracts";
 import {californiaCoverageFixture,CA_FIXTURE_POLICY,CA_FIXTURE_SOURCE,CA_FIXTURE_URL} from "./california-review-coverage.fixture";
 import {projectCaliforniaPrivacyReview} from "./california-privacy-review-projection";
@@ -80,6 +80,29 @@ test("broader core-rights omissions retain twelve once; no omission gives no rig
     assert.equal(result.points(RIGHTS),12);assert.equal(result.score.deductions.filter(d=>d.findingId===RIGHTS).length,1);
   }
   assert.equal(pipeline(materialize(fixture(CA_FIXTURE_POLICY))).points(RIGHTS),0);
+});
+
+test("new rights-review captures score a core omission once at four and keep its report row for review", () => {
+  for (const [text, expected] of [
+    [noNonDiscrimination.replace("You have the right to delete your personal information. ", ""), 4],
+    [noNonDiscrimination, 3], [CA_FIXTURE_POLICY, 0],
+  ] as const) {
+    const f = fixture(text);
+    const inspection = derivePolicySurfaceInspectionOutcome({rightsReviewScorePolicy: CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION});
+    f.bundle.policySurfaceInspection!.rightsReviewScorePolicy = inspection.rightsReviewScorePolicy;
+    const result = pipeline(materialize(f));
+    assert.equal(result.points(RIGHTS), expected);
+    if (expected !== 4) continue;
+    assert.equal(result.score.policyVersion, CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION);
+    assert.equal(result.score.score, 96);
+    const row = projectCaliforniaRegulatoryPriorities(result.packets).find(r => r.id === RIGHTS)!;
+    assert.equal(row.status, "Review");
+    assert.equal(row.severity, "low");
+    assert.match(row.summary, /CCPA applicability has not been determined/);
+    const legacyPackets = pipeline(materialize(fixture(text))).packets;
+    assert.equal(deriveCaliforniaRegulatoryScore({assessment: result.retained.californiaPrivacyReview,
+      checklistRows: [], unifiedFindings: legacyPackets}).score, null);
+  }
 });
 
 test("complete absence, explicit California sale declaration and missing signal disclosures support six once",()=>{

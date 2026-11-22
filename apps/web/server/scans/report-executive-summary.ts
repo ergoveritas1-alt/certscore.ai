@@ -1,3 +1,4 @@
+import { isContextualReviewFinding } from "../../lib/scans/assessment-finding-context";
 import { formatRetainedReportTiming } from "../../lib/scans/report-time";
 import type { CanonicalReportExport } from "./report-export";
 import { buildReportPdfV2Model } from "./report-pdf-v2-model";
@@ -11,9 +12,9 @@ import { evidenceHeaderStatus } from "../../lib/scans/detailed-evidence-presenta
 import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-score";
 import { reportFormInventory } from "./report-form-inventory";
 
-export type ExecutiveFindingCard = { id: string; title: string; summary: string; status: string; impact: string; confidence: string; priority: boolean; target: string };
+export type ExecutiveFindingCard = { id: string; title: string; summary: string; status: string; impact: string; confidence: string; priority: boolean; selectionLabel: string; target: string };
 export type ExecutiveSummaryContent = {
-  score: number | null; scoreScope: string; rating: string; priorityCount: number;
+  score: number | null; scoreScope: string; rating: string; priorityCount: number; findingCountLabel: string;
   metrics: Array<{ label: string; value: string; note: string; attention: boolean }>;
   findings: ExecutiveFindingCard[];
   topics: Array<{ title: string; status: string; target: string }>;
@@ -30,6 +31,7 @@ const object = (value: unknown): Record<string, unknown> => value && typeof valu
  * framework scope and typed assessments. No evidence or scoring is derived here. */
 export function reportExecutiveSummary(report: CanonicalReportExport): ExecutiveSummaryContent {
   const review = pdfPriorityReview(report), groups = pdfReviewGroups(report), narratives = pdfNarrativeFindings(report);
+  const priorityCount = review.topIssues.length - review.reviewItemCount;
   const rawScore = report.reviewFocus === "ccpa_cpra" ? report.californiaScore?.score : report.score?.value;
   const score = typeof rawScore === "number" && Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 100 ? rawScore : null;
   const otherIds = new Set(pdfOtherReviewGroups(report).flatMap(group => group.observations.map(observation => observation.id)));
@@ -37,8 +39,9 @@ export function reportExecutiveSummary(report: CanonicalReportExport): Executive
   const findings: ExecutiveFindingCard[] = groups.map((group, index) => {
     const finding = review.topIssues[index]!, observation = group.observations[0]!;
     const packet = narratives.find(item => pdfPrioritySourceIds(finding).includes(String(item.unifiedFindingId)));
+    const contextual = isContextualReviewFinding(finding);
     return { id: finding.id, title: pdfPublicWords(group.title), summary: formatRetainedReportTiming(pdfPublicWords(finding.summary)), status: reportStatusLabel(group.status),
-      impact: observation.severity ?? (typeof packet?.severity === "string" ? packet.severity : "Not recorded"), confidence: observation.confidence ?? "Confidence not established", priority: true, target: "findings" };
+      impact: observation.severity ?? (typeof packet?.severity === "string" ? packet.severity : "Not recorded"), confidence: observation.confidence ?? "Confidence not established", priority: !contextual, selectionLabel: contextual ? "Review item" : "Selected priority", target: "findings" };
   });
   for (const finding of narratives) {
     const id = String(finding.unifiedFindingId ?? "");
@@ -47,10 +50,10 @@ export function reportExecutiveSummary(report: CanonicalReportExport): Executive
     const topic = pdfDisplayTopic(pdfTopicForFinding(finding)) ?? "policy";
     findings.push({ id, title: pdfPublicWords(String(presentation.findingName ?? finding.title ?? id)), summary: formatRetainedReportTiming(pdfPublicWords(String(finding.summary ?? ""))),
       status: id === "post_accept_consent_dependent_activity" ? "For information" : reportStatusLabel(String(finding.status ?? "Finding")),
-      impact: typeof finding.severity === "string" ? finding.severity : "Not recorded", confidence: pdfConfidenceLabel(presentation.confidenceScore), priority: false, target: otherIds.has(id) ? "other-findings" : topic });
+      impact: typeof finding.severity === "string" ? finding.severity : "Not recorded", confidence: pdfConfidenceLabel(presentation.confidenceScore), priority: false, selectionLabel: id === "post_accept_consent_dependent_activity" ? "For information" : "Other finding", target: otherIds.has(id) ? "other-findings" : topic });
   }
   const v2 = report.artifactType === "certscore_canonical_report_export" && report.artifactVersion === "canonical-report-export-v8" && report.reviewFocus === "gdpr_eprivacy" && report.score.scope === "starting_page" ? buildReportPdfV2Model(report) : null;
-  if (v2) for (const finding of findings.filter(item => !item.priority)) {
+  if (v2) for (const finding of findings.filter(item => item.target !== "findings")) {
     const display = v2.findings.find(item => item.id === finding.id);
     if (display) finding.title = display.title;
   }
@@ -75,5 +78,8 @@ export function reportExecutiveSummary(report: CanonicalReportExport): Executive
       return { title: topic.title, status, target: topic.id };
     });
   return { score, scoreScope: report.reviewFocus === "ccpa_cpra" || report.score.scope === "starting_page" ? "Starting-page score" : "Full-site score", rating: score === null ? "Unavailable" : report.reviewFocus === "ccpa_cpra" ? "California assessment" : getGdprEprivacyPostureTone(score).ratingLabel,
-    priorityCount: review.topIssues.length, metrics: metrics.map((metric, index) => ({ ...metric, attention: Boolean(v2 && index === 2 && Number(metric.value) > 0), note: index === 0 ? `${findings.length} report findings` : v2 && index === 1 ? "Non-essential storage. Requests separate." : pdfPublicWords(metric.note) })), findings, topics };
+    priorityCount, findingCountLabel: review.reviewItemCount
+      ? `${priorityCount} priority ${priorityCount === 1 ? "finding" : "findings"} · ${review.reviewItemCount} review ${review.reviewItemCount === 1 ? "item" : "items"}`
+      : `${priorityCount} selected ${priorityCount === 1 ? "priority" : "priorities"}; ${findings.length} findings`,
+    metrics: metrics.map((metric, index) => ({ ...metric, ...(index === 0 && review.reviewItemCount ? { label: "Priority findings", value: String(priorityCount) } : {}), attention: Boolean(v2 && index === 2 && Number(metric.value) > 0), note: index === 0 ? `${findings.length} report findings` : v2 && index === 1 ? "Non-essential storage. Requests separate." : pdfPublicWords(metric.note) })), findings, topics };
 }

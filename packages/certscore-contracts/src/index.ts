@@ -35,7 +35,7 @@ export * from "./runtime-storage-purpose";
 import { verifiedSaleSharingOptOutSchema, saleSharingOptOutLaneOutcomeSchema, type SaleSharingOptOutLaneOutcome, type VerifiedSaleSharingOptOut } from "./sale-sharing-opt-out";
 export * from "./sale-sharing-opt-out";
 import { cookieClassificationSchema } from "./cookie-classification";
-import { privacyChoiceInspectionSchema, type PrivacyChoiceInspection } from "./california-privacy-review";
+import { CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION, privacyChoiceInspectionSchema, type PrivacyChoiceInspection } from "./california-privacy-review";
 export * from "./california-privacy-review";
 export * from "./california-restriction-shadow";
 export * from "./california-opt-out-shadow";
@@ -2822,6 +2822,7 @@ export const policyNegativeSearchEvidenceSchema: z.ZodType<PolicyNegativeSearchE
 });
 
 export const policySurfaceInspectionOutcomeSchema = z.object({
+  rightsReviewScorePolicy: z.literal(CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION).optional(),
   californiaDisclosureChoicePolicy:californiaDisclosureChoiceCapturePolicySchema.optional(),
   californiaReviewPolicy: z.enum(["california-privacy-review.v2","california-privacy-review.v3","california-privacy-review.v4","california-privacy-review.v5","california-privacy-review.v6","california-privacy-review.v7","california-privacy-review.v8","california-privacy-review.v9","california-privacy-review.v10"]).optional(),
   privacyChoiceInspection: privacyChoiceInspectionSchema.optional(),
@@ -2879,6 +2880,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   normalizedUrl?: string;
   negativeSearchEvidence?: PolicyNegativeSearchEvidence;
   privacyChoiceInspection?: PrivacyChoiceInspection;
+  rightsReviewScorePolicy?: typeof CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION;
   californiaDisclosureChoicePolicy?: CaliforniaDisclosureChoiceAssessment["policyVersion"];
   californiaReviewPolicy?: "california-privacy-review.v2" | "california-privacy-review.v3" | "california-privacy-review.v4" | "california-privacy-review.v5" | "california-privacy-review.v6" | "california-privacy-review.v7" | "california-privacy-review.v8" | "california-privacy-review.v9" | "california-privacy-review.v10";
   policySurfaceObservations?: z.infer<typeof policySurfaceObservationSchema>[];
@@ -2956,6 +2958,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
 
   return policySurfaceInspectionOutcomeSchema.parse({
     californiaReviewPolicy: input.californiaReviewPolicy,
+    rightsReviewScorePolicy: input.rightsReviewScorePolicy,
     californiaDisclosureChoicePolicy: input.californiaDisclosureChoicePolicy,
     privacyChoiceInspection: input.privacyChoiceInspection,
     outcome,

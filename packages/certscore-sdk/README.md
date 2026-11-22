@@ -403,3 +403,10 @@ Omitting it preserves the scan default. Preserve it on every manual cursor read;
 download links retain it automatically. It cannot be combined with a tracking
 workpaper. Both posture scores remain separately typed; this does not rescore or
 create a scan.
+
+For a California rights-disclosure review, call
+`getReportEvidence(scanId, { reviewFocus: "ccpa_cpra", section: "policy" })`.
+Read the returned `postureScores.ccpaCpra.score` and `policyVersion` together.
+The finding `california_rights_disclosure_not_observed` has status `Review`,
+low severity and, on updated report servers, `applicabilityGuidance` with coverage
+checks and source links. Business applicability requires independent verification.

@@ -1012,7 +1012,7 @@ function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTh
     y -= 16;
   }
   text("Report findings", 50, y, 13, true);
-  text(`${model.priorityCount} selected ${model.priorityCount === 1 ? "priority" : "priorities"}; ${model.findings.length} findings`, 335, y, 8, false, muted, 227);
+  text(`${model.findingCountLabel}`, 335, y, 8, false, muted, 227);
   y -= 12;
   if (!model.findings.length) {
     box(50, y - 48, 512, 48, "0.97 0.98 0.99");
@@ -1031,7 +1031,7 @@ function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTh
     const titleHeight = lines(finding.title, 86, top - 18, 335, 10, 2, true, ink);
     const maxLines = Math.max(1, Math.min(4, Math.floor((cardHeight - titleHeight - 22) / 10.5)));
     lines(finding.summary, 86, top - 21 - titleHeight, 333, 8.5, maxLines);
-    text(finding.priority ? "Selected priority" : finding.status === "For information" ? "For information" : "Other finding", 435, top - 18, 7.5, true, finding.priority ? orange : muted, 115);
+    text(finding.selectionLabel, 435, top - 18, 7.5, true, finding.priority ? orange : muted, 115);
     text(`${titleCase(finding.impact)} impact`, 435, top - 32, 7.5, true, muted, 115);
     lines(finding.confidence, 435, top - 46, 115, 7.5, 2);
     text(`Details p.${topicPages.get(finding.target) ?? "-"}`, 435, top - cardHeight + 10, 8, true, accent, 115);

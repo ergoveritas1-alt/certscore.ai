@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const CALIFORNIA_RIGHTS_DISCLOSURE_ID = "california_rights_disclosure_not_observed";
+export const CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION = "california-regulatory-posture.v27-rights-review";
 export const CALIFORNIA_RIGHTS_TOPICS = ["right_to_know", "right_to_delete", "right_to_correct", "non_discrimination"] as const;
 export const californiaDisclosureInspectionSchema = z.object({
   contractVersion: z.literal("certscore.california-disclosure-inspection.v1"),

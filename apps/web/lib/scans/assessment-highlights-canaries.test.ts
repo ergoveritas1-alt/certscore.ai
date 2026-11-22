@@ -14,7 +14,8 @@ for (const canary of canaries) {
       const result = buildAssessmentHighlightsPresentation(findings, page);
       assert.ok(result.text.length <= 430);
       assert.ok(result.expanded && result.expanded.text.length <= 1000);
-      assert.ok(result.links.filter(link => link.label !== "Detailed evidence").length >= 3);
+      assert.ok(result.links.filter(link => link.label !== "Detailed evidence").length >= (focus === "ccpa_cpra" ? 2 : 3));
+      if (focus === "ccpa_cpra") assert.doesNotMatch(result.text, /Privacy-rights disclosure/);
       assert.ok(result.expanded.links.some(link => link.targetId === "accessibility-evidence"));
       for (const link of result.links) assert.ok(result.expanded.links.some(expanded => expanded.label === link.label && expanded.targetId === link.targetId));
       for (const copy of [result, result.expanded]) {

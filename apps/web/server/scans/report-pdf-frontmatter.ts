@@ -2,7 +2,8 @@ import type { CanonicalReportExport } from "./report-export";
 import type { PdfLine } from "./report-export-pdf";
 import { pdfRegionLabel, pdfReviewGroups, pdfOtherReviewGroups, pdfTestedUrl } from "./report-pdf-reader";
 import { publicReportPdfBaseUrl } from "./report-pdf-public-safety";
-import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
+import { findingApplicabilityContext } from "../../lib/scans/finding-applicability-context";
+import { CALIFORNIA_RIGHTS_DISCLOSURE_ID, SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { pdfSiteIntegrityRemediationEvidence } from "./report-pdf-site-integrity";
 import { pdfGroupRemediation } from "./report-pdf-remediation";
 import { reportStatusLabel } from "../../lib/scans/report-status-presentation";
@@ -24,6 +25,12 @@ export function pdfFrontmatter(report: CanonicalReportExport, appUrl: string, la
     if ((group.evidenceGroup ?? group.id) === "initial-tracking" && report.appendix.evidenceDossier?.cmp?.provider === "OneTrust") {
       result.push(...layout.text("For a OneTrust-managed deployment: map each integration to the actual tenant category ID, choose documented Auto-Blocking or script rewriting, and load the blocking configuration before optional tags. Publishing a CMP banner alone does not activate blocking. If using a tag manager, configure the same category grants on every relevant trigger.", { size: 9 }),
         ...layout.text("OneTrust blocking implementation guidance", { href: "https://my.onetrust.com/s/article/UUID-518074a1-a6da-81c3-be52-bae7685d9c94?language=en_US", size: 8 }));
+    }
+    if (group.id === CALIFORNIA_RIGHTS_DISCLOSURE_ID && report.reviewFocus === "ccpa_cpra") {
+      const context = findingApplicabilityContext(group.id, report.reviewFocus);
+      result.push(layout.heading("Who qualifies under the CCPA?"));
+      for (const check of context.checks) result.push(...layout.text(check, { size: 9 }));
+      for (const source of context.sources) result.push(...layout.text(source.label, { href: source.url, size: 8 }));
     }
     if (plan.rules.length) {
       for (const rule of plan.rules) {

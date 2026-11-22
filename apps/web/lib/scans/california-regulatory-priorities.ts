@@ -35,10 +35,11 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
     const reject=eligible.flatMap(row=>row.unifiedFindingId === "california_post_reject_collection" && row.details?.family === "california_post_reject" ? [row.details.assessment] : [])
       .find(a=>a.scanId===projection.scanId && a.targetSha256===documentUrlSha256 && a.status==="qualified_collection" &&
         a.scope==="cookie_tracking_rejection" && a.sourcePacketSha256 && a.recipientIds.length>0);
+    const rightsReview = finding.unifiedFindingId === "california_rights_disclosure_not_observed";
     result.push({ id: finding.unifiedFindingId, title: copy.title, summary: copy.description,
-      severity:finding.severity,
-      priority: finding.severity==="high"?"high":undefined,
-      status: "Partial concern", evidence: [
+      severity:rightsReview ? "low" : finding.severity,
+      priority: !rightsReview && finding.severity==="high"?"high":undefined,
+      status: rightsReview ? "Review" : "Partial concern", evidence: [
         ...(!combined && (projection.contractVersion === "certscore.california-privacy-review.v5" || projection.contractVersion === "certscore.california-privacy-review.v6" || (projection.contractVersion === "certscore.california-privacy-review.v7" || (projection.contractVersion === "certscore.california-privacy-review.v8" || (projection.contractVersion === "certscore.california-privacy-review.v9" || projection.contractVersion === "certscore.california-privacy-review.v10")))) && projection.rightsAssessment ? [
           ...projection.rightsAssessment.topics.map(topic=>`${topic.topic.replaceAll("_"," ")}: ${topic.status.replaceAll("_"," ")} — ${topic.reason}`),
           ...projection.rightsAssessment.topics.flatMap(topic=>topic.passages.map(passage=>passage.excerpt)),

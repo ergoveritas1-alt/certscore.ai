@@ -116,6 +116,7 @@ export const CALIFORNIA_SCORING_RULES = [...CALIFORNIA_SCORING_RULES_V4_V7.filte
 /** Explicitly marked new captures only; all preceding registries stay frozen. */
 export const CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION = "california-regulatory-posture.v18-disclosure-choice" as const;
 export const CALIFORNIA_RUNTIME_LINK_SCORE_VERSION = "california-regulatory-posture.v19-runtime-link" as const;
+export const CALIFORNIA_CONDITIONAL_CORE_RIGHTS_POINTS = 4;
 export const CALIFORNIA_NON_DISCRIMINATION_ONLY_POINTS = 3;
 export const CALIFORNIA_DISCLOSURE_CHOICE_SCORING_RULES = [
   ...CALIFORNIA_SCORING_RULES.map(rule => ({...rule, ...(rule.findingId === "california_rights_disclosure_not_observed"

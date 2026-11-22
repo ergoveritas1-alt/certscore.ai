@@ -32,6 +32,10 @@ test("every mapped top issue retains collapsed applicability and jurisdiction-sp
       assert.match(disclosure[2]!, /What to check/);
       assert.doesNotMatch(disclosure[2]!, /From this scan/);
       assert.doesNotMatch(disclosure[2]!, /data-applicability-key="unmapped"/);
+      if (topic.id === "california-rights-disclosure") {
+        assert.match(disclosure[2]!, /CCPA applicability undetermined/);
+        for (const threshold of ["$26,625,000", "100,000", "50%"]) assert.ok(disclosure[2]!.includes(threshold));
+      }
       if (topic.id === "california-collection-review") {
         assert.match(html, /Related guidance · California collection review/);
       } else {

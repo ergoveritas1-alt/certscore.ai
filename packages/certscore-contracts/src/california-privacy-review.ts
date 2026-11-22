@@ -20,7 +20,7 @@ import {californiaRightsClauseAssessmentSchema,californiaCollectionNoticeAssessm
 import {californiaSaleSharingAssessmentSchema} from "./california-sale-sharing-assessment";
 export * from "./california-sale-sharing-assessment";
 export * from "./california-clause-assessment";
-import { californiaDisclosureInspectionSchema, CALIFORNIA_RIGHTS_DISCLOSURE_ID } from "./california-disclosure-inspection";
+import { CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION, californiaDisclosureInspectionSchema, CALIFORNIA_RIGHTS_DISCLOSURE_ID } from "./california-disclosure-inspection";
 export * from "./california-disclosure-inspection";
 import { verifiedSaleSharingOptOutSchema,saleSharingOptOutBindsDocument } from "./sale-sharing-opt-out";
 import { z } from "zod";
@@ -335,6 +335,7 @@ export const californiaObservedScoreBasisSchema = z.discriminatedUnion("policyVe
 export type CaliforniaObservedScoreBasis = z.infer<typeof californiaObservedScoreBasisSchema>;
 const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
   contractVersion:z.literal("certscore.california-privacy-review.v10"),policyVersion:z.literal("california-privacy-review.v10"),
+  rightsReviewScorePolicy: z.literal(CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION).optional(),
   observedScoreBasis:californiaObservedScoreBasisSchema.optional(),
   agentRegistrationAssessment:californiaAgentRegistrationSchema.optional(),
   disclosureChoiceAssessment:californiaDisclosureChoiceAssessmentSchema.optional(),
@@ -579,8 +580,8 @@ export function californiaPrivacyReviewCopy(id: string, assessment?: CaliforniaP
     })[topic.topic]) ?? [];
   if (id === CALIFORNIA_RIGHTS_DISCLOSURE_ID) return {
     title:missingRights.length === 1 && missingRights[0]!.startsWith("non-discrimination") ? "Non-discrimination disclosure not found in the inspected policy" : "Privacy-rights disclosure not found in the inspected policy",
-    description:`A complete inspection of retained English policy text and material linked supplements found no consumer-rights disclosure for ${missingRights.length ? missingRights.join(" and ") : "one or more core California privacy-rights topics"}. This is a scoped disclosure finding, assessed assuming CCPA/CPRA applies; it does not prove requests would be refused.`,
-    action:"Review the retained topic inspection and explain each applicable consumer right and how to exercise it. Check business applicability and any exemptions.",
+    description:`CCPA applicability has not been determined for this business. The inspected policy and linked supplements did not describe ${missingRights.length ? new Intl.ListFormat("en").format(missingRights) : "one or more core California privacy rights"}.`,
+    action:"Confirm whether the CCPA covers the business. If it does, check that the policy explains each applicable right and how to exercise it.",
   };
   if (id === CALIFORNIA_NOTICE_DESTINATION_ID) return {
     title: "Notice-at-collection link returned an HTTP error",

@@ -23,13 +23,19 @@ import type { ReportEvidencePage } from "../packages/certscore-sdk/src/types";
 
 // Materialize one partial Reject recipient and one full GPC recipient. The consumers
 // below receive persisted findings and evidence, never a preassigned score.
-function addCaliforniaChoiceEvidence(scan: ReturnType<typeof reportRequestScanFixture>) {
-  const { californiaCoverageFixture, CA_FIXTURE_SOURCE } = require("../apps/web/server/scans/california-review-coverage.fixture.ts");
+function addCaliforniaChoiceEvidence(scan: ReturnType<typeof reportRequestScanFixture>, rightsReview: boolean) {
+  const { californiaCoverageFixture, CA_FIXTURE_SOURCE, CA_FIXTURE_POLICY } = require("../apps/web/server/scans/california-review-coverage.fixture.ts");
   const { projectCaliforniaPrivacyReview } = require("../apps/web/server/scans/california-privacy-review-projection.ts");
   const { afterRejectClickProjection } = require("../apps/web/lib/scans/test-fixtures/after-reject-scoring.ts");
   const { buildPostRefusalRuntimeProjection } = require("../apps/web/lib/scans/post-refusal-runtime-projection.ts");
   const { buildUnifiedFindingDisplayPackets } = require("../apps/web/lib/scans/unified-findings.ts");
-  const fixture = californiaCoverageFixture(undefined, scan.scan.requestedUrl);
+  const policy = rightsReview ? CA_FIXTURE_POLICY.replace("You have the right to delete your personal information. ", "") : undefined;
+  const fixture = californiaCoverageFixture(policy, scan.scan.requestedUrl);
+  if (rightsReview) {
+    const { CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION, CALIFORNIA_COMBINED_OPT_OUT_POLICY } = require("@certscore/contracts");
+    fixture.bundle.policySurfaceInspection.rightsReviewScorePolicy = CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION;
+    fixture.bundle.policySurfaceInspection.californiaDisclosureChoicePolicy = CALIFORNIA_COMBINED_OPT_OUT_POLICY;
+  }
   fixture.bundle.scanId = fixture.policyEvidence.projection.scanId = scan.scan.id;
   fixture.bundle.policySurfaceInspection.californiaReviewPolicy = "california-privacy-review.v10";
   for (const observation of fixture.bundle.policySurfaceObservations) observation.documentLanguage = "en";
@@ -57,10 +63,13 @@ function addCaliforniaChoiceEvidence(scan: ReturnType<typeof reportRequestScanFi
 test("web, PDF/Word content, API, SDK and both MCP profiles retain identical forms, requests, choice proof and lens scope", async () => {
   const originalFetch = globalThis.fetch;
   try {
-    for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) for (const proof of ["retained", "missing_receipt", "wrong_target"] as const) {
+    for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) for (const proof of ["retained", "missing_receipt", "wrong_target", "rights_review"] as const) {
+      const rightsReview = proof === "rights_review";
+      if (rightsReview && focus !== "ccpa_cpra") continue;
+      const intact = proof === "retained" || rightsReview;
       const scan = reportRequestScanFixture(), scanId = scan.scan.id;
-      const checkPresenceScore = focus === "ccpa_cpra" && proof === "retained";
-      if (checkPresenceScore) addCaliforniaChoiceEvidence(scan);
+      const checkPresenceScore = focus === "ccpa_cpra" && intact;
+      if (checkPresenceScore) addCaliforniaChoiceEvidence(scan, rightsReview);
       scan.snapshot.report_projection_status = "ready";
       if (proof === "missing_receipt") delete scan.runtimeArtifacts.postAcceptEvidenceProjection.packetSha256;
       if (proof === "wrong_target") scan.runtimeArtifacts.postAcceptEvidenceProjection.formSnapshotCapture.exactTargetSha256 = "f".repeat(64);
@@ -79,21 +88,30 @@ test("web, PDF/Word content, API, SDK and both MCP profiles retain identical for
       const partialTitle = "Non-essential activity after Reject click";
       if (checkPresenceScore) {
         assert.equal(view.findings.find(f => f.id === "california_collection_review")?.title, partialTitle);
-        assert.equal(resource.postureScores.ccpaCpra.score,78);
-        assert.equal(resource.postureScores.ccpaCpra.policyVersion,"california-regulatory-posture.v26-verified-event");
+        const expectedScore = rightsReview ? 74 : 78;
+        assert.equal(resource.postureScores.ccpaCpra.score, expectedScore);
+        assert.equal(resource.postureScores.ccpaCpra.policyVersion,rightsReview ? "california-regulatory-posture.v27-rights-review" : "california-regulatory-posture.v26-verified-event");
         const {renderCanonicalReportPdf} = require("../apps/web/server/scans/report-export-pdf.ts");
         const {renderCanonicalReportDocx} = require("../apps/web/server/scans/report-export-docx.ts");
         const pdf = renderCanonicalReportPdf(exported);
         const docx = await renderCanonicalReportDocx(exported);
         const {renderPulseMarkdown} = require("../apps/web/lib/pulse/markdown.ts");
-        assert.match(renderPulseMarkdown(pulse), /California posture score \| 78/);
+        assert.ok(renderPulseMarkdown(pulse).includes(`California posture score | ${expectedScore}`));
         const text = [...pdf.toString("latin1").matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(m=>m[1]).join(" ");
         assert.ok(text.includes(partialTitle));
-        assert.match(text,/78 of 100 SCORE California assessment/);
+        assert.ok(text.includes(`${expectedScore} of 100 SCORE California assessment`));
         const archive = await JSZip.loadAsync(docx);
         const documentXml = await archive.file("word/document.xml")!.async("string");
         assert.ok(documentXml.includes(partialTitle));
-        assert.match(documentXml,/Score 78\/100/);
+        assert.ok(documentXml.includes(`Score ${expectedScore}/100`));
+        if (rightsReview) {
+          for (const rendered of [text, documentXml]) {
+            assert.match(rendered, /1 review item/);
+            assert.match(rendered, /Who qualifies under the CCPA/);
+            assert.match(rendered, /26,625,000/);
+          }
+          assert.doesNotMatch(view.verdict, /rights disclosure|applicability has not been determined/i);
+        }
       }
       assert.deepEqual(resource.formsSummary, web.formsSummary);
       assert.equal(resource.score, web.score.value);
@@ -104,8 +122,8 @@ test("web, PDF/Word content, API, SDK and both MCP profiles retain identical for
       const expectedRows = exported.appendix.dataCollectionSurfaces.reportInventory!.rows;
       assert.deepEqual(expectedRows, web.collectionTableRows);
       const content = canonicalReportDocumentContent(exported).lines.map(line => line.text).join("\n");
-      assert.equal(expectedRows.length, proof === "retained" ? 2 : 0);
-      if (proof === "retained") assert.match(content, /2 recorded forms; 9 recorded fields/);
+      assert.equal(expectedRows.length, intact ? 2 : 0);
+      if (intact) assert.match(content, /2 recorded forms; 9 recorded fields/);
       else assert.equal(web.formsSummary.afterAcceptObserved, null, "missing or mismatched proof remains unknown");
       assert.match(content, /3 request events; 2 distinct request resources/);
       const calls: string[] = [];
@@ -116,7 +134,7 @@ test("web, PDF/Word content, API, SDK and both MCP profiles retain identical for
         if (url.pathname === `/api/v2/scans/${scanId}`) return Response.json(resource);
         assert.equal(url.pathname, `/api/v2/scans/${scanId}/report-evidence`);
         assert.equal(url.searchParams.get("reviewFocus"), focus);
-        const section = url.searchParams.get("section") as "forms" | "tracking" | null;
+        const section = url.searchParams.get("section") as "forms" | "tracking" | "policy" | null;
         const selected = section ? selectReportEvidenceSection(view as unknown as Record<string, unknown>, section).report : view;
         return Response.json(buildReportEvidencePage({ scanId, report: buildReportDisplayExport(selected as unknown as Record<string, unknown>), section: section ?? undefined, reviewFocus: focus, cursor: url.searchParams.get("cursor") }));
       };
@@ -138,7 +156,8 @@ test("web, PDF/Word content, API, SDK and both MCP profiles retain identical for
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
         await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
         try {
-          for (const section of ["forms", "tracking"] as const) {
+          for (const section of ["forms", "tracking", "policy"] as const) {
+            if (section === "policy" && !rightsReview) continue;
             const pages: ReportEvidencePage[] = []; let cursor: string | undefined;
             do {
               const result = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: { scanId, section, reviewFocus: focus, ...(cursor ? { cursor } : {}) } });
@@ -152,6 +171,16 @@ test("web, PDF/Word content, API, SDK and both MCP profiles retain identical for
               assert.deepEqual(mcp.postureScores, resource.postureScores);
               const findings = mcp.findings as Array<{id:string; title:string}>;
               assert.equal(findings.find(f => f.id === "california_collection_review")?.title, partialTitle);
+            }
+            if (section === "policy") {
+              const findings = mcp.findings as Array<{id: string; status: string; severity: string; summary: string; applicabilityGuidance?: {checks: string[]}}>;
+              const index = findings.findIndex(finding => finding.id === "california_rights_disclosure_not_observed");
+              assert.ok(index > findings.findIndex(finding => finding.id === "california_collection_review"));
+              const row = findings[index]!;
+              assert.equal(row.status, "Review");
+              assert.equal(row.severity, "low");
+              assert.equal(row.summary.match(/CCPA applicability has not been determined/g)?.length, 1);
+              assert.match(row.applicabilityGuidance!.checks.join(" "), /26,625,000/);
             }
             if (section === "forms") assert.deepEqual(mcp.formsSummary, web.formsSummary);
             if (section === "tracking") assert.deepEqual(mcp.inventorySummary, web.inventorySummary);

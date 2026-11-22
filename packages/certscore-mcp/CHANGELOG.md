@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## 0.2.36
+
+- Document the California rights-disclosure review item and its applicability guidance for both tool profiles.
+
 ## 0.2.35
 
 - Align Light adoption and review actions with current onboarding, and use CertScore.ai in no-go responses.

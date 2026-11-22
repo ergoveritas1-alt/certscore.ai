@@ -16,7 +16,7 @@ import {claimReviewedOptOutRollout, reviewedRouteDispatch} from "./reviewed-opt-
 import {redHatConditionalDispatch} from './redhat-opt-out-dispatch';
 import {REDHAT_OPT_OUT_POLICY} from '@certscore/contracts';
 import { conditionalOptOutCandidate, type ConditionalOptOutDecision } from "./conditional-opt-out";
-import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
+import {CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION, CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
 import { assertPrivacyCaptureProfile, PRESENCE_ONLY_CAPTURE_PROFILE, CONDITIONAL_OPT_OUT_CAPTURE_PROFILE, type PrivacyCaptureProfile } from "@certscore/contracts";
 import { describeCaptureFailure } from "@certscore/contracts";
 import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, saleSharingOptOutMatchesDispatch, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
@@ -6255,6 +6255,7 @@ export function buildVerifiedPolicyEvidencePacket(input: {
       negativeSearchEvidence: input.result.negativeSearchEvidence,
       privacyChoiceInspection: input.result.privacyChoiceInspection,
       californiaReviewPolicy: "california-privacy-review.v10",
+      rightsReviewScorePolicy: CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION,
       californiaDisclosureChoicePolicy: CALIFORNIA_COMBINED_OPT_OUT_POLICY,
       modulesRun: [input.result.moduleRun],
       policySurfaceObservations,

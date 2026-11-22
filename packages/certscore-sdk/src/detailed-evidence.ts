@@ -6,6 +6,19 @@ export type { CmpAuditAvailability, DetailedEvidenceCounts, DetailedEvidenceRow,
 /** Reconstructed report content; canonical findings and the audit remain separate. */
 export interface ReportEvidenceDocument {
   postureScores?: PostureScores;
+  findings?: Array<{
+    id: string;
+    status: string;
+    severity?: string;
+    summary: string;
+    applicabilityGuidance?: {
+      when: string;
+      checks: string[];
+      scopeCheck: string;
+      sources: Array<{ label: string; url: string }>;
+    };
+    [key: string]: unknown;
+  }>;
   detailedEvidence?: DetailedEvidenceReport;
   cmpAudit?: PublicCmpAudit;
   cmsSecurity?: PublicCmsSecurity | null;

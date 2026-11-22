@@ -52,7 +52,7 @@ export function pdfGroupRemediation(report: CanonicalReportExport, group: PdfRev
         const projection = parsed.data;
         const labels: Record<string, string> = { non_discrimination: "non-discrimination when exercising privacy rights", right_to_know: "right to know/access", right_to_delete: "right to delete", right_to_correct: "right to correct" };
         const missing = "rightsAssessment" in projection ? projection.rightsAssessment?.topics.filter(topic => topic.status === "not_observed").map(topic => labels[topic.topic] ?? topic.topic) ?? [] : [];
-        if (missing.length) locations.push(`Missing disclosure in the scoped assessment: ${missing.join("; ")}. Applicability is not determined by this report.`);
+        if (missing.length) locations.push(`Missing disclosure in the scoped assessment: ${missing.join("; ")}.`);
         if ("reviewCoverage" in projection) locations.push(...(projection.reviewCoverage?.sourceDocuments ?? []).map(source => `Inspected policy URL: ${source.url}`));
       }
     }

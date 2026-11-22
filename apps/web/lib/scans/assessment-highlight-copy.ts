@@ -124,7 +124,7 @@ const COMPACT_ACTIONS: Record<string, string> = {
   options_settings_preferences_control: "Check how visitors can change or withdraw consent by purpose; provide an accessible settings path where required.",
   session_replay_fingerprinting_review: "Check replay activation and sensitive-field masking; apply the required consent controls and disclosures, then retest.",
   device_identification_fingerprinting_signal_observed: "Identify the scripts and their purpose; limit non-essential device-data collection and align disclosures and privacy controls.",
-  california_rights_disclosure_not_observed: "Check which California privacy rights apply and add clear instructions for exercising them to the site's privacy disclosures.",
+  california_rights_disclosure_not_observed: "Confirm whether the CCPA covers the business before reviewing its rights disclosures.",
   consent_surface_observed: "Check whether optional services require consent on this page; verify the consent interface in a fresh visit and correct any confirmed gaps.",
   cookie_notice_policy_availability: "Check which cookie disclosures apply; provide an accessible notice covering the site's actual cookie purposes and choices, then verify its links.",
   privacy_notice_availability: "Publish an accessible privacy policy describing the site's actual data practices and link it from the affected pages.",

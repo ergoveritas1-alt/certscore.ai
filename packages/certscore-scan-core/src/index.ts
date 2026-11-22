@@ -1,7 +1,7 @@
 import {retainGpcRecoveryLedger} from "./gpc-navigation-recovery";
 export { buildGpcCmpStateComparison } from "./gpc-cmp-state-comparison.js";
 import { serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
-import { RUNTIME_VIEWPORT_ID, isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage, hasRepresentativeRuntimeText, isAmazonShoppingInterstitial } from "@certscore/contracts";
+import { RUNTIME_VIEWPORT_ID, isBoundRuntimeAuthenticationPage, boundRuntimeDocumentStatus, CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION, CALIFORNIA_COMBINED_OPT_OUT_POLICY, classifyRuntimeErrorPage, hasRepresentativeRuntimeText, isAmazonShoppingInterstitial } from "@certscore/contracts";
 import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { collectionRecipientPriorities } from "./collection-recipient-retention.js";
 import {gpcProofEventPriorities} from "./gpc-proof-retention.js";
@@ -1413,6 +1413,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     negativeSearchEvidence: policySurfaceResult?.negativeSearchEvidence,
     privacyChoiceInspection: policySurfaceResult?.privacyChoiceInspection,
     californiaReviewPolicy: "california-privacy-review.v10",
+    rightsReviewScorePolicy: CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION,
     californiaDisclosureChoicePolicy: CALIFORNIA_COMBINED_OPT_OUT_POLICY,
     modulesRun: boundedModulesRun,
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],

@@ -103,7 +103,7 @@ test("overview and priority list omit the sole disclosure finding while detail a
     finding: {...row, focus: "CCPA/CPRA", vendors: []}, reviewFocus: "ccpa_cpra",
   }));
   assert.match(detailedFinding, /Non-discrimination disclosure not found in the inspected policy/);
-  assert.match(detailedFinding, /assuming CCPA\/CPRA applies/);
+  assert.match(detailedFinding, /CCPA applicability has not been determined/);
   const packet = result.packets.find(packet => packet.unifiedFindingId === CALIFORNIA_RIGHTS_DISCLOSURE_ID)!;
   assert.equal(packet.presentationDecision.status, "surface");
   assert.equal(packet.surfacingDecision.reportable, true);
