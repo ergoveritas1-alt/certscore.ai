@@ -57,7 +57,7 @@ for (const provider of ["finsweet", "cookiescript", "cookie_information", "osano
         window.save=()=>{ window.state=${mode === "partial" ? '{essential:true,analytics:false}' : `{essential:true,analytics:${mode === "opposite"},marketing:false,personalization:false}`};
           ${mode === "no_event" ? '' : `document.documentElement.dispatchEvent(new CustomEvent('consentpro:consent-updated'));`} };`
         : provider === "cookiescript" ? `
-          window.state={categories:[]};window.CookieScript={instance:{categories:()=>['performance','targeting'],currentState:()=>window.state}};
+          window.state={action:null,categories:['strict']};window.CookieScript={instance:{categories:()=>['performance','targeting'],currentState:()=>window.state}};
           window.save=()=>{window.state=${mode === "partial" ? '{action:"reject",categories:["invented"]}' : mode === "opposite" ? '{action:"accept",categories:["performance","targeting"]}' : '{action:"reject",categories:["strict"]}'};
             ${mode === "no_event" ? '' : `dispatchEvent(new Event('CookieScriptReject'));`} };`
         : provider === "cookie_information" ? `
@@ -101,6 +101,40 @@ test("documented API configuration drift and malformed saved updates cannot reus
     const after = await readCmpApiConsentSnapshot(page, "cookiescript");
     assert.notEqual(before?.configurationSha256, after?.configurationSha256);
     await page.evaluate(() => { (window as any).state={action:"reject",categories:["alien"]}; dispatchEvent(new Event("CookieScriptReject")); });
+    assert.equal(await readCmpApiConsentSnapshot(page, "cookiescript"), undefined);
+  } finally { await browser.close(); }
+});
+
+test("CookieScript pins categories before a usable choice and binds the saved read to its instance", async () => {
+  const browser = await chromium.launch({headless:true});
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<div id="cookiescript_injected"></div><script>
+      window.state={action:null,categories:['strict']};
+      window.CookieScript={instance:{categories:()=>['targeting','strict','performance'],currentState:()=>window.state}};
+    </script>`);
+    const before = await readCmpApiConsentSnapshot(page, "cookiescript");
+    assert.equal(before?.decision, "unknown");
+    assert.ok(before.configurationSha256);
+    await page.evaluate(() => {
+      (window as any).CookieScript.instance.currentState=()=>{throw new Error("state unavailable");};
+    });
+    const unavailable = await readCmpApiConsentSnapshot(page, "cookiescript");
+    assert.equal(unavailable?.decision, "unknown");
+    assert.equal(unavailable.configurationSha256, before.configurationSha256);
+    await page.evaluate(() => {
+      (window as any).CookieScript.instance.currentState=()=>(window as any).state;
+      (window as any).state={action:"reject",categories:["strict"]};
+      dispatchEvent(new Event("CookieScriptReject"));
+    });
+    const saved = await readCmpApiConsentSnapshot(page, "cookiescript");
+    assert.equal(saved?.decision, "denied");
+    assert.equal(saved.configurationSha256, before.configurationSha256);
+    assert.equal(saved.eventSequence, 1);
+    await page.evaluate(() => {
+      const sdk=(window as any).CookieScript;
+      sdk.instance={...sdk.instance};
+    });
     assert.equal(await readCmpApiConsentSnapshot(page, "cookiescript"), undefined);
   } finally { await browser.close(); }
 });

@@ -30,6 +30,8 @@ export async function readDocumentedConsentApi(scope: Page | Frame, provider: Do
     if (!api || (provider === "cookie_information" && typeof target.CookieInformation?.getConsentGivenFor !== "function") ||
       (provider === "cookiescript" && (typeof target.CookieScript?.instance?.currentState !== "function" || typeof target.CookieScript.instance.categories !== "function")) ||
       (provider === "finsweet" && typeof target.FinsweetConsentPro?.consents?.get !== "function")) return undefined;
+    // The configured categories are available independently of the visitor’s decision.
+    let cookieScriptConfiguration: string | undefined;
     const reader = { read(): State | undefined {
       let entries: Array<[string, boolean]>;
       let configuration: string[];
@@ -73,12 +75,14 @@ export async function readDocumentedConsentApi(scope: Page | Frame, provider: Do
         entries = configuration.map(key => [key, state[key] as boolean]);
       } else {
         const available = target.CookieScript!.instance!.categories!();
-        const raw = target.CookieScript!.instance!.currentState!();
         const known = ["strict", "performance", "targeting", "functionality", "unclassified"];
         if (!Array.isArray(available) || available.length > known.length || new Set(available).size !== available.length ||
           available.some(key => typeof key !== "string" || !known.includes(key))) return undefined;
         configuration = (available as string[]).filter(key => key !== "strict").sort();
         if (!configuration.length) return undefined;
+        cookieScriptConfiguration = JSON.stringify(configuration);
+        let raw: unknown;
+        try { raw = target.CookieScript!.instance!.currentState!(); } catch { return undefined; }
         if (raw === undefined) return {canonicalState: "unregistered", configuration: JSON.stringify(configuration), decision: "unknown"};
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
         const state = raw as { action?: unknown; categories?: unknown };
@@ -95,6 +99,8 @@ export async function readDocumentedConsentApi(scope: Page | Frame, provider: Do
     } };
     target.__certscoreDocumentedDecisionReaders ??= {};
     let tracker = target.__certscoreDocumentedDecisionReaders[provider];
+    // A saved decision must come from the same SDK instance as its category baseline.
+    if (provider === "cookiescript" && tracker && tracker.api !== api) return undefined;
     if (!tracker || tracker.api !== api) {
       tracker = { api, sequence: 0 };
       target.__certscoreDocumentedDecisionReaders[provider] = tracker;
@@ -111,8 +117,8 @@ export async function readDocumentedConsentApi(scope: Page | Frame, provider: Do
     if (provider === "cookie_information" && !live) return undefined;
     // A malformed latest event or a changed live API cannot reuse old proof.
     if (tracker.sequence && (!live || !tracker.state || tracker.state.canonicalState !== live.canonicalState || tracker.state.configuration !== live.configuration)) return undefined;
-    return { canonicalState: live?.canonicalState ?? "unregistered", decision: live?.decision ?? "unknown" as const,
-      configuration: live?.configuration, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.at };
+    return { canonicalState: live?.canonicalState ?? (cookieScriptConfiguration ? "unknown" : "unregistered"), decision: live?.decision ?? "unknown" as const,
+      configuration: live?.configuration ?? cookieScriptConfiguration, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.at };
   }, { provider, cookieInformationPolicy: COOKIE_INFORMATION_STATE_POLICY }).catch(() => undefined),
     new Promise<undefined>(resolve => {timer = setTimeout(() => resolve(undefined), 150);}),
   ]).finally(() => {if (timer) clearTimeout(timer);});
