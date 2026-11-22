@@ -1,3 +1,4 @@
+import { cookieScriptReloadPersistenceSchema, validateCookieScriptReloadPersistence } from "./cookiescript-reload-persistence";
 import {validateOsanoReceiptEnvelope,validateOsanoReceiptProjection} from "./osano-consent-receipt";
 import { postAcceptFormImageDiagnosticsSchema } from "./post-accept-form-snapshots";
 import { validateCookieYesLegacyReceiptEnvelope, validateCookieYesLegacyProjectionProof } from "./cookieyes-legacy-consent-state";
@@ -199,6 +200,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   resolver: postRefusalResolverSchema,
   acceptanceRegistration: postAcceptRegistrationSchema,
   consentReceiptCapture: consentReceiptCaptureSchema.optional(),
+  cookieScriptReloadPersistence: cookieScriptReloadPersistenceSchema.optional(),
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
   passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   observationWindowMs: z.number().int().nonnegative(),
@@ -246,6 +248,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  validateCookieScriptReloadPersistence(packet.cookieScriptReloadPersistence, packet, packet.acceptanceRegistration.actionDispatchedAtMs, context);
   validateActionRetentionBudget({action:"accept",coverage:packet.captureCoverage,requestCount:packet.network.requests.length,fullInventory:true,capture:packet.afterActionCapture},context);
   if (packet.timing.observationEndedAtMs !== undefined && (
     packet.timing.observationEndedAtMs > packet.timing.readyAtMs ||

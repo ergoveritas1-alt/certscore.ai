@@ -1,4 +1,5 @@
-import { expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
+import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
+import { observeCookieScriptReload } from "./cookiescript-reload-persistence.js";
 import { observeTrustArcReload } from "./trustarc-terminal-reload.js";
 import { installPostRefusalStorageWriteProbe } from "./post-refusal-storage-write-probe.js";
 import { installTrustArcSourceCapture, type TrustArcResponseCapture } from "./trustarc-source-capture.js";
@@ -508,6 +509,7 @@ export async function runPostRefusalObserver(
   let refusalRegisteredAtEpochMs: number | undefined;
   let selectedRecipe: PostRefusalActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
+  let cookieScriptReload: ReturnType<typeof observeCookieScriptReload>;
   let networkObservationClosed = false;
   let afterActionCapture: PostRefusalEvidencePacket["afterActionCapture"];
   const confirmationDiagnostic = confirmationDiagnostics();
@@ -595,6 +597,8 @@ export async function runPostRefusalObserver(
     }
     cancellation();
     finishTrustArcSourceCapture();
+    const cookieScriptReloadPersistence = interactionDiagnostics.click.outcome === "completed" &&
+      fields.registration.actionDispatchedAtMs !== undefined ? await cookieScriptReload?.finish() : undefined;
     const completedAtMs = Date.now();
     if (fields.registration.actionDispatchedAtMs !== undefined && interactionDiagnostics.navigation.finalUrlAuthorized && interactionDiagnostics.navigation.documentCommitted) {
       interactionDiagnostics.postClickNavigation = receiptCapture?.navigationEvidence(interactionDiagnostics.click.outcome, actionControlProof?.authorizedTargetSha256, completedAtMs);
@@ -638,6 +642,7 @@ export async function runPostRefusalObserver(
         })
       } : {}),
       ...(consentReceiptCapture?{consentReceiptCapture}:{}),
+      ...(cookieScriptReloadPersistence ? { cookieScriptReloadPersistence } : {}),
       confirmationDiagnostics: confirmationDiagnostic.retained(),
       ...(passiveCmpCapture ? {passiveCmpDiagnostics:passiveCmpCapture.finish(completedAtMs)} : {}),
       artifactOnly: true,
@@ -1669,6 +1674,13 @@ export async function runPostRefusalObserver(
             ? {controlFrame: actionControlProof?.frameIdentitySha256 ? sourceFrameBinding.boundFrame : undefined} : undefined);
           actionDispatched = true;
           graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
+          if (input.firstLayerProof?.exactSelector === COOKIE_SCRIPT_REJECT_ROLE_SELECTOR &&
+              actionControlProof?.cmpId === "CookieScript" && actionControlProof.authorizedTargetSha256 && !selectedRecipe?.controlFrameUrl && authorizedExactTargetUrl) {
+            cookieScriptReload = observeCookieScriptReload(page!, context!, authorizedExactTargetUrl,
+              actionControlProof.authorizedTargetSha256, parentScanStartedAtMs, actionDispatchedAtMs,
+              Math.min(actionDispatchedAtEpochMs + observationWindowMs,
+                (resultBudgetDeadlineAtMs ?? Infinity) - 250), baseSignal);
+          }
         },
         { ...actionabilityReadOptions(), deadlineAtMs: resultBudgetDeadlineAtMs, boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
         () => {
@@ -2140,6 +2152,7 @@ export async function runPostRefusalObserver(
   } finally {
     trustArcReload?.dispose();
     sourceFrameBinding.dispose();
+    cookieScriptReload?.dispose();
     if (budgetTimer) clearTimeout(budgetTimer);
     budgetController.signal.removeEventListener("abort", closeBudgetExpiredContext);
 

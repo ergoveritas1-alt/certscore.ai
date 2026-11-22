@@ -1807,14 +1807,22 @@ function collectConsentGeometryInPage(input: {
     const label = labelFor(element);
     const cookieScript = element.id === "cookiescript_accept" ? input.cookieScriptAccept
       : element.id === "cookiescript_reject" ? input.cookieScriptReject : undefined;
+    const exactCookieScriptControl = cookieScript && window === window.top &&
+      element.getRootNode() === document && element.matches(cookieScript.selector) &&
+      document.querySelectorAll(cookieScript.ids).length === 2;
     const aemFooterLink = Boolean(element.closest(input.aemFooterLinkSelector));
     const containerIndex = aemFooterLink ? undefined : nearestContainerIndex(element, containerItems);
     const contextRoot = typeof containerIndex === "number" ? containerItems[containerIndex]?.element : nearestContextRoot(element, contextPattern);
     const consentfulContextRoot = nearestTextContextRoot(element, contextPattern, label);
-    const contextText = compactText(
+    const genericContext = compactText(
       consentfulContextRoot ? independentContextText(consentfulContextRoot, element)
         : typeof containerIndex === "number" ? readableContextText(containerItems[containerIndex]!.element) : "",
     );
+    // A language picker can exhaust the generic text walk before the notice.
+    // For verified choice controls, read the banner's own visible description.
+    const contextText = exactCookieScriptControl &&
+      !contextPattern.test(genericContext.slice(0, 1_000))
+      ? cookieScriptDescription(element) || genericContext : genericContext;
     const attrs = compactText([
       label,
       element.getAttribute("id") || "",
@@ -1903,9 +1911,7 @@ function collectConsentGeometryInPage(input: {
       })(),
       selectorHint: selectorHintFor(element),
       exactNativeButtonSelector: selectExactButton?.(element),
-      ...(cookieScript && window === window.top &&
-          element.getRootNode() === document && element.matches(cookieScript.selector) &&
-          document.querySelectorAll(cookieScript.ids).length === 2
+      ...(exactCookieScriptControl
         ? {...(element.id === "cookiescript_accept"
             ? {exactCookieScriptAcceptVerified: true as const} : {exactCookieScriptRejectVerified: true as const}),
             cookieScriptUppercaseSourceLabel: getComputedStyle(element).textTransform === "uppercase" &&
@@ -2072,6 +2078,16 @@ function collectConsentGeometryInPage(input: {
       current = parentElementOrHost(current);
     }
     return undefined;
+  }
+
+  function cookieScriptDescription(control: Element): string {
+    const banner = control.closest("#cookiescript_injected")!;
+    const notices = document.querySelectorAll("#cookiescript_description");
+    const notice = notices[0];
+    if (notices.length !== 1 || !notice || notice.closest("#cookiescript_injected") !== banner ||
+        notice.contains(control) || control.contains(notice) || !contextTextIsReadable(notice) ||
+        !intersects(rectFor(notice), viewportRect())) return "";
+    return independentContextText(notice, control).slice(0, 1_000);
   }
 
   function independentContextText(root: Element, control: Element): string {

@@ -1,3 +1,4 @@
+import { cookieScriptReloadPersistenceSchema, validateCookieScriptReloadPersistence } from "./cookiescript-reload-persistence";
 import { choiceRequestRoleSchema } from "./choice-request-role";
 import {validateOsanoReceiptEnvelope,validateOsanoReceiptProjection} from "./osano-consent-receipt";
 import { validateCookieYesLegacyReceiptEnvelope, validateCookieYesLegacyProjectionProof } from "./cookieyes-legacy-consent-state";
@@ -574,6 +575,7 @@ function validateTrustArcReloadReadback(source: {
 
 const postRefusalEvidencePacketBaseSchema = z.object({
   consentReceiptCapture: consentReceiptCaptureSchema.optional(),
+  cookieScriptReloadPersistence: cookieScriptReloadPersistenceSchema.optional(),
   confirmationDiagnostics: consentConfirmationDiagnosticsSchema.optional(),
   passiveCmpDiagnostics: cmpPassiveDiagnosticsSchema.optional(),
   runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
@@ -644,6 +646,7 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  validateCookieScriptReloadPersistence(packet.cookieScriptReloadPersistence, packet, packet.refusalRegistration.actionDispatchedAtMs, context);
   validateActionRetentionBudget({action:"reject",coverage:packet.captureCoverage,requestCount:packet.network.requests.length,capture:packet.afterActionCapture},context);
   if (packet.timing.observationEndedAtMs !== undefined && (
     packet.timing.observationEndedAtMs > packet.timing.readyAtMs ||

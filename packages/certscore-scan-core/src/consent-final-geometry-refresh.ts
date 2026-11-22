@@ -12,6 +12,7 @@ export const FINAL_CONSENT_GEOMETRY_REFRESH_POLICY = "final_consent_geometry_ref
 export const FINAL_CONSENT_GEOMETRY_REFRESH_MS = 1500;
 export const FINAL_CONSENT_GEOMETRY_READ_MS = 1100;
 const CLEANUP_RESERVE_MS = 250;
+const COOKIE_SCRIPT_LOAD_WAIT_MS = 650;
 type State = DocumentCaptureBinding & {frameRevision: number; frames: readonly unknown[]};
 export type PreparedConsentGeometry = {commitIfCurrent: (current: () => boolean) => string | undefined; dispose: () => void};
 export type FinalConsentGeometryRefreshResult = {
@@ -128,10 +129,9 @@ async function beforeDeadline<T>(operation: Promise<T>, deadline: number, now: (
   }
 }
 
-/** One invocation-local optional refresh. Its only browser capability is the
- * existing geometry read: no wait, DOM inventory, screenshot, SDK or action.
- * A completed DOM channel and retained same-loader image must already exist;
- * an interactive source can only be repaired by a fresh complete geometry read. */
+/** One invocation-local refresh. Exact CookieScript controls captured before
+ * load may use part of the existing geometry allowance for document readiness.
+ * Only a fresh complete geometry read can repair an interactive source. */
 export function createFinalConsentGeometryRefresh(dependencies: {
   scanStartedAtMs: number;
   moduleDeadlineAtMs: number;
@@ -139,6 +139,7 @@ export function createFinalConsentGeometryRefresh(dependencies: {
   now?: () => number;
   readState: () => State;
   allowLimitedPositiveRefresh?: boolean;
+  waitForDocumentComplete?: (timeoutMs: number) => Promise<unknown>;
   capture: (options: {timeoutMs: number; screenshotArtifactRef: string; documentIdentity: NonNullable<State["documentIdentity"]>}) => Promise<ConsentControlGeometryArtifact>;
   prepare: (geometry: ConsentControlGeometryArtifact) => Promise<PreparedConsentGeometry>;
 }) {
@@ -192,9 +193,29 @@ export function createFinalConsentGeometryRefresh(dependencies: {
     const current = () => !dependencies.signal?.aborted && now() < commitDeadline && sameState(state, dependencies.readState());
     let prepared: PreparedConsentGeometry | undefined;
     try {
-      const geometry = await beforeDeadline(dependencies.capture({timeoutMs: FINAL_CONSENT_GEOMETRY_READ_MS,
+      const readDeadline = started + FINAL_CONSENT_GEOMETRY_READ_MS;
+      let readBudget = FINAL_CONSENT_GEOMETRY_READ_MS;
+      if (dependencies.waitForDocumentComplete && priorCoverage?.documentReadyState === "interactive" &&
+          priorCoverage.documentAndFramesStable && priorCoverage.frameCount === priorCoverage.capturedFrameCount &&
+          priorGeometry.cmp.detections?.some(cmp => cmp.canonicalName === "CookieScript") &&
+          priorGeometry.candidates.some(candidate => candidate.layer === "first_layer" &&
+            candidate.decisionStatus === "confirmed_visible" && candidate.frameContext.frameKind === "main_frame" &&
+            candidate.frameContext.frameUrl === state.url &&
+            ((candidate.actionType === "accept_all" && candidate.exactCookieScriptAcceptVerified) ||
+             (candidate.actionType === "reject_all" && candidate.exactCookieScriptRejectVerified)))) {
+        const waitDeadline = started + COOKIE_SCRIPT_LOAD_WAIT_MS;
+        await beforeDeadline(
+          dependencies.waitForDocumentComplete(Math.max(1, waitDeadline - now())),
+          waitDeadline, now, dependencies.signal,
+        ).catch(() => undefined);
+        if (!current()) return result(dependencies.signal?.aborted ? "cancelled" :
+          now() >= commitDeadline ? "timed_out" : "document_changed", true);
+        readBudget = readDeadline - now();
+      }
+      if (readBudget <= 0) return result("timed_out", true);
+      const geometry = await beforeDeadline(dependencies.capture({timeoutMs: readBudget,
         screenshotArtifactRef: image.path, documentIdentity: state.documentIdentity!}),
-      started + FINAL_CONSENT_GEOMETRY_READ_MS, now, dependencies.signal);
+      readDeadline, now, dependencies.signal);
       if (now() >= started + FINAL_CONSENT_GEOMETRY_READ_MS) return result("timed_out", true);
       if (!current()) return result(dependencies.signal?.aborted ? "cancelled" : now() >= commitDeadline ? "timed_out" : "document_changed", true);
       const capturedAt = Date.parse(geometry.capturedAt);

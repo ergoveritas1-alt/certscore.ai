@@ -1,4 +1,6 @@
-import { expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
+import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
+import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
+import { observeCookieScriptReload } from "./cookiescript-reload-persistence.js";
 import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
 import { choiceRequestRole } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
@@ -472,6 +474,7 @@ export async function runPostAcceptObserver(
   let observationCoverageSufficient = false;
   let selectedRecipe: PostAcceptActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
+  let cookieScriptReload: ReturnType<typeof observeCookieScriptReload>;
   let extendFormLifecycle = () => {};
   let sharedFormEndAtMs: number | undefined;
   let formSnapshotHandle: ReturnType<typeof startRegisteredPostAcceptFormSnapshots> | undefined;
@@ -541,6 +544,8 @@ export async function runPostAcceptObserver(
     if (captureCoverage.requestsDroppedAfterAction > 0) limitations.push("post_action_network_capture_truncated");
     captureCoverage.requestsDroppedBeforeAction += Math.max(0, preActionRequests.length + postActionRequests.length - retainedRequests().length);
     formCapture ??= formCaptureHandle?.finish();
+    const cookieScriptReloadPersistence = diagnostics.click.outcome === "completed" &&
+      fields.registration.actionDispatchedAtMs !== undefined ? await cookieScriptReload?.finish() : undefined;
     const completedAtMs = Date.now();
     if (fields.registration.actionDispatchedAtMs !== undefined && diagnostics.navigation.finalUrlAuthorized && diagnostics.navigation.documentCommitted) {
       diagnostics.postClickNavigation = receiptCapture?.navigationEvidence(diagnostics.click.outcome, actionControlProof?.authorizedTargetSha256, completedAtMs);
@@ -557,6 +562,7 @@ export async function runPostAcceptObserver(
       ...finishOptionalRuntimeGraph(graphCapture, "post_accept", confirmed ? undefined : "action_not_confirmed"),
       artifactVersion: "certscore.post_accept_evidence.v2",
       ...(consentReceiptCapture?{consentReceiptCapture}:{}),
+      ...(cookieScriptReloadPersistence ? { cookieScriptReloadPersistence } : {}),
       confirmationDiagnostics: confirmationDiagnostic.retained(),
       ...(passiveCmpCapture ? {passiveCmpDiagnostics:passiveCmpCapture.finish(completedAtMs)} : {}),
       ...(notificationAcknowledgment ? {notificationAcknowledgment} : {}),
@@ -874,12 +880,17 @@ export async function runPostAcceptObserver(
 
     stage("resolver");
     const resolverStartedAtMs = Date.now();
-    const searchDeadline = resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs);
+    const exactCookieScriptRecipe = firstLayerProof?.exactSelector === COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR &&
+      firstLayerProof.geometrySha256 && authorizedExactTargetUrl &&
+      firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
+      ? cookieScriptAcceptRecipe() : undefined;
+    const exactActionDeadline = exactCookieScriptRecipe ? firstLayerProof!.expiresAtMs : Infinity;
+    const searchDeadline = Math.min(resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs), exactActionDeadline);
     deferredPrimingController = new AbortController();
     // Optional loader priming must never serialize ordinary control discovery.
     // Abort its pending read before leaving resolution so it cannot move the
     // pointer later during baseline capture or the authorized click.
-    void primeDeferredConsentReadiness(page, {deadlineAtMs:searchDeadline,
+    if (!exactCookieScriptRecipe) void primeDeferredConsentReadiness(page, {deadlineAtMs:searchDeadline,
       signal:AbortSignal.any([effectiveSignal,deferredPrimingController.signal])}).catch(() => undefined);
     let previousSnapshot: string | undefined;
     let resolverReportingClosed = false;
@@ -891,15 +902,28 @@ export async function runPostAcceptObserver(
       previousSnapshot = signature;
       appendResolverDiagnostic(diagnostics.resolver!, snapshot, ++resolverAttempt, Date.now() - resolverStartedAtMs);
     };
-    const resolverReadDeadline = actionSearchTimeoutMs === 0 ? resultBudgetDeadlineAtMs ?? Infinity : searchDeadline;
-    const readiness = await readWithinAcceptDeadline(async () => actionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
+    const resolverReadDeadline = actionSearchTimeoutMs === 0
+      ? Math.min(resultBudgetDeadlineAtMs ?? Infinity, exactActionDeadline)
+      : searchDeadline;
+    const readiness = await readWithinAcceptDeadline(async () => {
+      if (exactCookieScriptRecipe) {
+        // The passive proof already identifies an exact main-frame selector.
+        // Resolve that control as soon as it is actionable in the authorized
+        // document, before a full-document geometry or registry sweep.
+        const resolution = await waitForDeterministicRecipe(page!, [exactCookieScriptRecipe],
+          actionSearchTimeoutMs === 0 ? 0 : Math.max(1, searchDeadline - Date.now()),
+          effectiveSignal, actionDiscovery, recordResolverSnapshot, undefined, true);
+        return {documentReady:false, resolution};
+      }
+      return actionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
       await waitForConsentDocumentOrNamedControl<AcceptRecipeResolution>({page:page!,deadlineAtMs:searchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
         probe:async (sliceMs,probeSignal)=>{
           const active=await resolveActiveRuntimeRecipes(page!,recipes,actionDiscovery);
           if(active.length!==1 || !isRegisteredLoadingConsentRecipe(active[0]!,"accept"))return undefined;
           const candidate=await waitForDeterministicRecipe(page!,active,sliceMs,probeSignal,actionDiscovery,recordResolverSnapshot);
           return candidate.status==="found" && candidate.scope===page ? candidate : undefined;
-        }}), {documentReady:false, resolution:undefined as AcceptRecipeResolution | undefined}, resolverReadDeadline, effectiveSignal);
+        }});
+    }, {documentReady:false, resolution:undefined as AcceptRecipeResolution | undefined}, resolverReadDeadline, effectiveSignal);
     const documentReady=readiness.documentReady;
     const searchEnded=effectiveSignal?.aborted || (actionSearchTimeoutMs>0 && Date.now()>=searchDeadline);
     if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot({ source: "named_recipe", state: documentReady ? "binding_budget_exhausted" : "document_loading",
@@ -940,7 +964,7 @@ export async function runPostAcceptObserver(
         ? "resolver_ambiguity_unresolved_at_deadline" : "resolver_search_budget_exhausted");
     }
     if (resolution.status !== "found") {
-      if (resolution.status !== "aborted") {
+      if (resolution.status !== "aborted" && !exactCookieScriptRecipe) {
         const coverage = await diagnoseCmpActionCoverage({
           action: "accept",
           context,
@@ -950,7 +974,9 @@ export async function runPostAcceptObserver(
           limitations.push(coverage.limitation);
         }
       }
-      const reason = resolution.status === "ambiguous"
+      const reason = Date.now() >= exactActionDeadline
+        ? "accept_first_layer_proof_expired_during_resolution"
+        : resolution.status === "ambiguous"
         ? "multiple_deterministic_accept_controls_found"
         : resolution.status === "aborted"
           ? "abort_requested_during_control_resolution"
@@ -984,7 +1010,9 @@ export async function runPostAcceptObserver(
     let confirmationScope = resolution.scope;
     if (boundControlDispatch) sourceFrameBinding.bind(page, confirmationScope);
     stage("storage_baseline");
-    const preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.preAction = d; });
+    const preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined,
+      (d) => { storageCollectionDiagnostics.preAction = d; },
+      exactCookieScriptRecipe ? {deadlineAtMs:Math.min(resultBudgetDeadlineAtMs ?? Infinity, exactActionDeadline),signal:effectiveSignal} : undefined);
     const preActionCapturedAtMs = elapsed(parentScanStartedAtMs);
     if (cancellation()) {
       return await finalize({
@@ -1000,14 +1028,15 @@ export async function runPostAcceptObserver(
     stage("control_readiness");
     let actionabilityError: unknown;
     let useVerifiedGeometryDispatch = false;
-    const actionReadinessDeadline = Date.now() + (input.allowCanonicalAcceptDiscovery ? 3_000 : 2_500);
+    const actionReadinessDeadline = Math.min(Date.now() + (input.allowCanonicalAcceptDiscovery ? 3_000 : 2_500),
+      exactActionDeadline);
     const actionReadinessRemaining = (maximumMs: number) => remainingResultBudgetMs(Math.min(maximumMs, Math.max(0, actionReadinessDeadline - Date.now())));
     const actionabilityReadOptions = (): ConsentControlReadOptions => ({
       deadlineAtMs: Math.min(actionReadinessDeadline, resultBudgetDeadlineAtMs ?? Infinity),
       signal: effectiveSignal, scope: confirmationScope,
     });
     try {
-      await trialAcceptControl(page, control, selectedRecipe);
+      if (!exactCookieScriptRecipe) await trialAcceptControl(page, control, selectedRecipe);
     } catch (error) {
       actionabilityError = error;
     }
@@ -1107,7 +1136,7 @@ export async function runPostAcceptObserver(
     }
 
     const deferredReady = await waitForDeferredConsentReadiness({page, control,
-      cmpId: selectedRecipe.cmpId, deadlineAtMs: Math.min(Math.max(actionReadinessDeadline, searchDeadline), resultBudgetDeadlineAtMs ?? Infinity),
+      cmpId: selectedRecipe.cmpId, deadlineAtMs: Math.min(Math.max(actionReadinessDeadline, searchDeadline), resultBudgetDeadlineAtMs ?? Infinity, exactActionDeadline),
       signal: effectiveSignal}).catch(() => false);
     if (!deferredReady) {
       limitations.push("deferred_consent_handlers_not_ready");
@@ -1117,13 +1146,16 @@ export async function runPostAcceptObserver(
     }
 
     stage("confirmation_baseline");
-    let confirmationBaseline = await captureConfirmationBaseline(
-      context,
-      page,
-      confirmationScope,
-      selectedRecipe.confirmation,
-      control,
-    );
+    const baseline = () => captureConfirmationBaseline(context!, page!, confirmationScope, selectedRecipe!.confirmation, control);
+    let confirmationBaseline = exactCookieScriptRecipe
+      ? await readWithinAcceptDeadline(baseline, undefined, exactActionDeadline, effectiveSignal)
+      : await baseline();
+    if (!confirmationBaseline) {
+      const reason = effectiveSignal.aborted ? "abort_requested_before_action" : "accept_first_layer_proof_expired_before_dispatch";
+      return await finalize({resolverFound:true,resolverReason:reason,
+        registration:unconfirmedRegistration(cancellation() ? "aborted" : "not_attempted",reason),
+        preActionCapturedAtMs,preActionStorage,requests:classifyRequests(retainedRequests(),parentScanStartedAtMs)});
+    }
     if ("oneTrustBaseline" in confirmationBaseline) {
       for (const reason of confirmationBaseline.oneTrustBaseline?.diagnosticReasons ?? []) confirmationDiagnostic.reason(reason);
       const reason = oneTrustBaselineLimitation(confirmationBaseline.oneTrustBaseline);
@@ -1133,7 +1165,7 @@ export async function runPostAcceptObserver(
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
       expectedNativeSelector: firstLayerProof?.exactSelector,
-      deadlineAtMs: resultBudgetDeadlineAtMs,
+      deadlineAtMs: exactCookieScriptRecipe ? Math.min(resultBudgetDeadlineAtMs ?? Infinity, firstLayerProof!.expiresAtMs) : resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
       action: "accept",
@@ -1159,7 +1191,7 @@ export async function runPostAcceptObserver(
       (proofResolution.reason === "resolved_control_no_longer_actionable" ||
         proofResolution.reason === "resolved_control_scope_not_interactive" ||
         (input.allowCanonicalAcceptDiscovery && consentActionLabelNeedsRediscovery(proofResolution))) &&
-      !cancellation()
+      !exactCookieScriptRecipe && !cancellation()
     ) {
       try {
         assertConsentActionDispatchAllowed(
@@ -1283,6 +1315,13 @@ export async function runPostAcceptObserver(
           : undefined);
         actionDispatched = true;
         graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
+        if (input.firstLayerProof?.exactSelector === COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR &&
+            actionControlProof?.cmpId === "CookieScript" && actionControlProof.authorizedTargetSha256 && !selectedRecipe?.controlFrameUrl && authorizedExactTargetUrl) {
+          cookieScriptReload = observeCookieScriptReload(page!, context!, authorizedExactTargetUrl,
+            actionControlProof.authorizedTargetSha256, parentScanStartedAtMs, actionDispatchedAtMs,
+            Math.min(actionDispatchedAtEpochMs + observationWindowMs,
+              (resultBudgetDeadlineAtMs ?? Infinity) - ACCEPT_RESULT_FINALIZATION_RESERVE_MS), baseSignal);
+        }
       };
       const notifyBeforeDispatch = () => {
         try { input.onLifecycleEvent?.({ type: "action_dispatched", atMs: elapsed(parentScanStartedAtMs) }); }
@@ -1764,6 +1803,7 @@ export async function runPostAcceptObserver(
     stage("cleanup");
     deferredPrimingController?.abort();
     sourceFrameBinding.dispose();
+    cookieScriptReload?.dispose();
     // Finalization already froze the optional sample. Cleanup must run even if
     // a capture-side failure interrupted packet construction.
     try { await formSnapshotHandle?.finish(); } catch { /* Optional image work is bounded and cannot block cleanup. */ }
@@ -1817,6 +1857,21 @@ function unconfirmedRegistration(
   return { status, acceptanceExercised: false, reason, witnesses: [] };
 }
 
+function cookieScriptAcceptRecipe(): PostAcceptActionRecipe | undefined {
+  const confirmation = getKnownCmpDefinitionByName("CookieScript")?.acceptConfirmation;
+  if (confirmation?.kind !== "cmp_api_consent_state_changed" || confirmation.provider !== "cookiescript" ||
+      !cmpActionRecipeEnabled({canonicalName:"CookieScript", action:"accept"})) return undefined;
+  return {
+    artifactVersion: "certscore.post_accept_action_recipe.v1",
+    recipeId: "passive-exact:CookieScript:accept:v1",
+    cmpId: "CookieScript",
+    resolverMethod: "canonical_consent_control_registry_recipe",
+    controlSelector: COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR,
+    bannerSelector: "#cookiescript_injected",
+    confirmation,
+  };
+}
+
 async function waitForDeterministicRecipe(
   page: Page,
   recipes: PostAcceptActionRecipe[],
@@ -1825,6 +1880,7 @@ async function waitForDeterministicRecipe(
   discovery?: ConsentActionDiscovery,
   reportDiagnostic?: ResolverReporter,
   outerDeadlineAtMs?: number,
+  mainFrameOnly = false,
 ): Promise<
   | {
       status: "found";
@@ -1865,7 +1921,7 @@ async function waitForDeterministicRecipe(
       if (signal?.aborted) return { status: "aborted" };
       // Never claim uniqueness from a truncated multi-recipe sweep.
       if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: "not_found" }; }
-      for (const scope of selectorScopes(page, recipe.controlFrameUrl)) {
+      for (const scope of mainFrameOnly ? [page] : selectorScopes(page, recipe.controlFrameUrl)) {
         if (signal?.aborted) return { status: "aborted" };
         if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: "not_found" }; }
         if (recipe.accessibleControl?.kind === "scoped_accessible_control") {

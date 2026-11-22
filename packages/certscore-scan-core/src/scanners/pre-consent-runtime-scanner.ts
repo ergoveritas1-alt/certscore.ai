@@ -4208,6 +4208,7 @@ export async function preConsentRuntimeScanner(
         const refresh = createFinalConsentGeometryRefresh({scanStartedAtMs: input.scanStartedAtMs,
           moduleDeadlineAtMs, signal: effectiveSignal, readState,
           allowLimitedPositiveRefresh: input.localOverflowConsentGeometryRefresh === true,
+          waitForDocumentComplete: timeout => page.waitForLoadState("load", {timeout}),
           capture: options => captureConsentControlGeometry(page, {...options,
             avoidOverlappingFrameReads: true, readFrameRevision: () => consentFrameRevision}),
           prepare: geometry => prepareFinalConsentGeometryArtifact(
@@ -4223,7 +4224,7 @@ export async function preConsentRuntimeScanner(
         timingBreakdown.push({label: "final consent geometry refresh", durationMs: refreshed.elapsedMs,
           outcome: refreshed.outcome === "retained" || refreshed.outcome === "no_positive_control"
             ? "completed" : refreshed.outcome === "timed_out" ? "timed_out" : refreshed.attempted ? "failed" : "skipped",
-          detail: `${refreshed.policyVersion}; outcome=${refreshed.outcome}; attempted=${refreshed.attempted}; no additional settle, inventory, screenshot or action`});
+          detail: `${refreshed.policyVersion}; outcome=${refreshed.outcome}; attempted=${refreshed.attempted}; geometry only, with a bounded load wait for exact CookieScript controls`});
         if (refreshed.geometry && refreshed.artifactPath) {
           latestRetainedConsentGeometry = refreshed.geometry;
           // Limited geometry is retained for canonical positive assessment only.
