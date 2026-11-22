@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { evaluateCmpApiConfirmation, type CmpApiConfirmationBaseline } from "./cmp-api-confirmation.js";
 import type { CmpApiConsentProvider, CmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
+import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
 
 const baseline = { canonicalState: "before", configurationSha256: "a".repeat(64), eventSequence: 2 };
 const providers: CmpApiConsentProvider[] = ["borlabs", "osano", "hubspot", "drupal_eu_cookie", "didomi", "cookie_information", "cookiescript", "finsweet"];
@@ -52,21 +53,22 @@ test("preexisting API snapshots without a configured-category fingerprint retain
   }
 });
 
-// Explicit loopback recipes exercise the existing typed API branch without
-// enabling a new production recipe or turning provider presence into consent.
+// Cookie Information exercises the normal TCF-or-provider recipe. The other
+// loopback recipes exercise the explicit API branch.
 for (const provider of ["cookiescript", "cookie_information", "finsweet"] as const) {
   for (const mode of ["saved", "missing_event", "wrong_document", "partial", "mixed", "inapplicable", "configuration_changed"] as const) {
-    if (mode === "configuration_changed" && provider !== "cookiescript") continue;
+    if (mode === "configuration_changed" && provider === "finsweet") continue;
     test(`Accept API ${provider}: ${mode}`, async () => {
       const scope = provider === "cookiescript" ? 'id="cookiescript_injected"'
         : provider === "cookie_information" ? 'id="coiOverlay"' : 'fs-consent-element="banner"';
+      const controlClass = provider === "cookie_information" ? 'class="coi-banner__accept"' : "";
       const event = provider === "cookiescript" ? "CookieScriptAcceptAll" : provider === "cookie_information" ? "CookieInformationConsentGiven" : "consentpro:consent-updated";
       let clicks = 0;
       const server = createServer((req, res) => {
         if (req.url === "/click") { clicks++; res.writeHead(204).end(); return; }
         res.setHeader("content-type", "text/html");
         if (req.url === "/child") { res.end("<html><body>Separate document</body></html>"); return; }
-        res.end(`<section ${scope}><p>Choose optional cookies</p><button id="accept">Accept all</button></section>
+        res.end(`<section ${scope}><p>Choose optional cookies</p><button id="accept" ${controlClass}>Accept all</button></section>
           ${mode === "wrong_document" ? '<iframe src="/child"></iframe>' : ''}<script>
           const provider=${JSON.stringify(provider)},mode=${JSON.stringify(mode)};
           window.categories=['performance','targeting'];
@@ -84,6 +86,7 @@ for (const provider of ["cookiescript", "cookie_information", "finsweet"] as con
               if(mode==='configuration_changed'){window.categories=['performance'];window.state.categories=['performance'];}
             }else if(provider==='finsweet')window.state=mode==='partial'?{essential:true,analytics:true}:mode==='inapplicable'?{essential:true}:{essential:true,analytics:true,marketing:mode!=='mixed',personalization:true};
             else window.state=mode==='partial'?{cookie_cat_statistic:true}:mode==='inapplicable'?undefined:mode==='mixed'?{cookie_cat_functional:true,cookie_cat_marketing:false,cookie_cat_statistic:true}:true;
+            if(provider==='cookie_information' && mode==='configuration_changed')window.cicl=['cookie_cat_necessary','cookie_cat_marketing'];
             if(provider==='cookie_information')window.cicc={cookie_cat_necessary:true,...(typeof window.state==='object'?window.state:window.state===undefined?{}:Object.fromEntries(window.cicl.filter(key=>key!=='cookie_cat_necessary').map(key=>[key,window.state])))};
             if(mode==='missing_event')return;
             if(mode==='wrong_document'){const child=document.querySelector('iframe').contentWindow;child.dispatchEvent(new child.Event('${event}'));return;}
@@ -94,19 +97,27 @@ for (const provider of ["cookiescript", "cookie_information", "finsweet"] as con
       await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
       const address = server.address(); assert.ok(address && typeof address !== "string");
       try {
+        const recipe = provider === "cookie_information"
+          ? buildCanonicalPostAcceptActionRecipes().find(row => row.cmpId === "Cookie Information")
+          : {artifactVersion:"certscore.post_accept_action_recipe.v1" as const,recipeId:`local-api-gate-${provider}`,controlSelector:"#accept",
+            confirmation:{kind:"cmp_api_consent_state_changed" as const,provider}};
+        assert.ok(recipe);
         const packet = await runPostAcceptObserver({scanId:`api-gate-${provider}-${mode}`,url:`http://127.0.0.1:${address.port}/`,
-          recipe:{artifactVersion:"certscore.post_accept_action_recipe.v1",recipeId:`local-api-gate-${provider}`,controlSelector:"#accept",
-            confirmation:{kind:"cmp_api_consent_state_changed",provider}},
+          recipe,
           interactionAuthorization:{kind:"loopback",authorizationId:"loopback_local_lab"},
           actionSearchTimeoutMs:3000,confirmationTimeoutMs:100,observationWindowMs:350});
         const confirmed = mode === "saved";
         assert.equal(clicks, 1, JSON.stringify(packet.limitations));
         assert.equal(packet.acceptanceRegistration.status, confirmed ? "confirmed" : "unconfirmed", JSON.stringify(packet.confirmationDiagnostics));
+        if (confirmed && provider === "cookie_information") {
+          assert.ok(packet.acceptanceRegistration.witnesses.some(witness => witness.witnessType === "cmp_api_state" &&
+            witness.key === "cookie_information" && !witness.corroboratingOnly));
+        }
         if (["missing_event", "wrong_document"].includes(mode)) {
           assert.ok(packet.confirmationDiagnostics?.reasons.includes("api_saved_event_unverified"));
           assert.equal(packet.terminalDecisionEvidence, undefined);
         }
-        if (provider === "cookiescript" && mode === "configuration_changed") {
+        if (mode === "configuration_changed") {
           assert.ok(packet.confirmationDiagnostics?.reasons.includes("configuration_changed"));
         }
       } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }

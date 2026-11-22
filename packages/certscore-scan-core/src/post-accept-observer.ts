@@ -95,7 +95,7 @@ import {
   resolveScopedAccessibleControl,
   type CmpAccessibleActionResolution,
 } from "./cmp-accessible-action.js";
-import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
+import { readCmpApiConsentSnapshot, type CmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
 import { acceptFirstLayerProofMatches, dispatchWithAcceptFirstLayerProof, type AcceptFirstLayerProof } from "./accept-first-layer-gate.js";
 import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
@@ -305,6 +305,7 @@ type ConfirmationBaseline =
       snapshot?: TcfDataSnapshot;
       cookieStateHash?: string;
       oneTrustBaseline?: OneTrustBaseline;
+      cookieInformationBaseline?: CmpApiConsentSnapshot;
     }
   | {
       kind: "tcf_purposes_granted_or_cmp_storage_keys_changed";
@@ -2639,12 +2640,14 @@ async function readCaptureConfirmationBaseline(
     };
   }
   if (confirmation.kind === "tcf_purposes_granted_or_cmp_cookie_changed") {
-    const [snapshot, cookieStateHash, oneTrustBaseline] = await Promise.all([
+    const isCookieInformation = confirmation.cookieName === "CookieInformationConsent";
+    const [snapshot, cookieStateHash, oneTrustBaseline, cookieInformationBaseline] = await Promise.all([
       readTcfData(page).catch(() => undefined),
-      cookieState(context, confirmation.cookieName),
+      isCookieInformation ? undefined : cookieState(context, confirmation.cookieName),
       confirmation.cookieName === "OptanonConsent" ? captureOneTrustBaseline(context, confirmationScope) : undefined,
+      isCookieInformation ? readCmpApiConsentSnapshot(confirmationScope, "cookie_information") : undefined,
     ]);
-    return { kind: confirmation.kind, snapshot, cookieStateHash, oneTrustBaseline };
+    return { kind: confirmation.kind, snapshot, cookieStateHash, oneTrustBaseline, cookieInformationBaseline };
   }
   const keys = confirmation.keys.slice(0, 8);
   const [snapshot, stateEntries, writes] = await Promise.all([
@@ -2837,6 +2840,27 @@ async function waitForAcceptanceConfirmation(
           tcfPurposeEvidence: snapshot!.purposeEvidence, expectedState: "configured_purposes_granted_after_accept"};
       });
       const cookieRead = (): Promise<ConfirmationState | undefined> => readCookieBranch(async () => {
+        if (confirmation.cookieName === "CookieInformationConsent") {
+          const before = baseline.cookieInformationBaseline;
+          if (!before) {
+            diagnostics?.reason("api_unavailable");
+            return undefined;
+          }
+          const current = await readCmpApiConsentSnapshot(confirmationScope, "cookie_information", diagnostics?.reason);
+          if (!current) return undefined;
+          const eligibility = evaluateCmpApiConfirmation({
+            provider: "cookie_information", baseline: before, snapshot: current,
+            decision: "granted", actionDispatchedAtEpochMs,
+          });
+          if (!eligibility.eligible) {
+            diagnostics?.reason(eligibility.reason);
+            return undefined;
+          }
+          return {
+            stateHash: hashValue(current.canonicalState), witnessType: "cmp_api_state", key: "cookie_information",
+            expectedState: "all_configurable_purposes_granted_after_accept",
+          };
+        }
         if (confirmation.cookieName === "OptanonConsent" && baseline.oneTrustBaseline?.status === "verified") {
           decoded = await verifiedChangedOneTrustDecision({context, scope: confirmationScope,
             cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs,
