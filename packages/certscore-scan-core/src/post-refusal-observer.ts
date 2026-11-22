@@ -1,3 +1,4 @@
+import { expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
 import { observeTrustArcReload } from "./trustarc-terminal-reload.js";
 import { installPostRefusalStorageWriteProbe } from "./post-refusal-storage-write-probe.js";
 import { installTrustArcSourceCapture, type TrustArcResponseCapture } from "./trustarc-source-capture.js";
@@ -1039,12 +1040,14 @@ export async function runPostRefusalObserver(
 
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const passiveResolutionStartedAtMs = navigationStartedAtMs;
+      const expectedLanding = expectedMoodMediaLanding(input.url, input.firstLayerProof?.exactSelector, input.firstLayerProof?.binding.documentSha256);
       const settled = await waitForPassiveRedirectSettle(
         page,
         input.interactionAuthorization.resolutionTimeoutMs,
         effectiveSignal,
+        expectedLanding,
       );
-      const resolution = settled
+      const resolution = settled && (!expectedLanding || page.url() === expectedLanding)
         ? await bindPostRefusalBrowserResolvedExactTarget({
             durationMs: Date.now() - passiveResolutionStartedAtMs,
             finalUrl: page.url(),
@@ -2988,6 +2991,7 @@ export async function waitForPassiveRedirectSettle(
   page: Page,
   timeoutMs: number,
   signal?: AbortSignal,
+  expectedLanding?: string,
 ) {
   const boundedTimeoutMs = Math.max(250, Math.min(timeoutMs, 5_000));
   const stableWindowMs = Math.min(1_500, Math.max(500, boundedTimeoutMs - 250));
@@ -3002,7 +3006,7 @@ export async function waitForPassiveRedirectSettle(
       stableSinceMs = Date.now();
     }
     if (
-      /^https:\/\//i.test(currentUrl) &&
+      (!expectedLanding || currentUrl === expectedLanding) && /^https:\/\//i.test(currentUrl) &&
       Date.now() - stableSinceMs >= stableWindowMs
     ) return true;
     if (Date.now() >= deadlineAtMs) break;

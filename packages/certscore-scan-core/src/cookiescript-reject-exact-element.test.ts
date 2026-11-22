@@ -1,3 +1,5 @@
+import dns from "node:dns/promises";
+import { bindAccessibilityNodesToDom, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -11,11 +13,17 @@ import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR 
 import { evaluateRejectGate, readRejectFirstLayerProof } from "./reject-gate-shadow-receipt.js";
 import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes.js";
 import { runPostRefusalObserver } from "./post-refusal-observer.js";
-import { readRapidFirstLayerConsentUiObservation } from "./scanners/pre-consent-runtime-scanner.js";
+import { consentControlsFromAccessibilityTree, filterAccessibilityTreeToFirstLayer, readRapidFirstLayerConsentUiObservation } from "./scanners/pre-consent-runtime-scanner.js";
 
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
-const url = "https://cookiescript-fixture.example/";
-for (const action of ["accept","reject"] as const) test(`CookieScript ${action} binds the original and blocks an identical replacement at dispatch`, async t => {
+for (const redirected of [false,true])
+for (const action of ["accept","reject"] as const) test(`CookieScript ${action} ${redirected ? "redirected AX" : "direct DOM"} binds the original and blocks an identical replacement at dispatch`, async t => {
+  const requestedUrl = redirected ? "https://moodmedia.com/" : "https://cookiescript-fixture.example/";
+  const url = redirected ? "https://us.moodmedia.com/?utm_source=MoodMedia&utm_medium=redirect&utm_campaign=moodmedia_com" : requestedUrl;
+  if (redirected) t.mock.method(dns,"lookup", async (hostname: string) => {
+    assert.equal(hostname,"us.moodmedia.com");
+    return [{address:"93.184.216.34",family:4}];
+  });
   const accept = action === "accept";
   const id = "cookiescript_" + action;
   const label = accept ? "Accept All" : "Decline All";
@@ -44,8 +52,10 @@ for (const action of ["accept","reject"] as const) test(`CookieScript ${action} 
     const context = await newContext({...options, serviceWorkers:"block"});
     context.on("page", page => {workerPage = page;});
     await context.route("**/*", route => {
+      if (redirected && route.request().url() === requestedUrl) return route.fulfill({contentType:"text/html",
+        body:`<script>setTimeout(() => location.replace(${JSON.stringify(url)}),1650)</script>`});
       if (route.request().url() === url) return route.fulfill({contentType:"text/html",body:html});
-      if (route.request().url() === url + "clicked") {clicks++; return route.fulfill({status:204});}
+      if (route.request().url() === new URL("/clicked",url).href) {clicks++; return route.fulfill({status:204});}
       return route.abort();
     });
     return context;
@@ -60,13 +70,22 @@ for (const action of ["accept","reject"] as const) test(`CookieScript ${action} 
   const geometry = await capture();
   assert.equal(await loader(), documentIdentity.token);
   const button = page.locator("#"+id);
+  const {nodes} = await cdp.send("Accessibility.getFullAXTree");
+  const visible = await filterAccessibilityTreeToFirstLayer(cdp,nodes,page.viewportSize());
+  const axControls = async () => consentControlsFromAccessibilityTree(await bindAccessibilityNodesToDom(cdp,visible,{url,identity:documentIdentity}),url).controls;
+  const ax = (await axControls()).find(c => c.role === "button")!;
+  assert.equal(ax.domBinding?.version,"ax_backend_dom_binding.v4");
+  assert.ok(passiveButtonSelectorMatches(ax,"#"+id,action,url,documentIdentity.token));
+  assert.ok(!passiveButtonSelectorMatches(ax,"#"+id,action,url,"other-loader"));
+  assert.ok(!passiveButtonSelectorMatches(ax,"#"+id,accept ? "reject" : "accept",url,documentIdentity.token));
   await button.evaluate(el => el.after(el.cloneNode(true)));
+  assert.ok(!(await axControls()).some(c=>c.domBinding?.verifiedButtonSelector));
   assert.ok(!(await capture()).candidates.some(c => c[exact]));
   await button.last().evaluate(el => el.remove());
   await button.evaluate(el => document.body.appendChild(el));
   assert.ok(!(await capture()).candidates.some(c => c[exact]));
   const scanId = "cookiescript-role-fixture";
-  const bundle = {url,scanId,domSnapshots:[{url,documentIdentity,artifactId:"dom_text_pre_consent",consentStateAtTime:"pre_consent"}],
+  const bundle = {url:requestedUrl,scanId,domSnapshots:[{url,documentIdentity,artifactId:"dom_text_pre_consent",consentStateAtTime:"pre_consent"}],
     consentSurfaceInspection:{inspectedPreInteraction:true,actionableControlObserved:true},
     consentUiObservations:[{...observation,documentIdentity,documentUrl:url,captureDiagnostics:{
       ...observation.captureDiagnostics,completedChannels:[...observation.captureDiagnostics!.completedChannels,"geometry"]}}]} as CanonicalEvidenceBundle;
@@ -76,22 +95,28 @@ for (const action of ["accept","reject"] as const) test(`CookieScript ${action} 
   assert.equal(observation.controls.find(c => c.actionType === (accept ? "accept_all" : "reject_all"))?.label, label);
   const proofInput = () => {
     const bytes = Buffer.from(JSON.stringify(geometry));
-    return {bundle,scanId,targetUrl:url,sourceSha256:hash(JSON.stringify(bundle)),parentDispatchSha256:hash(scanId),
+    return {bundle,scanId,targetUrl:requestedUrl,sourceSha256:hash(JSON.stringify(bundle)),parentDispatchSha256:hash(scanId),
       nowMs:Date.now(),deadlineAtMs:Date.now()+6000,requireExactSelector:true,geometry:{bytes,sha256:hash(bytes),sizeBytes:bytes.length}};
   };
   delete candidate.cookieScriptUppercaseSourceLabel;
   if (accept) assert.equal(deriveAcceptFirstLayerProof(proofInput()),undefined);
   else assert.equal(evaluateRejectGate(proofInput()).outcome,"blocked");
   candidate.cookieScriptUppercaseSourceLabel = label;
+  if (redirected) {
+    const classified = observation.controls.find(c => c.selectorHint === ax.domBinding?.verifiedButtonSelector)!;
+    assert.ok(ax.classifierReasonCodes?.includes("matched_"+action));
+    bundle.consentUiObservations[0]!.controls = [{...ax,actionType:classified.actionType}];
+  }
   const rejectRecipes = buildCanonicalPostRefusalActionRecipes();
   const acceptRecipes = buildCanonicalPostAcceptActionRecipes();
   for (const replace of [false,true]) {
     const before = clicks;
     const checks: string[] = [];
     let replacement: Promise<void> | undefined;
-    const common = {browser,url,scanId,parentScanId:scanId,
-      interactionAuthorization:{kind:"scan_target" as const,normalizedUrl:url,scanId,authorizationId:"sharded_scan_exact_target.v1" as const},
-      actionSearchTimeoutMs:1800,resultBudgetMs:5000,confirmationTimeoutMs:300,observationWindowMs:300,
+    const common = {browser,url:requestedUrl,scanId,parentScanId:scanId,
+      interactionAuthorization:redirected ? {kind:"scan_target_resolution" as const,requestedUrl,scanId,
+        authorizationId:"sharded_scan_resolved_exact_target.v2" as const,maxRedirects:8,resolutionTimeoutMs:5000} : {kind:"scan_target" as const,normalizedUrl:url,scanId,authorizationId:"sharded_scan_exact_target.v1" as const},
+      actionSearchTimeoutMs:1800,resultBudgetMs:7000,confirmationTimeoutMs:300,observationWindowMs:300,
       onLifecycleEvent:() => {if (replace && !replacement) replacement = workerPage.evaluate(id => {
         const node = document.getElementById(id)!;
         node.replaceWith(node.cloneNode(true));
@@ -99,14 +124,15 @@ for (const action of ["accept","reject"] as const) test(`CookieScript ${action} 
     const onRecheck = (outcome: string) => {checks.push(outcome);};
     const packet = await (async () => {
       if (accept) {
-        const proof = deriveAcceptFirstLayerProof(proofInput());
-        assert.equal(proof?.exactSelector,COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR);
+        let diagnostic;
+        const proof = deriveAcceptFirstLayerProof({...proofInput(),onDecision:d=>{diagnostic=d;}});
+        assert.equal(proof?.exactSelector,COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR,JSON.stringify({diagnostic,ax}));
         return runPostAcceptObserver({...common,firstLayerProof:proof,recipe:acceptRecipes[0]!,recipeCandidates:acceptRecipes,
           allowCanonicalAcceptDiscovery:true,onAcceptGateFinalRecheck:onRecheck});
       }
       const decision = evaluateRejectGate(proofInput());
       const proof = readRejectFirstLayerProof({...decision,scanId});
-      assert.equal(proof?.exactSelector,COOKIE_SCRIPT_REJECT_ROLE_SELECTOR);
+      assert.equal(proof?.exactSelector,COOKIE_SCRIPT_REJECT_ROLE_SELECTOR,JSON.stringify({decision,ax}));
       return runPostRefusalObserver({...common,firstLayerProof:proof,recipeSetId:"canonical_cmp_registry",
         recipe:rejectRecipes[0]!,recipeCandidates:rejectRecipes,allowCanonicalRejectDiscovery:true,onRejectGateFinalRecheck:onRecheck});
     })();

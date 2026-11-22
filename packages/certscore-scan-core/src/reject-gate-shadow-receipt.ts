@@ -1,3 +1,4 @@
+import { passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
 import { classifyConsentControlLabel, consentSessionAccessLimited, isConsentControlInteractionEligible, verifyConsentControlInspection,
@@ -125,7 +126,7 @@ export function evaluateRejectGate(input: {
   const control = controls[0], candidate = candidates[0];
   const cookieScriptRole = candidate?.exactCookieScriptRejectVerified === true &&
     candidate.selectorHint === "#cookiescript_reject" && candidate.tagName === "div" && candidate.role === "button" &&
-    control?.tagName === "div" && control.role === "button" && control.selectorHint === candidate.selectorHint &&
+    control?.tagName === "div" && control.role === "button" &&
     artifact.cmp?.detections?.some(cmp => cmp.canonicalName === "CookieScript");
   // DOM inventory can read source text while geometry and the worker read rendered text.
   const exactUppercaseLabel = cookieScriptRole && !candidate.ariaLabel &&
@@ -139,10 +140,10 @@ export function evaluateRejectGate(input: {
       !isConsentControlInteractionEligible(candidate) || !isConsentControlInteractionEligible(control) ||
       !inspection.candidates.some(row => row.candidateId === candidate.candidateId && row.role === "decision" &&
         !row.unresolvedIntents.includes("reject")) ||
-      control.selectorHint !== candidate.selectorHint || (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label)) ||
+      !passiveButtonSelectorMatches(control, candidate.selectorHint, "reject", document.url, identity.token) || (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label)) ||
       !candidate.label || ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
         label === undefined || (typeof label === "string" && (!label || directReject(label)))) ||
-      control.domBinding) {
+      (control.domBinding && !cookieScriptRole)) {
     return block("control_binding_unverified");
   }
   const expiresAtMs = Math.min(input.deadlineAtMs ?? Infinity, nowMs + proofLifetimeMs);

@@ -1,3 +1,4 @@
+import { passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
 import type { CanonicalEvidenceBundle, ConsentActionControlProof, ConsentUiObservation } from "@certscore/contracts";
@@ -273,9 +274,11 @@ export function deriveAcceptFirstLayerProof(input: {
         (control.layer === undefined || control.layer === "first_layer") &&
         (control.consentContextEvidence === undefined || control.consentContextEvidence === "local_surface") &&
         (control.label === nativeAccept.label || control.label === nativeAccept.sourceLabel) &&
-        (!nativeAccept.cookieScriptRole || (control.role === "button" && !control.domBinding)) && control.selectorHint === nativeAccept.inventorySelector &&
+        (!nativeAccept.cookieScriptRole || control.role === "button") &&
         control.tagName === nativeAccept.tagName &&
-        (!input.requireExactSelector || !control.domBinding);
+        (nativeAccept.cookieScriptRole
+          ? passiveButtonSelectorMatches(control, nativeAccept.inventorySelector, "accept", committedDocument.url, documentToken)
+          : control.selectorHint === nativeAccept.inventorySelector && (!input.requireExactSelector || !control.domBinding));
       if ((!direct || input.requireExactSelector) && !handoff) {
         missing = "control_binding_unverified";
         if (control.layer === "first_layer") return block(missing);

@@ -1,3 +1,4 @@
+import { expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
 import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
 import { choiceRequestRole } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
@@ -814,12 +815,14 @@ export async function runPostAcceptObserver(
     stage("target_binding");
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const resolutionStartedAtMs = Date.now();
+      const expectedLanding = expectedMoodMediaLanding(input.url, input.firstLayerProof?.exactSelector, firstLayerProof?.documentSha256);
       const settled = await waitForPassiveRedirectSettle(
         page,
         remainingResultBudgetMs(input.interactionAuthorization.resolutionTimeoutMs),
         effectiveSignal,
+        expectedLanding,
       );
-      const resolution = settled
+      const resolution = settled && (!expectedLanding || page.url() === expectedLanding)
         ? await bindPostRefusalBrowserResolvedExactTarget({
             durationMs: Date.now() - resolutionStartedAtMs,
             finalUrl: page.url(),
@@ -3449,7 +3452,7 @@ async function visibleAcceptLocatorStateHash(
   return state ? hashValue(state) : undefined;
 }
 
-async function waitForPassiveRedirectSettle(page: Page, timeoutMs: number, signal?: AbortSignal) {
+async function waitForPassiveRedirectSettle(page: Page, timeoutMs: number, signal?: AbortSignal, expectedLanding?: string) {
   const deadlineAtMs = Date.now() + timeoutMs;
   let lastUrl = page.url();
   let stableSinceMs = Date.now();
@@ -3460,7 +3463,7 @@ async function waitForPassiveRedirectSettle(page: Page, timeoutMs: number, signa
       lastUrl = currentUrl;
       stableSinceMs = Date.now();
     }
-    if (Date.now() - stableSinceMs >= 150) return true;
+    if ((!expectedLanding || currentUrl === expectedLanding) && Date.now() - stableSinceMs >= 150) return true;
     await waitForDelay(25, signal).catch(() => undefined);
   }
   return false;
