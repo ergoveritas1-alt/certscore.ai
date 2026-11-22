@@ -1295,10 +1295,11 @@ export async function runPostAcceptObserver(
     actionControlProof = proofResolution.proof;
     boundControlElement = proofResolution.boundElement;
     sourceFrameBinding.setElement(boundControlElement, resultBudgetDeadlineAtMs);
+    const originalTarget = authorizedExactTargetUrl;
     const osanoOriginalRead = firstLayerProof && boundControlElement && selectedRecipe.cmpId === "Osano" &&
       actionControlProof.actionSemantics === "direct_label" && confirmationScope === page &&
-      page.url() === "https://you.com/" && authorizedExactTargetUrl === page.url()
-      ? await readWithinAcceptDeadline(() => armOsanoNavigationAccept(boundControlElement!, "https://you.com/").catch(() => undefined),
+      originalTarget?.startsWith("https://") && page.url() === originalTarget
+      ? await readWithinAcceptDeadline(() => armOsanoNavigationAccept(boundControlElement!, originalTarget).catch(() => undefined),
           undefined, Math.min(firstLayerProof.expiresAtMs, Date.now()+150), effectiveSignal)
       : undefined;
     stage("click");

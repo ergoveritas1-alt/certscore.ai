@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
-import test from "node:test";
+import test, {type TestContext} from "node:test";
 import {chromium} from "playwright";
 import {projectPostAcceptEvidenceForReport, type CanonicalEvidenceBundle} from "@certscore/contracts";
 import {deriveAcceptFirstLayerProof} from "./accept-first-layer-gate.js";
@@ -9,9 +9,9 @@ import {readRapidFirstLayerConsentUiObservation} from "./scanners/pre-consent-ru
 import {buildCanonicalPostAcceptActionRecipes} from "./post-accept-cmp-recipes.js";
 import {runPostAcceptObserver} from "./post-accept-observer.js";
 
-const url = "https://you.com/", script = "https://cmp.osano.com/test/config/osano.js";
+const script = "https://cmp.osano.com/test/config/osano.js";
 const hash = (data: string|Buffer) => createHash("sha256").update(data).digest("hex");
-test("normal gated Osano Accept preserves only a source-bound grant through navigation", async t => {
+async function verifyNavigation(t: TestContext, url: string, modes: string[]) {
   const browser = await chromium.launch();
   t.after(()=>browser.close());
   const oldAccept=process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE,oldReject=process.env.CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE;
@@ -38,11 +38,12 @@ test("normal gated Osano Accept preserves only a source-bound grant through navi
         <button id="accept" class="osano-cm-accept-all">Accept</button><button id="deny" class="osano-cm-deny-all">Deny Non-Essential</button></div>
         <script>document.querySelector('button').onclick=()=>{
           const mode=${JSON.stringify(mode)};
-          if(mode==='full_navigation'){state=granted;emit();location.replace('/next');return;}
-          if(mode==='destination'){location.replace('/next');return;}
+          if(mode==='full_navigation'){state=granted;emit();location.replace('next');return;}
+          if(mode==='destination'){location.replace('next');return;}
           history.replaceState(null,'',location.href);
           setTimeout(()=>{state=mode==='disagree'?denied:granted;
             if(mode==='new_api')window.Osano.cm={...window.Osano.cm};
+            if(mode==='changed_config')document.querySelector('script[src]').remove();
             if(mode==='tcf')window.__tcfapi=()=>{};
             if(mode!=='getter_only')emit();
           },20);
@@ -61,7 +62,7 @@ test("normal gated Osano Accept preserves only a source-bound grant through navi
     consentUiObservations:[{...inventory,documentIdentity,documentUrl:url,captureDiagnostics:{...inventory.captureDiagnostics,
       completedChannels:[...inventory.captureDiagnostics!.completedChannels,"geometry"]}}]} as CanonicalEvidenceBundle;
   await context.close();
-  for(mode of ["saved","full_navigation","getter_only","disagree","tcf","new_api","destination"]){
+  for(mode of modes){
     const firstLayerProof=deriveAcceptFirstLayerProof({bundle,targetUrl:url,scanId,parentDispatchSha256:hash(scanId),sourceSha256:hash(JSON.stringify(bundle)),
       nowMs:Date.now(),deadlineAtMs:Date.now()+6000,requireExactSelector:true,geometry:{bytes:geometry,sizeBytes:geometry.length,sha256:hash(geometry)}});
     assert.ok(firstLayerProof,JSON.stringify({controls:inventory.controls.map(c=>[c.label,c.selectorHint]),geometry:JSON.parse(geometry.toString()).candidates.map((c:any)=>[c.label,c.selectorHint,c.decisionStatus])}));
@@ -74,7 +75,7 @@ test("normal gated Osano Accept preserves only a source-bound grant through navi
     assert.equal(packet.interactionDiagnostics?.click.outcome,"completed",mode);
     assert.equal(packet.interactionDiagnostics?.postClickNavigation?.outcome,"main_frame_navigated",mode);
     assert.equal(packet.acceptanceRegistration.status==="confirmed",(mode==="saved"||mode==="full_navigation"),JSON.stringify({mode,limitations:packet.limitations,registration:packet.acceptanceRegistration}));
-    if(mode==="saved"){
+    if(mode==="saved" || mode==="full_navigation"){
       assert.equal(packet.decisionEvidence?.decision,"granted");
       assert.equal(packet.acceptanceRegistration.witnesses[0]?.witnessType,"cmp_api_state");
       assert.equal(packet.acceptanceRegistration.witnesses[0]?.key,"osano");
@@ -87,4 +88,14 @@ test("normal gated Osano Accept preserves only a source-bound grant through navi
       assert.ok(packet.limitations.includes("osano_saved_event_and_sdk_read_in_original_document"));
     }
   }
+}
+
+test("You.com still confirms Osano Accept when the original document saves the choice", async t => {
+  await verifyNavigation(t, "https://you.com/", ["full_navigation"]);
+});
+
+test("a different Osano site can confirm a navigating Accept only from the bound source", async t => {
+  await verifyNavigation(t, "https://osano-customer.example/privacy/", [
+    "saved", "full_navigation", "getter_only", "disagree", "tcf", "new_api", "changed_config", "destination",
+  ]);
 });
