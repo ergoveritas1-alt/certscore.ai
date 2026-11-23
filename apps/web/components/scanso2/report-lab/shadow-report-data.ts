@@ -1,3 +1,4 @@
+import type { SitePriorityFinding } from "../../../lib/scans/full-site-priority-review";
 import type { ChoicePathExecution } from "@certscore/contracts";
 import type { ExternalScanNoGoProjection } from "@website-signal-risk-scanner/shared";
 import type { GpcResponseAssessment } from "@certscore/contracts";
@@ -77,7 +78,7 @@ export type ShadowFinding = {
   id: string;
   rank: number;
   title: string;
-  status: "Potential gap" | "Partial concern" | "Not confirmed" | "Observed";
+  status: SitePriorityFinding["status"];
   summary: string;
   focus: string;
   evidence: string[];
