@@ -16,7 +16,7 @@ export const sitePriorityFindingSchema = z.object({
   priority: z.literal("high").optional(),
   severity: z.enum(["critical", "high", "medium", "low"]).optional(),
   id: z.string(), rank: z.number(), title: z.string(), summary: z.string(),
-  status: z.enum(["Potential gap", "Partial concern", "Not confirmed", "Observed"]),
+  status: z.enum(["Potential gap", "Partial concern", "Not confirmed", "Observed", "Review"]),
   evidence: z.array(z.string()), evidenceJson: z.record(z.unknown()),
   correctionSteps: z.array(z.string()),
   pages: z.array(z.object({ id: z.string(), url: z.string(), homepage: z.boolean() })),
