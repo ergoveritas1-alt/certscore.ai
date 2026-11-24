@@ -725,6 +725,7 @@ export async function preConsentRuntimeScanner(
   const scriptEvents: ScriptEvent[] = [];
   const iframeEvents: IframeEvent[] = [];
   const browserApiAccessEvents: RuntimeEvidenceEvent[] = [];
+  const activeHttpResponses = new Map<string, { requestId: string; kind: string; documentUrl?: string } | null>();
   const failedHttpRequests: Array<{ requestId?: string; url: string; resourceType?: string; failureText?: string; pageUrl?: string }> = [];
   const mixedContentConsoleMessages: string[] = [];
   const vendorResolverInputs: VendorResolverInput[] = [];
@@ -905,7 +906,7 @@ export async function preConsentRuntimeScanner(
     timingBreakdown,
     "browser api probe install",
     "Install bounded pre-consent browser API access probes for entropy/fingerprinting review.",
-    () => installBrowserApiAccessProbe(browserContext),
+    () => installBrowserApiAccessProbe(browserContext, captureScope !== "consent_proof"),
   );
   if (captureConsentEvidence) {
     await recordTiming(
@@ -1112,6 +1113,21 @@ export async function preConsentRuntimeScanner(
     cmpInitialization?.recordResponse(formRequestId, response.status());
     if (formRequestId) formTracing?.status(formRequestId, "response_observed");
     if (responseCaptureFinalized) return;
+    if (captureScope !== "consent_proof" && response.url().startsWith("http://") &&
+        ["script", "stylesheet"].includes(response.request().resourceType()) && requestEvents.get(response.request())?.isMainFrame === true) {
+      const url = response.url();
+      const requestId = requestIds.get(response.request());
+      const kind = response.request().resourceType();
+      const documentUrl = requestEvents.get(response.request())?.documentUrl;
+      const eligible = requestId && documentUrl && !response.fromServiceWorker() &&
+        response.status() === 200 && !response.request().redirectedFrom();
+      const previous = activeHttpResponses.get(url);
+      if (previous === undefined && activeHttpResponses.size < 48) {
+        activeHttpResponses.set(url, eligible ? { requestId, kind, documentUrl } : null);
+      } else if (previous && (!eligible || previous.kind !== kind || previous.documentUrl !== documentUrl)) {
+        activeHttpResponses.set(url, null);
+      }
+    }
     if (isHttpUrl(response.url())) passiveEvidenceActivity.noteActivity();
     const capture = captureResponse(response).catch(() => {
       if (!responseCaptureFinalized) runtimeErrors.push("Response metadata capture incomplete.");
@@ -2116,6 +2132,7 @@ export async function preConsentRuntimeScanner(
         "Capture HTTPS, TLS, redirect, mixed-content, and form transport evidence while the already-started consent evidence lane runs independently.",
         Math.min(2_500, Math.max(1_000, remainingModuleBudgetMs())),
         () => captureTransportSecurityObservation({
+          activeHttpResponses,
           collectionSurfaceObservations: [],
           failedHttpRequests,
           mixedContentConsoleMessages,
@@ -4785,6 +4802,7 @@ export async function preConsentRuntimeScanner(
           "Bounded HTTPS, TLS, HTTP redirect, mixed-content, and form transport observation without form submission.",
           Math.min(12_000, transportSecurityRemainingMs),
           () => captureTransportSecurityObservation({
+            activeHttpResponses,
             collectionSurfaceObservations,
             failedHttpRequests,
             mixedContentConsoleMessages,
@@ -7380,10 +7398,28 @@ function iframeEventsFromRows(
   });
 }
 
-async function installBrowserApiAccessProbe(browserContext: BrowserContext): Promise<void> {
+async function installBrowserApiAccessProbe(browserContext: BrowserContext, observeActiveLoads: boolean): Promise<void> {
   await browserContext.addInitScript({
     content: `(() => {
       const globalTarget = window;
+      if (${observeActiveLoads} && window === window.top && location.protocol === "https:") {
+        const loads = new Map();
+        const readLoads = () => Array.from(loads, ([url, kind]) => ({ url, kind }));
+        Object.defineProperty(window, "__certscoreReadActiveHttpLoads", { value: readLoads });
+        document.addEventListener("load", event => {
+          const node = event.target;
+          if (!event.isTrusted || loads.size >= 25 || !node || node.getRootNode?.() !== document || node.integrity) return;
+          const script = node instanceof HTMLScriptElement &&
+            ["", "module", "text/javascript", "application/javascript", "text/ecmascript", "application/ecmascript"].includes(node.type.trim().toLowerCase());
+          const stylesheet = node instanceof HTMLLinkElement && node.relList.contains("stylesheet") &&
+            node.sheet && !node.sheet.disabled && (!node.media || matchMedia(node.media).matches);
+          if (!script && !stylesheet) return;
+          const url = script ? node.src : node.href;
+          if (!url.startsWith("http://") || url.length > 500) return;
+          const resource = new URL(url);
+          if (!resource.username && !resource.password) loads.set(url, script ? "script" : "stylesheet");
+        }, true);
+      }
       const accesses = Array.isArray(globalTarget.__certscoreBrowserApiAccesses)
         ? globalTarget.__certscoreBrowserApiAccesses
         : [];
@@ -11964,6 +12000,7 @@ export async function captureCollectionSurfaceInventory(
 }
 
 async function captureTransportSecurityObservation(input: {
+  activeHttpResponses: ReadonlyMap<string, { requestId: string; kind: string; documentUrl?: string } | null>;
   artifactWriter: ArtifactWriter;
   collectionSurfaceObservations: CollectionSurfaceObservation[];
   failedHttpRequests: Array<{ url: string; resourceType?: string; failureText?: string; pageUrl?: string }>;
@@ -11977,7 +12014,7 @@ async function captureTransportSecurityObservation(input: {
 }): Promise<{ observation: TransportSecurityObservation; artifactRef?: ArtifactRef }> {
   const pageUrl = safePageUrl(input.page, input.normalizedUrl);
   const pageFormCapture = await captureFormTransportObservations(input.page, pageUrl)
-    .catch(() => ({ forms: [], complete: false }));
+    .catch(() => ({ forms: [], complete: false, activeLoads: [] }));
   const collectionSurfaceForms = input.collectionSurfaceObservations.map((surface, index) =>
     formTransportFromCollectionSurface(surface, index, pageUrl)
   );
@@ -12039,7 +12076,11 @@ async function captureTransportSecurityObservation(input: {
     httpProbe,
     tlsProbe,
     tlsCertificateObservations,
-    mixedContent,
+    mixedContent: { ...mixedContent, activeFormResources: pageFormCapture.activeLoads.flatMap(load => {
+      const response = input.activeHttpResponses.get(load.url);
+      return response?.kind === load.kind && response.documentUrl === pageUrl ? [{ resourceUrl: sanitizeTransportUrl(load.url), kind: load.kind,
+        requestId: response.requestId, documentUrl: sanitizeTransportUrl(pageUrl) }] : [];
+    }) },
     formTransports,
     summary: {
       formInventoryState: pageFormCapture.complete && combinedFormTransports.length <= 40 ? "complete" : "limited",
@@ -12471,7 +12512,9 @@ async function fetchOnceWithTimeout(url: string, timeoutMs: number, method: "GET
   }
 }
 
+type ActiveFormResource = { url: string; kind: "script" | "stylesheet" };
 async function captureFormTransportObservations(page: Page, pageUrl: string): Promise<{
+  activeLoads: ActiveFormResource[];
   complete: boolean;
   forms: TransportSecurityObservation["formTransports"];
 }> {
@@ -12479,6 +12522,8 @@ async function captureFormTransportObservations(page: Page, pageUrl: string): Pr
     const forms = document.querySelectorAll("form");
     return {
       documentUrl: window.location.href,
+      activeLoads: forms.length ? (window as Window & { __certscoreReadActiveHttpLoads?: () => ActiveFormResource[] })
+        .__certscoreReadActiveHttpLoads?.() ?? [] : [],
       formCount: forms.length,
       rows: Array.from({ length: Math.min(forms.length, 40) }, (_, index) => forms.item(index)!).map((form, index) => {
         const fields = [...form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select")].slice(0, 24).map((input) => {
@@ -12536,7 +12581,7 @@ async function captureFormTransportObservations(page: Page, pageUrl: string): Pr
       hasSensitiveFieldHint: /password|ssn|social security|credit card|card number|health|medical|birth|date of birth/.test(haystack),
     };
   });
-  return { complete, forms: documentMatches ? forms : [] };
+  return { complete, forms: documentMatches ? forms : [], activeLoads: documentMatches ? capture.activeLoads : [] };
 }
 
 function formTransportFromCollectionSurface(

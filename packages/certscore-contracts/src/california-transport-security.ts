@@ -4,7 +4,7 @@ export const CALIFORNIA_TRANSPORT_FINDING_ID = "california_personal_data_transpo
 export const CALIFORNIA_TRANSPORT_SIGNAL = "california.personal_data_transport_security";
 export const CALIFORNIA_TRANSPORT_TITLE = "Insecure transport on a personal-data form path";
 export const CALIFORNIA_TRANSPORT_SUMMARY = "A page or submission destination used by a form that asks for personal information had a verified transport security issue.";
-export const CALIFORNIA_TRANSPORT_ACTION = "Serve the affected pages and form destinations over HTTPS with a valid certificate, then verify the form paths again.";
+export const CALIFORNIA_TRANSPORT_ACTION = "Serve the affected pages, active resources, and form destinations over HTTPS with a valid certificate, then verify the form paths again.";
 
 export const transportPersonalDataCategories = ["name", "email", "phone", "address", "password", "payment_card",
   "bank_account", "government_id", "social_security_number", "date_of_birth", "health", "geolocation"] as const;
@@ -12,7 +12,7 @@ export const transportPersonalDataCategorySchema = z.enum(transportPersonalDataC
 export const definitiveTransportCertificateErrorSchema = z.enum([
   "CERT_HAS_EXPIRED", "CERT_NOT_YET_VALID", "ERR_TLS_CERT_ALTNAME_INVALID", "HOSTNAME_MISMATCH", "DEPTH_ZERO_SELF_SIGNED_CERT",
 ]);
-const defects = z.enum(["plaintext_page", "plaintext_form_destination", "certificate_validation_failure"]);
+const defects = z.enum(["plaintext_page", "plaintext_form_destination", "certificate_validation_failure", "active_mixed_content"]);
 export type CaliforniaTransportDefect = z.infer<typeof defects>;
 
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
@@ -24,7 +24,7 @@ export const californiaTransportProjectionSchema = z.object({
   documentUrl: z.string().url().max(500),
   issues: z.array(z.object({
     authority: z.string().min(1).max(262).regex(/^[a-z0-9.:[\]-]+$/),
-    defects: z.array(defects).min(1).max(3),
+    defects: z.array(defects).min(1).max(4),
     fieldCategories: z.array(transportPersonalDataCategorySchema).min(1).max(transportPersonalDataCategories.length),
   }).strict()).min(1).max(41),
 }).strict().superRefine((value, ctx) => {

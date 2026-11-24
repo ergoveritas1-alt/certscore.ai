@@ -111,3 +111,36 @@ test("unknown, old, unrelated or contradictory transport evidence remains unscor
   fixture.bundle.transportSecurityObservations = [transport()];
   assert.equal(projectCaliforniaTransport(fixture.bundle, { ...CA_FIXTURE_SOURCE, verificationStatus: "unverified" }, https), null);
 });
+
+test("loaded active HTTP resources on the verified HTTPS form document count once", t => {
+  t.mock.method(performance, "now", () => 0);
+  const fixture = californiaCoverageFixture();
+  const row = transport().formTransports[0]!;
+  const active = { documentUrl: https, resourceUrl: "http://assets.example.test/code.js", kind: "script" as const, requestId: "req_1" };
+  const observation = transport({ tlsProbe: { attempted: false },
+    formTransports: [{ ...row, actionUrl: https, actionScheme: "https", resolvesToHttps: true, insecureTransportObserved: false }],
+    mixedContent: { observedCount: 2, blockedHttpSubresources: [], loadedHttpSubresources: [],
+      activeFormResources: [active, { ...active, resourceUrl: "http://other.example.test/style.css", requestId: "req_2", kind: "stylesheet" }] } });
+  fixture.bundle.transportSecurityObservations = [observation, observation];
+  const project = () => projectCaliforniaTransport(fixture.bundle, CA_FIXTURE_SOURCE, https);
+  const proof = project();
+  assert.deepEqual(proof?.issues, [{ authority: host, defects: ["active_mixed_content"], fieldCategories: ["email"] }]);
+  const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { californiaTransportSecurity: proof },
+    reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+  const assessment = projectCaliforniaPrivacyReview(fixture.bundle, CA_FIXTURE_SOURCE, https, fixture.policyEvidence);
+  assert.ok(assessment);
+  const score = deriveCaliforniaRegulatoryScore({ assessment, checklistRows: [], unifiedFindings: [...findings, ...findings] });
+  assert.equal(score.score, 92);
+  assert.equal(score.policyVersion, "california-regulatory-posture.v29-active-mixed-content");
+  assert.deepEqual(selectRegulatoryReview(projectReportPriorityFindings([], findings), "ccpa_cpra").topIssues.map(row => row.id), [ID]);
+  fixture.bundle.transportSecurityObservations = [{ ...observation, formTransports: [{ ...observation.formTransports[0]!,
+    actionUrl: undefined, actionScheme: "unknown" }] }];
+  assert.deepEqual(project()?.issues, proof?.issues);
+  for (const resources of [undefined, [], [{ ...active, documentUrl: https + "other" }],
+    [{ ...active, resourceUrl: "https://assets.example.test/script" }], [{ ...active, resourceUrl: "http://localhost/x" }]]) {
+    fixture.bundle.transportSecurityObservations = [{ ...observation, mixedContent: { ...observation.mixedContent, activeFormResources: resources } }];
+    assert.equal(project(), null);
+  }
+  fixture.bundle.transportSecurityObservations = [{ ...observation, formTransports: [{ ...row, personalDataFieldCategories: [] }] }];
+  assert.equal(project(), null);
+});

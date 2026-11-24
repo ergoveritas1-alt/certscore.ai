@@ -10,6 +10,7 @@ import { CALIFORNIA_TRANSPORT_ACTION, CALIFORNIA_TRANSPORT_FINDING_ID, CALIFORNI
 import { verifiedCaliforniaTransportFinding } from "./california-transport-score-policy";
 
 const transportDefectLabels = {
+  active_mixed_content: "Personal-information form page loaded an active resource over HTTP",
   plaintext_page: "Form page served over plaintext HTTP",
   plaintext_form_destination: "Form destination is configured as plaintext HTTP",
   certificate_validation_failure: "TLS certificate validation failed",

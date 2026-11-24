@@ -1181,6 +1181,10 @@ export const transportSecurityObservationSchema = z.object({
   }),
   tlsCertificateObservations: z.array(transportCertificateObservationSchema).max(4).default([]),
   mixedContent: z.object({
+    activeFormResources: z.array(z.object({
+      documentUrl: transportUrlSchema, resourceUrl: transportUrlSchema, kind: z.enum(["script", "stylesheet"]),
+      requestId: z.string().min(1).max(160),
+    }).strict()).max(25).optional(),
     loadedHttpSubresources: z.array(transportSecuritySubresourceSchema).max(25).default([]),
     blockedHttpSubresources: z.array(transportSecuritySubresourceSchema).max(25).default([]),
     observedCount: z.number().int().nonnegative(),

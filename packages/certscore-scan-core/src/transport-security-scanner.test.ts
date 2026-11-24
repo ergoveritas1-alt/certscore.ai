@@ -139,6 +139,11 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
       <!doctype html>
       <html>
         <body>
+          <script src="${assetServer.url}active.js"></script>
+          <script>const repeated = document.createElement("script"); repeated.src = "${assetServer.url}active.js"; document.head.append(repeated);</script>
+          <script src="${assetServer.url}blocked.js" integrity="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="></script>
+          <link rel="stylesheet" href="${assetServer.url}form.css">
+          <iframe srcdoc='<script src="${assetServer.url}child.js"></script>'></iframe>
           <img src="${assetServer.url}/pixel.png?cache_buster=secret" alt="">
           <form method="post" action="${assetServer.url}/submit?email=person@example.test">
             <label>Email <input type="email" name="email"></label>
@@ -185,6 +190,8 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
     assert.equal(observation.summary.validTlsCertificate, false);
     assert.equal(observation.summary.mixedContentObserved, true);
     assert.ok(observation.mixedContent.observedCount > 0);
+    assert.deepEqual(observation.mixedContent.activeFormResources?.map(row => new URL(row.resourceUrl).pathname).sort(),
+      ["/active.js", "/form.css"]);
     assert.equal(observation.summary.formInventoryState, "complete");
     assert.equal(observation.summary.insecureFormTransportObserved, true);
 
@@ -282,6 +289,12 @@ async function createSelfSignedCertificate(tempRoot: string): Promise<{ certPath
 
 async function startAssetServer(): Promise<{ server: HttpServer; url: string }> {
   const server = createHttpServer((request, response) => {
+    if (request.url?.endsWith(".js") || request.url === "/form.css") {
+      const css = request.url === "/form.css";
+      response.writeHead(200, { "cache-control": "no-store", "content-type": css ? "text/css" : "text/javascript" });
+      response.end(css ? "form { display: block }" : "void 0");
+      return;
+    }
     if (request.url?.startsWith("/pixel.png")) {
       response.writeHead(200, { "content-type": "image/png" });
       response.end(Buffer.from(

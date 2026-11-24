@@ -7,8 +7,16 @@ import { SCORING_FAMILIES, SCORING_RULE_BY_ID } from "./scoring-policy";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
 export const CALIFORNIA_TRANSPORT_SCORE_VERSION = "california-regulatory-posture.v28-transport";
+export const CALIFORNIA_MIXED_CONTENT_SCORE_VERSION = "california-regulatory-posture.v29-active-mixed-content";
+
+function transportPolicyVersion(issues: CaliforniaTransportProjection["issues"]):
+  typeof CALIFORNIA_MIXED_CONTENT_SCORE_VERSION | typeof CALIFORNIA_TRANSPORT_SCORE_VERSION {
+  return issues.some(issue => issue.defects.includes("active_mixed_content"))
+    ? CALIFORNIA_MIXED_CONTENT_SCORE_VERSION : CALIFORNIA_TRANSPORT_SCORE_VERSION;
+}
 const policyKey = "california.personal_data_transport";
 const weight = {
+  active_mixed_content: SCORING_RULE_BY_ID.get("transport_security_mixed_content")!.points,
   plaintext_page: SCORING_RULE_BY_ID.get("transport_security_https_delivery")!.points,
   plaintext_form_destination: SCORING_RULE_BY_ID.get("transport_security_form_transport")!.points,
   certificate_validation_failure: SCORING_RULE_BY_ID.get("transport_security_tls_certificate")!.points,
@@ -36,7 +44,7 @@ export function californiaTransportScoreEffect(raw: unknown): NormalizedConcernS
   const parsed = californiaTransportProjectionSchema.safeParse(raw);
   if (!parsed.success) return [];
   const proof = parsed.data;
-  return [{ appliesTo: "california_posture", framework: "california", policyVersion: CALIFORNIA_TRANSPORT_SCORE_VERSION,
+  return [{ appliesTo: "california_posture", framework: "california", policyVersion: transportPolicyVersion(proof.issues),
     policyKey, reasonCode: "verified_personal_data_form_transport", deductionPoints: transportPoints(proof.issues),
     evidenceRefs: [`sha256:${proof.sourceHash}`, "CanonicalEvidenceBundle.json#transportSecurityObservations"],
     observedActivity: proof.issues.map(issue => issue.authority).sort() }];
@@ -66,5 +74,5 @@ export function californiaTransportDeduction(findings: readonly UnifiedFindingDi
     const proof = verifiedCaliforniaTransportFinding(finding);
     return proof?.scanId === scanId && proof.documentUrl === document ? proof.issues : [];
   });
-  return { points: transportPoints(issues), policyKey };
+  return { points: transportPoints(issues), policyKey, policyVersion: transportPolicyVersion(issues) };
 }

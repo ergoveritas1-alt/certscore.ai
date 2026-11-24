@@ -39,10 +39,16 @@ export function projectCaliforniaTransport(bundle: CanonicalEvidenceBundle,
         transportDocumentUrl(observation.finalUrl)?.href !== document.href || observation.finalScheme !== document.protocol.slice(0, -1) ||
         observation.pageHttpsObserved !== (document.protocol === "https:") ||
         !observation.evidenceRefs.some(ref => ref.artifactId === "transport_security_observation")) continue;
+    const activeMixedContent = document.protocol === "https:" && observation.mixedContent.activeFormResources?.some(resource => {
+      const url = transportDocumentUrl(resource.resourceUrl);
+      return resource.documentUrl === observation.finalUrl && url?.protocol === "http:" &&
+        !/^(?:127\.|\[::1\]$)|(?:^|\.)localhost\.?$/.test(url.hostname);
+    });
     for (const form of observation.formTransports) {
       const categories = form.personalDataFieldCategories;
       if (!categories?.length || !/^form_\d+$/.test(form.formId) || !["get", "post"].includes(form.method) ||
           form.pageUrl !== observation.finalUrl || form.pageScheme !== observation.finalScheme) continue;
+      if (activeMixedContent) add(document, "active_mixed_content", categories);
       const action = transportDocumentUrl(form.actionUrl);
       if (!action || action.protocol.slice(0, -1) !== form.actionScheme || (!form.actionPresent && action.href !== document.href)) continue;
       if (document.protocol === "http:") add(document, "plaintext_page", categories);
