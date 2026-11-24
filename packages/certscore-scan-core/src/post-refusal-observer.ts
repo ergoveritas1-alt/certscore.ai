@@ -1630,7 +1630,9 @@ export async function runPostRefusalObserver(
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
         }
-        if (proofResolution.reason === "resolved_control_scope_not_interactive" &&
+        // A hidden former candidate needs fresh resolution. Opacity settling
+        // stays bound to the one selector it already checked.
+        if (proofResolution.reason === "resolved_control_scope_not_interactive" && proofResolution.scopeExclusion !== "hidden" &&
           !await waitForTransparentConsentControl({action: "reject", control, page,
             selectorHint: selectedRecipe.controlSelector, controlFrameUrl: selectedRecipe.controlFrameUrl,
             authorizedTargetSha256: authorizedExactTargetUrl ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) : undefined,

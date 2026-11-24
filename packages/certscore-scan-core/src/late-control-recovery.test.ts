@@ -29,7 +29,7 @@ test("late proof rejects a stale hidden control without dispatching it", async (
     });
     clicks = await page.evaluate(() => (window as unknown as { __clicks: number }).__clicks);
     // The existing scope guard rejects hidden ancestry before hit-target proof.
-    assert.deepEqual(result, { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive" });
+    assert.deepEqual(result, { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive", scopeExclusion: "hidden" });
     assert.equal(clicks, 0);
   } finally {
     await browser.close();

@@ -1254,7 +1254,9 @@ export async function runPostAcceptObserver(
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
         }
-        if (proofResolution.reason === "resolved_control_scope_not_interactive" &&
+        // A hidden former candidate needs fresh resolution. Opacity settling
+        // stays bound to the one selector it already checked.
+        if (proofResolution.reason === "resolved_control_scope_not_interactive" && proofResolution.scopeExclusion !== "hidden" &&
           !await waitForTransparentConsentControl({action: "accept", control, page,
             selectorHint: selectedRecipe.controlSelector,
             ...(confirmationScope !== page ? {controlFrameUrl: confirmationScope.url()} : {}),

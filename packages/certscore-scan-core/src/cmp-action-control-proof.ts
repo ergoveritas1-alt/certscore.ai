@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { inspectLocatorActionability, inspectLocatorConsentReadiness, locatorActionabilitySupportsVerifiedDispatch, type ConsentActionControl } from "./cmp-control-actionability.js";
 import type { ElementHandle, Frame, Locator, Page } from "playwright";
 import { readConsentActionLabelFields, type ConsentActionLabelFields } from "./consent-action-label-fields.js";
-import { consentScopePermitsInteraction } from "./cmp-action-target.js";
+import { inspectConsentScopeInteraction } from "./cmp-action-target.js";
 import { readConsentActionSettlingSnapshot } from "./consent-action-settling-snapshot.js";
 import { inspectCustomAcceptControl, sameCustomAcceptControlBinding } from "./custom-accept-control.js";
 import type { CustomAcceptControlBinding } from "@certscore/contracts";
@@ -26,7 +26,7 @@ type ControlLabelFields = ConsentActionLabelFields;
 
 export type ConsentActionControlProofResolution =
   | { status: "verified"; proof: ConsentActionControlProof; boundElement?: ElementHandle<HTMLElement | SVGElement> }
-  | { status: "label_mismatch" | "label_unverifiable"; reason: string };
+  | { status: "label_mismatch" | "label_unverifiable"; reason: string; scopeExclusion?: "hidden" };
 
 /** Proof-only hooks: no new browser commands and no late result reuse. */
 export type ConsentProofReadGuard = {
@@ -273,8 +273,10 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       if (!readiness.scopeInteractive) return { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive" };
       actionability = readiness.actionability;
     } else {
-      if (!await guard.read(() => consentScopePermitsInteraction(input.control))) {
-        return { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive" };
+      const scope = await guard.read(() => inspectConsentScopeInteraction(input.control));
+      if (scope.state !== "interactive") {
+        return { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive",
+          ...(scope.exclusion?.reason === "hidden" ? { scopeExclusion: "hidden" } : {}) };
       }
       actionability = await guard.read(() => inspectLocatorActionability(input.control, options));
     }
