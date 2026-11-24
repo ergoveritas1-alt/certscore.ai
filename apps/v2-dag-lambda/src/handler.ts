@@ -13,7 +13,7 @@ import { isRejectPreparationId, newRejectPreparationId, rejectPreparationCanaryE
   prepareRejectProofSender, takeRejectPreparationRelease, warmRejectPreparationClassifier, withPreparedRejectBrowser,
   type RejectPreparationGate } from "./reject-preparation-canary.js";
 import type { Browser } from "playwright";
-import { prepareConsentActionPage, type PreparedConsentActionPage } from "@certscore/scan-core/consent-action-browser";
+import { prepareConsentActionPage, shareConsentActionBrowser, type PreparedConsentActionPage } from "@certscore/scan-core/consent-action-browser";
 import type { PostRefusalObserverInput } from "@certscore/scan-core/post-refusal-observer";
 import { retainRuntimeCmsMetadataSnapshot } from "@certscore/contracts";
 import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
@@ -598,6 +598,7 @@ type RejectPacketReady = {
 
 type InlineConsentBrowser = {
   browser: Promise<Browser>;
+  pages: ReturnType<typeof shareConsentActionBrowser>;
   workspaceRoot?: string;
   awsRequestId?: string;
   rejectNetworkCheck?: ReturnType<typeof beginExactRejectNetworkCheck>;
@@ -3309,7 +3310,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           parentPayload: payload,
           parentScanId: payload.scanId,
           signal: postAcceptWorkerSignal,
-          ...(proof ? {acceptFirstLayerProof:proof} : {}),
+          ...(proof ? {acceptFirstLayerProof:proof, inlineConsentBrowser:options.inlineConsentBrowser} : {}),
           workerLane: "accept_observation",
         });
       })
@@ -4440,7 +4441,9 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const onConsentReady = isCloudConsentHandoffPayload(workerPayload) ? input.onConsentEvidenceReady : undefined;
   const onRejectReady = workerLane === "reject_observation" && workerPayload.targetEnvironment === "production" &&
     input.rejectFirstLayerProof && !input.rejectPreparationId ? input.onRejectPacketReady : undefined;
-  if (input.inlineConsentBrowser && (onConsentReady || onRejectReady)) {
+  const inlineAccept = workerLane === "accept_observation" && input.acceptFirstLayerProof &&
+    productionConsentGateEnforced(workerPayload, "accept");
+  if (input.inlineConsentBrowser && (onConsentReady || onRejectReady || inlineAccept)) {
     const inline = input.inlineConsentBrowser;
     // Retain the same worker parser, network validation, scan deadlines, and
     // original evidence checks. Only the physical invocation is shared.
@@ -7307,19 +7310,20 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         // navigate, after the normal target checks and exact proof validation.
         const authorization = accept ? payload.postAcceptObservation?.interactionAuthorization
           : payload.postRefusalObservation?.interactionAuthorization;
-        const borrowed = reject ? options.inlineConsentBrowser : undefined;
-        const browser = borrowed?.browser ?? startBlankExactActionBrowser(Math.max(1, proof.expiresAtMs - Date.now()));
-        earlyActionPage = browser.then(async browser => {
-          try {
-            options.callerSignal?.throwIfAborted();
-            return await prepareConsentActionPage(
-              browser, authorization?.kind === "scan_target_resolution", accept ? "accept" : "reject", Boolean(borrowed),
-            );
-          } catch (error) {
-            if (!borrowed) await browser.close().catch(() => undefined);
-            throw error;
-          }
-        });
+        const action = accept ? "accept" : "reject";
+        const needsNetworkGuard = authorization?.kind === "scan_target_resolution";
+        const borrowed = options.inlineConsentBrowser;
+        earlyActionPage = borrowed
+          ? borrowed.pages.prepare(action, needsNetworkGuard, options.callerSignal)
+          : startBlankExactActionBrowser(Math.max(1, proof.expiresAtMs - Date.now())).then(async browser => {
+            try {
+              options.callerSignal?.throwIfAborted();
+              return await prepareConsentActionPage(browser, needsNetworkGuard, action);
+            } catch (error) {
+              await browser.close().catch(() => undefined);
+              throw error;
+            }
+          });
         void earlyActionPage.catch(() => undefined);
       }
     }
@@ -7363,7 +7367,10 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       // here so Reject can use a clean context without a second cold launch.
       const browser = startBlankExactActionBrowser(LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS);
       void browser.catch(() => undefined);
-      ownedConsentBrowser = { browser, workspaceRoot: options.workspaceRoot, awsRequestId: options.awsRequestId };
+      ownedConsentBrowser = {
+        browser, pages: shareConsentActionBrowser(browser),
+        workspaceRoot: options.workspaceRoot, awsRequestId: options.awsRequestId,
+      };
     }
     const workspaceRoot = options.workspaceRoot ?? process.cwd();
     const baseArtifactRoot = buildLocalV2DagLambdaArtifactRoot({

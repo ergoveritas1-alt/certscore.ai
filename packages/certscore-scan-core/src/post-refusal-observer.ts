@@ -784,7 +784,7 @@ export async function runPostRefusalObserver(
     };
     if (input.preparedActionPage) {
       if (prepared) throw new Error("Reject worker received two browser preparation paths.");
-      ({ context, page } = takePreparedConsentActionPage(input.preparedActionPage, needsPublicNetworkGuard));
+      ({ context, page } = takePreparedConsentActionPage(input.preparedActionPage, needsPublicNetworkGuard, "reject"));
     } else {
       context = await operation(() => browser!.newContext({ ...browserContextConfiguration, ignoreHTTPSErrors: false }), value => value.close());
       await operation(() => installWebBotAuthRoute(context!));

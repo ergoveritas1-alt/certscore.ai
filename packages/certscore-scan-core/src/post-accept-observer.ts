@@ -498,7 +498,7 @@ export async function runPostAcceptObserver(
     policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified",
   };
   let browser = input.preparedActionPage?.browser ?? input.browser;
-  let ownsBrowser = Boolean(input.preparedActionPage);
+  let ownsBrowser = Boolean(input.preparedActionPage && !input.preparedActionPage.borrowedBrowser);
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
@@ -701,7 +701,7 @@ export async function runPostAcceptObserver(
     stage("context_setup");
     const needsPublicNetworkGuard = input.interactionAuthorization.kind === "scan_target_resolution";
     if (input.preparedActionPage) {
-      ({ context, page } = takePreparedConsentActionPage(input.preparedActionPage, needsPublicNetworkGuard));
+      ({ context, page } = takePreparedConsentActionPage(input.preparedActionPage, needsPublicNetworkGuard, "accept"));
     } else {
       context = await operation(() => browser!.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false }), value => value.close());
       await operation(() => installWebBotAuthRoute(context!));
