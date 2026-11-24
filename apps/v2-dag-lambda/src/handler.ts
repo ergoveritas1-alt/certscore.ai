@@ -590,6 +590,12 @@ type ArtifactChainResult = {
 
 export type LocalV2DagLambdaRuntimeDiagnostics = ReturnType<typeof buildLocalV2DagLambdaRuntimeDiagnostics>;
 
+type RejectPacketReady = {
+  scanId: string;
+  parentDispatchSha256: string;
+  packet: { uri: string; sha256: string; sizeBytes: number };
+};
+
 type HandlerOptions = {
   localGpcAdaptiveParticipant?: RunScanInput["localGpcAdaptiveParticipant"];
   artifactChainTimeoutMs?: number;
@@ -599,6 +605,7 @@ type HandlerOptions = {
   now?: () => Date;
   resultPublishTimeoutMs?: number;
   onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady) => void;
+  onRejectPacketReady?: (receipt: RejectPacketReady) => void;
   runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: {
     deadlineAtMs?: number;
     artifactSignal?: AbortSignal;
@@ -2484,6 +2491,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   options: {
     artifactRoot: string;
     earlyActionPage?: Promise<PreparedConsentActionPage>;
+    onRejectPacketReady?: (receipt: RejectPacketReady) => void;
     prepared?: { browser: Browser; gate: RejectPreparationGate };
     s3Client?: S3PutClient;
     signal?: AbortSignal;
@@ -2549,7 +2557,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   const uploadClient = options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion);
   const checkpointClient = options.s3Client ??
     (enforce ? localV2DagLambdaS3Client(payload.awsRegion,1,(uploadClient as S3Client).config.requestHandler) : undefined);
-  const beginArchive = (body: Buffer) => {
+  const beginArchive = (body: Buffer, sealedExactPacket = false) => {
     const sha256 = createHash("sha256").update(body).digest("hex");
     const bucket = requireArtifactBucket();
     const key = `${artifactKeyPrefix(payload).replace(/^\/+|\/+$/g, "")}/PostRefusalEvidencePacket.json`;
@@ -2563,6 +2571,13 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
         Key: key,
         Metadata: { sha256 },
       }), { abortSignal: options.signal });
+      if (sealedExactPacket && !options.signal?.aborted && payload.parentDispatchSha256) {
+        options.onRejectPacketReady?.({
+          scanId: payload.scanId,
+          parentDispatchSha256: payload.parentDispatchSha256,
+          packet: { uri: s3Uri(bucket, key), sha256, sizeBytes: body.byteLength },
+        });
+      }
       await checkpoint("artifact_upload_completed");
       if (trustArcSources) {
         const trustArcSourceBody = Buffer.from(JSON.stringify(trustArcSources));
@@ -2616,7 +2631,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
           onExactRejectClickCompleted?.(click),
         onExactRejectPacketSealed: (sealed: PostRefusalEvidencePacket) => {
           if (gateRecheck?.outcome !== "passed" || earlyArchive || options.signal?.aborted) return;
-          earlyArchive = beginArchive(Buffer.from(JSON.stringify(sealed)));
+          earlyArchive = beginArchive(Buffer.from(JSON.stringify(sealed)), true);
           void earlyArchive.uploaded.catch(() => undefined);
         },
       } : {}),
@@ -3090,6 +3105,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     timedOut: boolean;
   } = { passiveAbsence: false, cancelledNoReject: false, settled: false, started: false, timedOut: false };
   let postRefusalWorkerPromise: Promise<void> | undefined;
+  let earlyRejectPacket: ReturnType<typeof startRejectPacketVerification> | undefined;
   const postRefusalAbortController = new AbortController();
   postRefusalAbortController.signal.addEventListener("abort", () => {
     postRefusalState.error = postRefusalState.cancelledNoReject
@@ -3146,6 +3162,14 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             parentScanId: payload.scanId,
             signal: postRefusalWorkerSignal,
             ...(proof ? {rejectFirstLayerProof:proof} : {}),
+            ...(proof && useCloudConsentHandoff ? {
+              onRejectPacketReady: (notice: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => {
+                earlyRejectPacket = startRejectPacketVerification(notice, expected, {
+                  awsRegion: payload.awsRegion, s3GetClient: evidenceReader, signal: postRefusalWorkerSignal,
+                });
+                void earlyRejectPacket?.verified.catch(() => undefined);
+              },
+            } : {}),
             workerLane: "reject_observation",
           });
         } finally {
@@ -3679,6 +3703,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       }
       if (postRefusalState.cancelledNoReject || !postRefusalState.result) return true;
       let packet: PostRefusalEvidencePacket | undefined;
+      const result = postRefusalState.result;
+      const verification = earlyRejectPacket
+        ? earlyRejectPacket.join(result)
+        : readPostRefusalPacketFromArtifactResult(result, {
+          awsRegion: payload.awsRegion, s3GetClient: evidenceReader, signal: postRefusalAbortController.signal,
+        });
       const packetCompleted = await timeLambdaPhase(
         phaseTimings,
         "post_refusal_packet_join",
@@ -3686,11 +3716,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           abortController: postRefusalAbortController,
           maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
           passiveLaneBarrierCompletedAtMs,
-          workerPromise: readPostRefusalPacketFromArtifactResult(postRefusalState.result!, {
-            awsRegion: payload.awsRegion,
-            s3GetClient: evidenceReader,
-            signal: postRefusalAbortController.signal,
-          }).then((verifiedPacket) => {
+          workerPromise: verification.then(verifiedPacket => {
             packet = verifiedPacket;
           }),
         }),
@@ -4292,6 +4318,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   parentPayload: LocalV2DagLambdaDispatchPayload;
   parentScanId: string;
   onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady, expected: LocalV2DagLambdaDispatchPayload) => void;
+  onRejectPacketReady?: (receipt: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => void;
   signal?: AbortSignal;
   workerLane: LocalV2DagLambdaWorkerLane;
 }): Promise<LocalV2DagLambdaShardResult> {
@@ -4350,7 +4377,10 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const workerDispatch = enforceWorker ? {...workerPayload,contractVersion:CONSENT_GATED_ACTION_DISPATCH_VERSION} : workerPayload;
   const invocationStartedAtMs = Date.now();
   let responsePayload: Uint8Array | undefined;
-  if (input.onConsentEvidenceReady && isCloudConsentHandoffPayload(workerPayload)) {
+  const onConsentReady = isCloudConsentHandoffPayload(workerPayload) ? input.onConsentEvidenceReady : undefined;
+  const onRejectReady = workerLane === "reject_observation" && workerPayload.targetEnvironment === "production" &&
+    input.rejectFirstLayerProof && !input.rejectPreparationId ? input.onRejectPacketReady : undefined;
+  if (onConsentReady || onRejectReady) {
     const streamClient = new LambdaClient({ region:workerPayload.awsRegion,maxAttempts:1 });
     try {
       const streamed = await streamClient.send(new InvokeWithResponseStreamCommand({
@@ -4358,7 +4388,9 @@ export async function invokeLocalV2DagLambdaWorker(input: {
         InvocationType: "RequestResponse",
         Payload: Buffer.from(JSON.stringify({ ...workerDispatch, consentEvidenceStreaming:true })),
       }), { abortSignal: input.signal });
-      responsePayload = await readConsentEvidenceWorkerStream(streamed, receipt => input.onConsentEvidenceReady!(receipt,workerPayload));
+      responsePayload = onRejectReady
+        ? await readConsentEvidenceWorkerStream<RejectPacketReady>(streamed, receipt => onRejectReady(receipt, workerPayload))
+        : await readConsentEvidenceWorkerStream(streamed, receipt => onConsentReady!(receipt, workerPayload));
     } finally {
       streamClient.destroy();
     }
@@ -5042,13 +5074,50 @@ export function deriveConsentActionAvailability(bundle: CanonicalEvidenceBundle,
   };
 }
 
+type RejectPacketReadOptions = {
+  awsRegion?: LocalV2DagLambdaAwsRegion;
+  s3GetClient?: S3GetClient;
+  signal?: AbortSignal;
+};
+
+export function startRejectPacketVerification(
+  notice: unknown,
+  expected: Pick<LocalV2DagLambdaDispatchPayload, "scanId" | "parentDispatchSha256" | "orchestrationMode" | "workerLane">,
+  options: RejectPacketReadOptions,
+) {
+  if (options.signal?.aborted || !expected.parentDispatchSha256 ||
+      expected.orchestrationMode !== "worker" || expected.workerLane !== "reject_observation") return;
+  const record = asRecord(notice);
+  const packet = asRecord(record.packet);
+  const uri = s3Uri(requireArtifactBucket(), `${artifactKeyPrefix(expected)}/PostRefusalEvidencePacket.json`);
+  const { sha256, sizeBytes } = packet;
+  if (record.scanId !== expected.scanId || record.parentDispatchSha256 !== expected.parentDispatchSha256 ||
+      packet.uri !== uri || typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256) ||
+      typeof sizeBytes !== "number" || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) return;
+  const metadata = { sha256, sizeBytes };
+  const verified = readPostRefusalPacketFromArtifactResult({
+    scanId: expected.scanId,
+    artifactPointers: { postRefusalPacketUri: uri },
+    artifactMetadata: { postRefusalPacketUri: metadata },
+  }, options);
+  return {
+    verified,
+    async join(result: LocalV2DagLambdaShardResult) {
+      const terminal = result.artifactMetadata?.postRefusalPacketUri;
+      if (result.status !== "completed" || result.workerLane !== "reject_observation" ||
+          result.scanId !== expected.scanId || result.parentDispatchSha256 !== expected.parentDispatchSha256 ||
+          result.artifactPointers?.postRefusalPacketUri !== uri ||
+          terminal?.sha256 !== sha256 || terminal.sizeBytes !== sizeBytes) {
+        throw new Error("Reject worker terminal packet did not match its durable notice.");
+      }
+      return verified;
+    },
+  };
+}
+
 async function readPostRefusalPacketFromArtifactResult(
-  result: LocalV2DagLambdaShardResult,
-  options: {
-    awsRegion?: LocalV2DagLambdaAwsRegion;
-    s3GetClient?: S3GetClient;
-    signal?: AbortSignal;
-  },
+  result: Pick<LocalV2DagLambdaShardResult, "scanId" | "artifactPointers" | "artifactMetadata">,
+  options: RejectPacketReadOptions,
 ) {
   const uri = result.artifactPointers?.postRefusalPacketUri;
   if (!uri) {
@@ -6164,7 +6233,7 @@ function requireArtifactBucket() {
   return bucket;
 }
 
-function artifactKeyPrefix(payload: LocalV2DagLambdaDispatchPayload) {
+function artifactKeyPrefix(payload: Pick<LocalV2DagLambdaDispatchPayload, "scanId" | "orchestrationMode" | "workerLane">) {
   const prefix = compactString(process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX) ?? "v2-dag-lambda/local";
   const scanPrefix = `${prefix.replace(/^\/+|\/+$/g, "")}/${payload.scanId}`;
   return payload.orchestrationMode === "worker" && payload.workerLane
@@ -7164,7 +7233,9 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         earlyActionPage = startBlankExactActionBrowser(Math.max(1, proof.expiresAtMs - Date.now()))
           .then(async browser => {
             try {
-              return await prepareConsentActionPage(browser, authorization?.kind === "scan_target_resolution");
+              return await prepareConsentActionPage(
+                browser, authorization?.kind === "scan_target_resolution", accept ? "accept" : "reject",
+              );
             } catch (error) {
               await browser.close().catch(() => undefined);
               throw error;
@@ -7219,6 +7290,9 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         ? runLocalV2DagLambdaPostRefusalArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
             earlyActionPage,
+            onRejectPacketReady: dispatchPayload.targetEnvironment === "production" &&
+              dispatchPayload.rejectFirstLayerProof && productionConsentGateEnforced(dispatchPayload, "reject")
+              ? options.onRejectPacketReady : undefined,
             s3Client: options.s3Client,
             signal: runOptions.signal,
           })

@@ -57,7 +57,9 @@ async function postStreamingRuntimeResult(invocationId, event) {
   try {
     const result = await handler(event, {
       awsRequestId: invocationId,
-      onConsentEvidenceReady: receipt => write({ kind: "ready", receipt }),
+      ...(event.workerLane === "reject_observation"
+        ? { onRejectPacketReady: receipt => write({ kind: "ready", receipt }) }
+        : { onConsentEvidenceReady: receipt => write({ kind: "ready", receipt }) }),
     });
     write({ kind: "result", result });
   } finally {
@@ -85,7 +87,8 @@ while (true) {
 
   try {
     const event = await nextResponse.json();
-    if (event?.consentEvidenceStreaming === true && event.orchestrationMode === "worker" && event.workerLane === "consent_proof") {
+    if (event?.consentEvidenceStreaming === true && event.orchestrationMode === "worker" &&
+        (event.workerLane === "consent_proof" || event.workerLane === "reject_observation")) {
       await postStreamingRuntimeResult(invocationId,event).catch(error => {
         console.error("Consent worker stream failed.", serializeError(error));
       });

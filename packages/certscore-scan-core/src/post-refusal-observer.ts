@@ -399,6 +399,7 @@ type RefusalConfirmationState = {
   tcfApiSource?: "addEventListener" | "getTCData";
   tcfPurposeEvidence?: ActionTcfData["purposeEvidence"];
   observedAtEpochMs?: number;
+  apiEventWitnessAtEpochMs?: number;
   stateHash: string;
   witnessType:
     | "cmp_storage_state"
@@ -798,7 +799,9 @@ export async function runPostRefusalObserver(
     receiptCapture = installConsentReceiptCapture(page,{scanId:input.scanId,action:'reject',clockOriginAtEpochMs:parentScanStartedAtMs,signal:effectiveSignal});
     oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
     await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
-    originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl, undefined, {
+    const preparedStorageSession = input.preparedActionPage?.rejectStorageSession;
+    originDomStorageCapture = await installActionDomStorageCapture(
+      page, observationTargetUrl, preparedStorageSession ? () => preparedStorageSession : undefined, {
       onSession: session => {
         oneTrustSdkCapture?.bindNativeSession(session, {
           deadlineAtEpochMs: resultBudgetDeadlineAtMs, signal: effectiveSignal,
@@ -811,8 +814,12 @@ export async function runPostRefusalObserver(
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
       ...input.runtimeGraph, captureId: input.scanId, scenario: "post_reject", startedAt: new Date(parentScanStartedAtMs).toISOString(),
     });
-    actionDiscovery = await installConsentActionDiscovery(page);
-    await installPostRefusalStorageWriteProbe(page);
+    if (input.preparedActionPage?.rejectDiscovery) {
+      actionDiscovery = input.preparedActionPage.rejectDiscovery;
+    } else {
+      actionDiscovery = await installConsentActionDiscovery(page);
+      await installPostRefusalStorageWriteProbe(page);
+    }
 
     });
 
@@ -1232,23 +1239,24 @@ export async function runPostRefusalObserver(
       if (verified) readyExactCookieInformationControl = verified.control;
       return verified;
     };
-    const readiness = initialActionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
-      await waitForConsentDocumentOrNamedControl<DeterministicRecipeResolution>({page,deadlineAtMs:initialSearchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
+    const focusedResolution = initialActionSearchTimeoutMs > 0 && exactCookieInformation
+      ? await probeExactCookieInformation(250, effectiveSignal, true) : undefined;
+    const readiness = focusedResolution || initialActionSearchTimeoutMs === 0
+      ? {documentReady:true,resolution:focusedResolution}
+      : await waitForConsentDocumentOrNamedControl<DeterministicRecipeResolution>({
+        page,deadlineAtMs:initialSearchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
         probe:async (sliceMs,probeSignal)=>{
-          const exact = await probeExactCookieInformation(sliceMs, probeSignal);
-          if (exact) return exact;
           const active=await resolveActiveRuntimeRecipes(page!,actionRecipes,actionDiscovery);
           if(active.length!==1 || !isRegisteredLoadingConsentRecipe(active[0]!,"reject"))return undefined;
           const candidate=await waitForDeterministicRecipe(page!,active,sliceMs,probeSignal,recordResolverSnapshot,actionDiscovery,true);
           return candidate.status==="found" && !candidate.recipe.controlFrameUrl ? candidate : undefined;
-        }});
+        },
+      });
     const documentReady=readiness.documentReady;
     const searchEnded=effectiveSignal?.aborted || (initialActionSearchTimeoutMs>0 && Date.now()>=initialSearchDeadline);
     if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot(emptyResolverSnapshot("named_recipe", documentReady ? "binding_budget_exhausted" : "document_loading"));
     const searchRemaining = () => initialActionSearchTimeoutMs === 0 ? 0 : Math.max(1, initialSearchDeadline - Date.now());
-    const exactResolution = !readiness.resolution && documentReady && !searchEnded
-      ? await probeExactCookieInformation(250, effectiveSignal, true) : undefined;
-    let resolution: DeterministicRecipeResolution = readiness.resolution ?? exactResolution ?? ((!documentReady || searchEnded)
+    let resolution: DeterministicRecipeResolution = readiness.resolution ?? ((!documentReady || searchEnded)
       ? { status: effectiveSignal?.aborted ? "aborted" : "not_found" }
       : input.allowCanonicalRejectDiscovery
       ? await waitForDeterministicOrCanonicalRecipe(
@@ -1981,8 +1989,17 @@ export async function runPostRefusalObserver(
       });
     }
 
-    const confirmedRefusalRegisteredAtEpochMs = confirmedState.observedAtEpochMs ?? Date.now();
-    if (confirmedState.observedAtEpochMs === undefined) limitations.push("registration_timestamp_is_observation_upper_bound");
+    // The documented Cookie Information reader samples canonical state in
+    // the saved event and checks that sample against live state. An exact
+    // completed click can use that already observed event as its window anchor.
+    const confirmedAtEpochMs = Date.now();
+    const eventWitnessAt = confirmedState.apiEventWitnessAtEpochMs;
+    const eventRegistrationAt = passiveProof && !clickError && eventWitnessAt !== undefined &&
+      eventWitnessAt >= actionDispatchedAtEpochMs && eventWitnessAt <= confirmedAtEpochMs
+      ? eventWitnessAt : undefined;
+    const confirmedRefusalRegisteredAtEpochMs = confirmedState.observedAtEpochMs ?? eventRegistrationAt ?? confirmedAtEpochMs;
+    if (confirmedRefusalRegisteredAtEpochMs === confirmedAtEpochMs && confirmedState.observedAtEpochMs === undefined &&
+        eventRegistrationAt === undefined) limitations.push("registration_timestamp_is_observation_upper_bound");
     refusalRegisteredAtEpochMs = confirmedRefusalRegisteredAtEpochMs;
     graphCapture?.confirmAction(parentScanStartedAtMs + elapsed(parentScanStartedAtMs, confirmedRefusalRegisteredAtEpochMs));
     void graphCapture?.snapshotStorage();
@@ -2096,6 +2113,16 @@ export async function runPostRefusalObserver(
     } else registeredReloadTerminal?.discard();
     if (cancellation()) limitations.push("abort_requested_after_confirmed_action_observation_not_truncated");
 
+    const collectPostActionStorage = async () => {
+      const storage = await captureStorage(context!, page!, observationTargetUrl, limitations, graphCapture?.cookies,
+        diagnostics => { storageCollectionDiagnostics.postAction = diagnostics; });
+      return { storage, observedAtEpochMs: Date.now() };
+    };
+    // These two terminal reads both follow the full registered window. On the
+    // exact saved-event path they can share the checkpoint without new reads.
+    const pendingPostActionStorage = eventRegistrationAt !== undefined && observationResult.reason === "window_elapsed"
+      ? collectPostActionStorage() : undefined;
+    void pendingPostActionStorage?.catch(() => undefined);
     if (observationResult.tcfData) {
       tcfDataAfterRefusal = observationResult.tcfData;
       tcfDataObservedAtEpochMs = observationResult.tcfObservedAtEpochMs;
@@ -2113,9 +2140,10 @@ export async function runPostRefusalObserver(
           elapsed(parentScanStartedAtMs, tcfDataObservedAtEpochMs),
         )
       : undefined;
-    const postActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies, (d) => { storageCollectionDiagnostics.postAction = d; });
+    const postStorage = await (pendingPostActionStorage ?? collectPostActionStorage());
+    const postActionStorage = postStorage.storage;
     void graphCapture?.snapshotStorage();
-    const postActionStorageObservedAtEpochMs = Date.now();
+    const postActionStorageObservedAtEpochMs = postStorage.observedAtEpochMs;
     const postActionCapturedAtMs = elapsed(
       parentScanStartedAtMs,
       postActionStorageObservedAtEpochMs,
@@ -3052,32 +3080,56 @@ async function probeCookieInformationReject(
 ): Promise<Extract<DeterministicRecipeResolution, { status: "found" }> | undefined> {
   const selector = "#coiOverlay #coi-banner-wrapper #declineButton";
   const control = page.locator(selector).and(page.locator(recipe.controlSelector));
-  if (waitForVisible) {
-    // The locator's retry backoff can outlast a short, delayed first-layer
-    // banner. Use the browser's render cadence inside this same proof slice.
-    // The ordinary uniqueness, geometry and live action checks still follow.
-    const visible = await readWithinActionBoundary(async () => {
-      const witness = await page.waitForFunction(selector => {
+  const boundElement = await readWithinActionBoundary(async () => {
+    const handle = await page.evaluateHandle(({ selector, recipeSelector, waitMs }) => {
+      const scope = { read(): HTMLButtonElement | null {
         const button = document.querySelector(selector);
-        if (!(button instanceof HTMLButtonElement)) return false;
+        const api = (window as Window & {CookieInformation?: {getConsentGivenFor?: unknown}}).CookieInformation;
+        if (!(button instanceof HTMLButtonElement) || button.getRootNode() !== document ||
+            !button.matches(recipeSelector) || document.querySelectorAll("#coiOverlay").length !== 1 ||
+            document.querySelectorAll("#declineButton").length !== 1 ||
+            typeof api?.getConsentGivenFor !== "function") return null;
         const rect = button.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && getComputedStyle(button).visibility === "visible";
-      }, selector, { polling: "raf", timeout: Math.max(1, deadlineAtMs - Date.now()) });
-      void witness.dispose().catch(() => undefined);
-      return true;
-    }, false, deadlineAtMs, signal).catch(() => false);
-    if (!visible) return undefined;
-  }
-  const owned = await readWithinActionBoundary(() => page.evaluate(selector => {
-    const button = document.querySelector(selector);
-    const api = (window as Window & {CookieInformation?: {getConsentGivenFor?: unknown}}).CookieInformation;
-    return button instanceof HTMLButtonElement && button.getRootNode() === document &&
-      document.querySelectorAll("#coiOverlay").length === 1 &&
-      document.querySelectorAll("#declineButton").length === 1 &&
-      typeof api?.getConsentGivenFor === "function";
-  }, selector).catch(() => false), false, deadlineAtMs, signal);
-  if (!owned) return undefined;
-  const readiness = await inspectLocatorConsentReadiness(control, {deadlineAtMs, signal, scope:page});
+        return rect.width > 0 && rect.height > 0 && getComputedStyle(button).visibility === "visible"
+          ? button : null;
+      } };
+      const current = scope.read();
+      if (current || waitMs <= 0) return current;
+      return new Promise<HTMLButtonElement | null>(resolve => {
+        let frame = 0;
+        let tries = 0;
+        let finished = false;
+        const controls = { finish(button: HTMLButtonElement | null) {
+          finished = true;
+          clearTimeout(timer);
+          observer.disconnect();
+          cancelAnimationFrame(frame);
+          resolve(button);
+        }, check() {
+          const button = scope.read();
+          if (button) controls.finish(button);
+          else if (++tries >= 32) controls.finish(null);
+        }, onFrame() {
+          controls.check();
+          if (!finished) frame = requestAnimationFrame(controls.onFrame);
+        } };
+        const observer = new MutationObserver(controls.check);
+        const timer = setTimeout(() => controls.finish(null), waitMs);
+        observer.observe(document, { subtree: true, childList: true, attributes: true });
+        frame = requestAnimationFrame(controls.onFrame);
+      });
+    }, { selector, recipeSelector:recipe.controlSelector,
+      waitMs:waitForVisible ? Math.max(1, deadlineAtMs - Date.now()) : 0 });
+    const element = handle.asElement();
+    if (!element || signal.aborted || Date.now() >= deadlineAtMs) {
+      void handle.dispose().catch(() => undefined);
+      return undefined;
+    }
+    return element;
+  }, undefined, deadlineAtMs, signal).catch(() => undefined);
+  if (!boundElement) return undefined;
+  const readiness = await inspectLocatorConsentReadiness(control, {deadlineAtMs, signal, scope:page, boundElement})
+    .finally(() => { void boundElement.dispose().catch(() => undefined); });
   if (signal.aborted || Date.now() >= deadlineAtMs || !readiness.scopeInteractive ||
       !locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) return undefined;
   return {status:"found",recipe,control};
@@ -4145,6 +4197,7 @@ async function waitForRefusalConfirmation(
           return undefined;
         }
         return {stateHash: hashValue(current.canonicalState), witnessType: "cmp_api_state", key: "cookie_information",
+          apiEventWitnessAtEpochMs: current.eventObservedAtEpochMs,
           expectedState: "all_configurable_purposes_denied_after_reject"};
       }
       if (confirmation.cookieName === "notice_gdpr_prefs" && !controlFrameUrl &&

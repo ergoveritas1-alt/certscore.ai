@@ -75,7 +75,7 @@ export async function inspectLocatorActionability(control: ConsentActionControl,
 /** Reuse the resolver's existing geometry read for composed-scope readiness.
  * A transparent hit target is still pending, not a completed resolution. The
  * final source, label, uniqueness and dispatch checks remain independent. */
-export async function inspectLocatorConsentReadiness(control: Locator, options?: ConsentControlReadOptions): Promise<{
+export async function inspectLocatorConsentReadiness(control: ConsentActionControl, options?: ConsentControlReadOptions): Promise<{
   actionability: LocatorActionability; scopeInteractive: boolean;
 }> {
   return inspectLocatorReadiness(control, true, options);

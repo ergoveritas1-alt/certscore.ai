@@ -10,7 +10,7 @@ import {
 } from "@certscore/contracts";
 import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
 import { createHash } from "node:crypto";
-import { inspectLocatorActionability, locatorActionabilitySupportsVerifiedDispatch, type ConsentActionControl } from "./cmp-control-actionability.js";
+import { inspectLocatorActionability, inspectLocatorConsentReadiness, locatorActionabilitySupportsVerifiedDispatch, type ConsentActionControl } from "./cmp-control-actionability.js";
 import type { ElementHandle, Frame, Locator, Page } from "playwright";
 import { readConsentActionLabelFields, type ConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { consentScopePermitsInteraction } from "./cmp-action-target.js";
@@ -262,12 +262,23 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     return { status: "label_unverifiable", reason: "redirect_target_not_authorized" };
   }
   if (input.expectedAccessibleControl?.kind !== "closed_shadow_accessible_control") {
-    if (!await guard.read(() => consentScopePermitsInteraction(input.control))) {
-      return { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive" };
-    }
-    if (!locatorActionabilitySupportsVerifiedDispatch(await guard.read(() => inspectLocatorActionability(input.control, {
+    const options = {
       deadlineAtMs: input.deadlineAtMs, signal: input.signal, scope: guard.scope, trackActualRead: guard.track,
-    })))) {
+    };
+    let actionability;
+    if (input.action === "reject" && input.cmpId === "Cookie Information" &&
+        input.exactElement && (input.expectedNativeSelector ?? input.selectorHint) === "#declineButton") {
+      // This still reads the same native element's composed scope and geometry.
+      const readiness = await guard.read(() => inspectLocatorConsentReadiness(input.control, options));
+      if (!readiness.scopeInteractive) return { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive" };
+      actionability = readiness.actionability;
+    } else {
+      if (!await guard.read(() => consentScopePermitsInteraction(input.control))) {
+        return { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive" };
+      }
+      actionability = await guard.read(() => inspectLocatorActionability(input.control, options));
+    }
+    if (!locatorActionabilitySupportsVerifiedDispatch(actionability)) {
       return { status: "label_unverifiable", reason: "resolved_control_no_longer_actionable" };
     }
   }
@@ -315,15 +326,21 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     ? { policyVersion: necessaryOnlyRecipe.policyVersion,
         bannerSelector: "#onetrust-banner-sdk" as const, controlSelector: "#onetrust-reject-all-handler" as const,
         contextText: necessaryOnlyContext } : undefined;
-  const classification = classifyConsentControlLabel({
-    // Discovery and every proof check must use the same canonical locale set.
-    // In particular, do not lose Dutch intent or miss a cross-language conflict.
-    usage: labelBoundNecessaryOnly ? "observation" : "action", classifierProfile: "multilingual_v1",
-    label: preferredLabel(bounded)?.value,
-    ...(labelBoundNecessaryOnly ? { contextText: labelBoundNecessaryOnly.contextText } : {}),
-    hasConsentContext: true,
-  });
-  const conflictingIntent = sourceIntentConflict(bounded, labelBoundNecessaryOnly?.contextText);
+  // Reuse classifications for identical strings from independent DOM reads.
+  // Discovery and both proof stages still use the same canonical locales.
+  const classifications = new Map<string | undefined, ReturnType<typeof classifyConsentControlLabel>>();
+  const classify = (label: string | undefined) => {
+    const cached = classifications.get(label);
+    if (cached) return cached;
+    const result = classifyConsentControlLabel({
+      usage: labelBoundNecessaryOnly ? "observation" : "action", classifierProfile: "multilingual_v1", label,
+      contextText: labelBoundNecessaryOnly?.contextText, hasConsentContext: true,
+    });
+    classifications.set(label, result);
+    return result;
+  };
+  const classification = classify(preferredLabel(bounded)?.value);
+  const conflictingIntent = sourceIntentConflict(bounded, classify);
   if (conflictingIntent) {
     return {
       status: "label_mismatch",
@@ -428,10 +445,9 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       const labels = boundFields(fields);
       const liveLabel = preferredLabel(labels);
       if (input.exactElement && (liveLabel?.source !== selected.source || liveLabel.value !== selected.value)) return false;
-      if (sourceIntentConflict(labels, labelBoundNecessaryOnly?.contextText)) return false;
+      if (sourceIntentConflict(labels, classify)) return false;
       if (labelBoundNecessaryOnly) {
-        const classified = classifyConsentControlLabel({usage: "observation", classifierProfile: "multilingual_v1",
-          label: preferredLabel(labels)?.value, contextText: labelBoundNecessaryOnly.contextText, hasConsentContext: true});
+        const classified = classify(preferredLabel(labels)?.value);
         return necessaryOnlyRecipe!.expectedNormalizedLabels.includes(normalizeConsentControlText(preferredLabel(labels)?.value)) &&
           classified.intent === "reject" && classified.variant === "necessary_only";
       }
@@ -439,8 +455,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         normalizeConsentControlText(label) === normalizeConsentControlText(input.canonicalNecessaryOnly?.expectedNormalizedLabel));
       if (contextualLabelVerified) return isRegisteredContextualAcceptLabel(
         preferredLabel(labels)?.value ?? "", contextualApproval!.expectedNormalizedLabel);
-      const classified = classifyConsentControlLabel({ usage: "action", classifierProfile: "multilingual_v1",
-        label: liveLabel?.value, hasConsentContext: true });
+      const classified = classify(liveLabel?.value);
       return classified.intent === input.action && classified.confidence >= 0.8;
     });
     if (matching?.length !== 1) return { status: "label_unverifiable", reason: "resolved_control_no_longer_unique" };
@@ -598,11 +613,15 @@ function preferredLabel(fields: ControlLabelFields): {
   return undefined;
 }
 
-function sourceIntentConflict(fields: ControlLabelFields, necessaryOnlyContext?: string) {
+function sourceIntentConflict(
+  fields: ControlLabelFields,
+  classify = (label: string) => classifyConsentControlLabel({
+    usage: "action", classifierProfile: "multilingual_v1", label, hasConsentContext: true,
+  }),
+) {
   const classifications = [fields.ariaLabel, fields.visibleText, fields.value, fields.title]
     .filter((value): value is string => Boolean(value))
-    .map((label) => classifyConsentControlLabel({ usage: necessaryOnlyContext ? "observation" : "action",
-      classifierProfile: "multilingual_v1", label, hasConsentContext: true, contextText: necessaryOnlyContext }));
+    .map(classify);
   // An unproven acknowledgment is not actionable, but it can become a valid
   // decision label during the remaining original discovery window. Keep mixed
   // sources vetoed, since an affirmative accessible label cannot override an

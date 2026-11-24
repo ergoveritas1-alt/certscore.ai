@@ -1,9 +1,9 @@
 import type { InvokeWithResponseStreamCommandOutput } from "@aws-sdk/client-lambda";
 import type { LocalConsentEvidenceReady } from "./handler.js";
 
-export async function readConsentEvidenceWorkerStream(
+export async function readConsentEvidenceWorkerStream<Receipt = LocalConsentEvidenceReady>(
   response: InvokeWithResponseStreamCommandOutput,
-  onReady: (notice: LocalConsentEvidenceReady) => void,
+  onReady: (notice: Receipt) => void,
 ): Promise<Buffer> {
   if (response.StatusCode !== 200 || !response.EventStream) throw new Error("Consent worker stream unavailable.");
   let pending: Buffer = Buffer.alloc(0);

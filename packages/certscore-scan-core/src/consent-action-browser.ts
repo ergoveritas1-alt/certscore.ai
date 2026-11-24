@@ -1,5 +1,7 @@
-import type { Browser, BrowserContext, Page } from "playwright";
+import type { Browser, BrowserContext, CDPSession, Page } from "playwright";
+import { installConsentActionDiscovery, type ConsentActionDiscovery } from "./consent-action-discovery";
 import { chromiumContextOptions } from "./playwright-runtime";
+import { installPostRefusalStorageWriteProbe } from "./post-refusal-storage-write-probe";
 import { installPublicNetworkGuardRoute } from "./public-network-guard";
 import { installWebBotAuthRoute } from "./web-bot-auth-routing";
 
@@ -8,11 +10,14 @@ type BlankConsentPage = { context: BrowserContext; page: Page };
 export type PreparedConsentActionPage = BlankConsentPage & {
   browser: Browser;
   needsPublicNetworkGuard: boolean;
+  rejectDiscovery?: ConsentActionDiscovery;
+  rejectStorageSession?: Promise<CDPSession>;
 };
 
 export async function prepareConsentActionPage(
   browser: Browser,
   needsPublicNetworkGuard: boolean,
+  action?: "accept" | "reject",
 ): Promise<PreparedConsentActionPage> {
   if (browser.contexts().length !== 0) throw new Error("Exact action browser already has a context.");
   const context = await browser.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false });
@@ -20,7 +25,20 @@ export async function prepareConsentActionPage(
     await installWebBotAuthRoute(context);
     if (needsPublicNetworkGuard) await installPublicNetworkGuardRoute(context);
     const page = await context.newPage();
-    return { browser, context, page, needsPublicNetworkGuard };
+    let rejectDiscovery: ConsentActionDiscovery | undefined;
+    let rejectStorageSession: Promise<CDPSession> | undefined;
+    if (action === "reject") {
+      rejectStorageSession = context.newCDPSession(page);
+      // The ordinary storage collector handles unsupported CDP exactly as before.
+      void rejectStorageSession.catch(() => undefined);
+      // These blank-page hooks have no target access. Prepare them while the
+      // handler validates the URL, before the worker can navigate.
+      [rejectDiscovery] = await Promise.all([
+        installConsentActionDiscovery(page),
+        installPostRefusalStorageWriteProbe(page),
+      ]);
+    }
+    return { browser, context, page, needsPublicNetworkGuard, rejectDiscovery, rejectStorageSession };
   } catch (error) {
     await context.close().catch(() => undefined);
     throw error;
