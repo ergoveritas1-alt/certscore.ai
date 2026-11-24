@@ -7,6 +7,11 @@ import { projectCaliforniaRegulatoryPriorities } from "../../lib/scans/californi
 import { deriveCaliforniaRegulatoryScore, CALIFORNIA_REGULATORY_SCORE_VERSION } from "../../lib/scans/california-regulatory-score";
 import { projectCaliforniaChoicePresence } from "../../lib/scans/california-choice-presence";
 
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+import { projectReportPriorityFindings } from "../../lib/scans/report-priority-projection";
+import { selectRegulatoryReview } from "../../lib/scans/regulatory-review-catalog";
+
 const url = "https://example.test/";
 const source = { verificationStatus: "verified", sha256: "a".repeat(64) };
 const inspection = {
@@ -130,6 +135,38 @@ test("California score fails closed on missing coverage and binds deductions to 
   const sharedNotice = {id:"privacy_notice_availability",assessmentStatus:"gap_observed",evidenceState:"not_observed"} as any;
   assert.equal(deriveCaliforniaRegulatoryScore({assessment:complete,checklistRows:[sharedNotice],unifiedFindings:packets}).score,84);
   assert.equal(deriveCaliforniaRegulatoryScore({assessment:complete,checklistRows:[{...sharedNotice,assessmentStatus:"needs_evidence"}],unifiedFindings:packets}).score,94);
+});
+
+test("California counts a complete missing-policy search once and surfaces the same finding", () => {
+  const assessment = projectCaliforniaPrivacyReview(bundle({
+    policySurfaceInspection: { privacyChoiceInspection: { ...inspection, namedChoiceCandidateCount: 1 } },
+    policySurfaceObservations: [{ ...surface, status: "completed", documentFetchState: "fetched", fetchFailureReason: null, httpStatus: 200 }],
+  }), source, url);
+  const complete = {
+    coverageStatus: "complete", linkDiscoveryCoverageStatus: "complete", documentRetrievalCoverageStatus: "insufficient",
+    inspectionCompleted: true, limitationKeys: [], observedSurfaceTypes: [],
+    outcome: "no_privacy_policy_observed_complete_coverage", privacyPolicyObserved: false,
+  };
+  const findingId = "regulatory_gap__gdpr_eprivacy__privacy_notice_availability";
+  for (const [label, policySurfaceInspection, expected] of [
+    ["complete absence", complete, 1],
+    ["unfinished search", { ...complete, inspectionCompleted: false }, 0],
+    ["partial link inventory", { ...complete, linkDiscoveryCoverageStatus: "limited" }, 0],
+    ["policy observed", { ...complete, privacyPolicyObserved: true, observedSurfaceTypes: ["privacy_policy"], outcome: "privacy_policy_observed" }, 0],
+    ["missing inspection", undefined, 0],
+  ] as const) {
+    const coverage = { scanCompleted: true, coverageLimited: false };
+    const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      ...coverage, runtimeArtifacts: { policySurfaceInspection, policyDisclosureSummary: { privacyPolicyPresent: label === "policy observed" } },
+    });
+    const checklistRows = deriveGdprEprivacyCoverageChecklist({ ...coverage, coverageOutcomes, unifiedFindings: [] });
+    const priorities = projectReportPriorityFindings(checklistRows, []);
+    const review = selectRegulatoryReview(priorities, "ccpa_cpra");
+    assert.equal(review.topIssues.filter(row => row.id === findingId && row.status === "Potential gap").length, expected, label);
+    const score = deriveCaliforniaRegulatoryScore({ assessment, checklistRows: [...checklistRows, ...checklistRows], unifiedFindings: [] });
+    assert.equal(score.deductions.filter(row => row.findingId === findingId).length, expected, label);
+    assert.equal(score.score, expected ? 90 : 100, label);
+  }
 });
 
 import { createHash } from "node:crypto";

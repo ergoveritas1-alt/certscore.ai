@@ -1,3 +1,4 @@
+import { isCompletePrivacyPolicyAbsence } from "./privacy-policy-discovery";
 import {controlAccessibilityReceipt} from "@certscore/contracts";
 import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { GDPR_NARROW_RULES, gdprNarrowFindingId, GDPR_NARROW_SIGNAL, isActiveGdprNarrowKind } from "@certscore/contracts";
@@ -9114,17 +9115,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       "policy_surface_inspection"
     ]);
     const inspection = policySurfaceInspectionOutcomeSchema.safeParse(policySurfaceInspection);
-    const completeNoPrivacyPolicyObservation =
-      inspection.success &&
-      inspection.data.outcome === "no_privacy_policy_observed_complete_coverage" &&
-      inspection.data.coverageStatus === "complete" &&
-      inspection.data.linkDiscoveryCoverageStatus === "complete" &&
-      inspection.data.documentRetrievalCoverageStatus !== "usable" &&
-      inspection.data.inspectionCompleted &&
-      !inspection.data.privacyPolicyObserved &&
-      !inspection.data.observedSurfaceTypes.includes("privacy_policy") &&
-      inspection.data.limitationKeys.length === 0;
-    if (config.rowId === "privacy_notice_availability" && completeNoPrivacyPolicyObservation) {
+    if (config.rowId === "privacy_notice_availability" && inspection.success && isCompletePrivacyPolicyAbsence(inspection.data)) {
       return makeOutcome(
         config.rowId,
         "Gap observed",

@@ -1,3 +1,5 @@
+import { policySurfaceInspectionOutcomeSchema } from "@certscore/contracts";
+import { isCompletePrivacyPolicyAbsence } from "./privacy-policy-discovery";
 import { siteIntegrityFindingEffects, siteIntegrityDeduction, CALIFORNIA_SITE_INTEGRITY_SCORE_VERSION, SITE_INTEGRITY_SCORE_POLICY_KEY } from "./site-integrity-score-policy";
 import { SITE_INTEGRITY_POLICY_VERSION, SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { californiaAgentRegistrationProjectionSchema } from "@certscore/contracts";
@@ -310,8 +312,16 @@ export function deriveCaliforniaRegulatoryScore(input: {
   }
   // Reuse a supported canonical checklist gap; missing or inconclusive policy
   // evidence does not become a California deduction.
-  const sharedNotice = input.checklistRows.find(row => row.id === "privacy_notice_availability");
-  if (sharedNotice?.assessmentStatus === "gap_observed" && sharedNotice.evidenceState === "not_observed") {
+  const missingPrivacyPolicy = input.checklistRows.some(row => {
+    if (row.id !== "privacy_notice_availability" || row.assessmentStatus !== "gap_observed") return false;
+    const retained = row.criticalEvidence?.retainedEvidence?.policySurfaceInspection;
+    // Earlier canonical rows encoded a completed negative search directly.
+    if (retained === undefined) return row.evidenceState === "not_observed";
+    const inspection = policySurfaceInspectionOutcomeSchema.safeParse(retained);
+    return (row.evidenceState === "observed" || row.evidenceState === "not_observed") &&
+      inspection.success && isCompletePrivacyPolicyAbsence(inspection.data);
+  });
+  if (missingPrivacyPolicy) {
     deductions.push({findingId: "regulatory_gap__gdpr_eprivacy__privacy_notice_availability",
       policyKey: CALIFORNIA_SHARED_PRIVACY_NOTICE_KEY, label: "Privacy notice unavailable", points: CALIFORNIA_SHARED_NOTICE_POINTS});
   }
