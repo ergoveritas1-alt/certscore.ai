@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
-import type { Frame, Locator, Page } from "playwright";
+import type { ElementHandle, Frame, Locator, Page } from "playwright";
 import type { ConsentConfirmationReason } from "@certscore/contracts";
 import type { CmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 
 export type DocumentedConsentProvider = "cookie_information" | "cookiescript" | "finsweet";
 export const COOKIE_INFORMATION_STATE_POLICY = "cookie_information_active_categories.v2";
-export type CookieInformationReadBinding = { control: Locator } | { actionDispatchedAtEpochMs: number };
+export type CookieInformationReadBinding =
+  | { control: Locator | ElementHandle<HTMLElement | SVGElement> }
+  | { actionDispatchedAtEpochMs: number };
 
 /** Passive documented getters and saved-decision events only. No queues,
  * initialization, consent setters, UI actions or network calls are invoked.
@@ -18,9 +20,17 @@ export async function readDocumentedConsentApi(
   binding?: CookieInformationReadBinding,
 ): Promise<CmpApiConsentSnapshot | undefined> {
   const read = async () => {
-    const bindControl = binding && "control" in binding;
-    const element = bindControl ? await binding.control.elementHandle({timeout: 75}).catch(() => undefined) : undefined;
-    if (bindControl && !element) return { diagnostic: "receipt_missing" as const };
+    const control = binding && "control" in binding ? binding.control : undefined;
+    let acquired: ElementHandle<HTMLElement | SVGElement> | undefined;
+    let element: ElementHandle<HTMLElement | SVGElement> | undefined;
+    if (control && "elementHandle" in control) {
+      const resolved = await control.elementHandle({timeout: 75}).catch(() => undefined);
+      if (!resolved) return { diagnostic: "receipt_missing" as const };
+      acquired = resolved;
+      element = resolved;
+    } else {
+      element = control;
+    }
     return scope.evaluate(({ provider, cookieInformationPolicy, control, actionAt }) => {
       type State = { canonicalState: string; decision: "granted" | "denied" | "mixed" | "unknown"; configuration: string };
       type Tracker = {
@@ -163,7 +173,7 @@ export async function readDocumentedConsentApi(
         configuration: live?.configuration ?? cookieScriptConfiguration, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.at };
     }, { provider, cookieInformationPolicy: COOKIE_INFORMATION_STATE_POLICY, control: element,
       actionAt: binding && "actionDispatchedAtEpochMs" in binding ? binding.actionDispatchedAtEpochMs : undefined })
-      .finally(() => { void element?.dispose().catch(() => undefined); });
+      .finally(() => { void acquired?.dispose().catch(() => undefined); });
   };
   let timer: NodeJS.Timeout | undefined;
   const raw = await Promise.race([read().catch(() => undefined),

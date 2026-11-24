@@ -66,6 +66,7 @@ import {
   chromium,
   type Browser,
   type BrowserContext,
+  type ElementHandle,
   type Frame,
   type Locator,
   type Page,
@@ -535,7 +536,7 @@ export async function runPostRefusalObserver(
     localExactRejectControlEnabled());
   const boundControlDispatch = recheckExactReject ||
     (input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1");
-  let boundControlElement: import("playwright").ElementHandle<HTMLElement | SVGElement> | undefined;
+  let boundControlElement: ElementHandle<HTMLElement | SVGElement> | undefined;
   let refusalRegisteredAtEpochMs: number | undefined;
   let selectedRecipe: PostRefusalActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
@@ -1521,34 +1522,39 @@ export async function runPostRefusalObserver(
       if (scope.status === "found") sourceFrameBinding.bind(page, scope.scope);
     }
     if (preClickTiming) preClickTiming.actionabilityFinishedAtMs = Date.now();
-    let confirmationBaseline = await captureRefusalConfirmationBaseline(
-      context,
-      page,
-      selectedRecipe.confirmation,
-      control,
-      selectedRecipe.controlFrameUrl,
-      boundControlDispatch,
-      confirmationDiagnostic.reason,
-    ).catch(() => undefined);
-    if (preClickTiming) preClickTiming.confirmationBaselineAtMs = Date.now();
-    if (confirmationBaseline && "oneTrustBaseline" in confirmationBaseline) {
-      for (const reason of confirmationBaseline.oneTrustBaseline?.diagnosticReasons ?? []) confirmationDiagnostic.reason(reason);
-      const reason = oneTrustBaselineLimitation(confirmationBaseline.oneTrustBaseline);
-      if (reason) limitations.push(reason);
-    }
-    if (!confirmationBaseline) {
+    const readBaseline = (recipe: PostRefusalActionRecipe, locator: Locator, boundControl?: ElementHandle<HTMLElement | SVGElement>) =>
+      captureRefusalConfirmationBaseline(context!, page!, recipe.confirmation, locator,
+        recipe.controlFrameUrl, boundControlDispatch, confirmationDiagnostic.reason, boundControl);
+    // Cookie Information binds its saved event to the exact button, so defer
+    // its baseline until the proof has acquired that node for the click.
+    const readBaselineBeforeProof = async (recipe: PostRefusalActionRecipe, locator: Locator) => {
+      const confirmation = recipe.confirmation;
+      if (boundControlDispatch && (
+        confirmation.kind === "tcf_purposes_denied_or_cmp_cookie_changed" && confirmation.cookieName === "CookieInformationConsent" ||
+        confirmation.kind === "cmp_api_consent_state_changed" && confirmation.provider === "cookie_information"
+      )) return null;
+      return readBaseline(recipe, locator);
+    };
+    const missingBaseline = () => {
       limitations.push("refusal_confirmation_baseline_unavailable");
-      return await finalize({
+      return finalize({
         resolverFound: true,
         resolverReason: "refusal_confirmation_baseline_unavailable",
-        registration: unconfirmedRegistration(
-          "not_attempted",
-          "refusal_confirmation_baseline_unavailable",
-        ),
+        registration: unconfirmedRegistration("not_attempted", "refusal_confirmation_baseline_unavailable"),
         preActionCapturedAtMs,
         preActionStorage,
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
+    };
+    let baselineBeforeProof = await readBaselineBeforeProof(selectedRecipe, control).catch(() => undefined);
+    if (baselineBeforeProof === undefined) return await missingBaseline();
+    if (baselineBeforeProof) {
+      if (preClickTiming) preClickTiming.confirmationBaselineAtMs = Date.now();
+      if ("oneTrustBaseline" in baselineBeforeProof) {
+        for (const reason of baselineBeforeProof.oneTrustBaseline?.diagnosticReasons ?? []) confirmationDiagnostic.reason(reason);
+        const reason = oneTrustBaselineLimitation(baselineBeforeProof.oneTrustBaseline);
+        if (reason) limitations.push(reason);
+      }
     }
     if (
       Date.now() - preActionCapturedAtEpochMs >
@@ -1689,15 +1695,7 @@ export async function runPostRefusalObserver(
             const scope = exactSelectorScope(page, selectedRecipe.controlFrameUrl);
             if (scope.status === "found") sourceFrameBinding.bind(page, scope.scope);
           }
-          confirmationBaseline = await captureRefusalConfirmationBaseline(
-            context,
-            page,
-            selectedRecipe.confirmation,
-            control,
-            selectedRecipe.controlFrameUrl,
-            boundControlDispatch,
-            confirmationDiagnostic.reason,
-          );
+          baselineBeforeProof = await readBaselineBeforeProof(selectedRecipe, control);
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
             expectedNativeSelector: firstLayerProof?.exactSelector,
@@ -1744,6 +1742,9 @@ export async function runPostRefusalObserver(
     actionControlProof = proofResolution.proof;
     boundControlElement = proofResolution.boundElement;
     sourceFrameBinding.setElement(boundControlElement, resultBudgetDeadlineAtMs);
+    const confirmationBaseline = baselineBeforeProof ?? await readBaseline(selectedRecipe, control, boundControlElement).catch(() => undefined);
+    if (baselineBeforeProof === null && preClickTiming) preClickTiming.confirmationBaselineAtMs = Date.now();
+    if (!confirmationBaseline) return await missingBaseline();
     if (originDomStorageCapture && !originDomStorageCapture.bindAuthorizedTarget(observationTargetUrl))
       limitations.push("origin_storage_authorized_target_binding_limited");
     if (!selectedRecipe.controlFrameUrl && actionControlProof?.cmpId === "TrustArc" &&
@@ -4320,6 +4321,7 @@ async function readCaptureRefusalConfirmationBaseline(
   controlFrameUrl?: string,
   boundStorageScope = false,
   onDiagnostic?: (reason: import("@certscore/contracts").ConsentConfirmationReason) => void,
+  boundControl?: ElementHandle<HTMLElement | SVGElement>,
 ): Promise<RefusalConfirmationBaseline> {
   const boundScope = exactSelectorScope(page, controlFrameUrl);
   if (boundScope.status !== "found") throw new Error("confirmation_control_frame_unavailable");
@@ -4377,7 +4379,7 @@ async function readCaptureRefusalConfirmationBaseline(
   if (confirmation.kind === "cmp_api_consent_state_changed") {
     const [snapshot, osanoReceiptBaseline] = await Promise.all([
       readCmpApiConsentSnapshot(semanticScope, confirmation.provider, onDiagnostic,
-        confirmation.provider === "cookie_information" ? {control} : undefined),
+        confirmation.provider === "cookie_information" ? {control: boundControl ?? control} : undefined),
       confirmation.provider === "osano" ? captureOsanoReceiptBaseline(context, semanticScope, control) : undefined,
     ]);
     return {
@@ -4399,7 +4401,9 @@ async function readCaptureRefusalConfirmationBaseline(
       readTcfData(semanticScope).catch(() => undefined),
       cmpCookieState(context, confirmation.cookieName).then((state) => state?.stateHash),
       confirmation.cookieName === "OptanonConsent" ? captureOneTrustBaseline(context, semanticScope) : undefined,
-      confirmation.cookieName === "CookieInformationConsent" ? readCmpApiConsentSnapshot(semanticScope, "cookie_information", onDiagnostic, {control}) : undefined,
+      confirmation.cookieName === "CookieInformationConsent"
+        ? readCmpApiConsentSnapshot(semanticScope, "cookie_information", onDiagnostic, {control: boundControl ?? control})
+        : undefined,
     ]);
     return {
       kind: "tcf_purposes_denied_or_cmp_cookie_changed",

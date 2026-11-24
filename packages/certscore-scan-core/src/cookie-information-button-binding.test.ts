@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import test from "node:test";
-import { chromium, type Page } from "playwright";
+import { chromium, type Locator, type Page } from "playwright";
 import { classifyConsentControlLabel, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveAcceptFirstLayerProof } from "./accept-first-layer-gate.js";
 import { capturePassiveConsentControlGeometry } from "./consent-control-geometry.js";
@@ -109,6 +109,16 @@ for (const [action, nativeAx, delayed] of [
     const axControls = nativeAx ? consentControlsFromAccessibilityTree(
       await bindAccessibilityNodesToDom(client, axNodes, {url, identity:documentIdentity}),url).controls : [];
     await passive.close();
+    if (!accept && !delayed) {
+      const prototype: Locator = Object.getPrototypeOf(capturedPage.locator(selector));
+      const resolveElement = prototype.elementHandle;
+      t.mock.method(prototype, "elementHandle", function (this: Locator, options?: {timeout?: number}) {
+        if (this.page() === page && options?.timeout === 75) {
+          return Promise.reject(new Error("Cookie Information's separate confirmation lookup timed out."));
+        }
+        return resolveElement.call(this, options);
+      });
+    }
     const candidate = geometry.candidates.find(row => row.selectorHint === selector);
     assert.equal(candidate?.label, ariaLabel.toUpperCase());
     assert.equal(candidate.ariaLabel, ariaLabel);
