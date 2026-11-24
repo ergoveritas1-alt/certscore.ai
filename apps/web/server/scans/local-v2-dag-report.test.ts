@@ -10165,33 +10165,46 @@ test("new scanner no-go decisions survive report reads without applying new rule
   assert.equal(JSON.stringify(bundle),retained);
 });
 
-test("a retained hosting placeholder no-go suppresses the scores in the scan report", async () => {
+test("the controlled cPanel fixture produces a No-Go report with both posture scores withheld", async () => {
   const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
-  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
-  const bundle = gpcRuntimeFixture({ enabled: false, url: "https://fixture.test/" }) as CanonicalEvidenceBundle;
-  bundle.scanNoGoAssessment = {
-    status: "available", version: "scan-no-go-assessment-v1", decision: "no_go", scanNoGoConfidence: 0.98,
-    reasonCodes: ["parked_or_placeholder", "scan_no_go_corroborated"],
-    corroboratorCodes: ["cpanel_default_hosting_page_observed"], contradictorCodes: [],
-    supportingSignals: {}, evidenceRefs: ["CanonicalEvidenceBundle.json#networkEvents"],
-  };
-  bundle.visualAccessReview = {
-    artifact_ref: null, confidence: 0.98, go_no_go: "NO_GO", key_visual_evidence: ["Default hosting page"],
-    page_state: "parked_or_placeholder", reason_code: "parked_or_placeholder",
-    short_explanation: "The scanned site opened the default hosting page.", status: "available", version: "visual-access-review-v1",
-  };
-  const record = makeScanRecord();
-  record.scan = { ...record.scan, id: bundle.scanId, domainHostname: "fixture.test", createdAt: bundle.startedAt };
-  const detail = buildMaterializedLocalV2Detail(record, bundle);
-  assert.equal(detail.snapshot?.stop_reason_code, "homepage_parked_or_placeholder");
-  assert.equal(detail.snapshot?.certscore_overall, null);
-  assert.equal(detail.snapshot?.privacy_score, null);
-  assert.equal(detail.scan.pagesScanned, 0);
-  const pulse = buildPulseProjection({ scanRecord: detail, detail: "summary", format: "json", freshnessMode: "latest",
-    pulseRequestId: "local-placeholder", requestedUrl: bundle.url, resolutionMode: "existing_scan", waitSeconds: 0 });
-  assert.equal(pulse.summary.score, null);
-  assert.equal(pulse.noGo?.reasonCode, "parked_or_placeholder");
-  assert.equal("postureScores" in pulse.summary, false);
+  const { runScan } = await import("../../../../packages/certscore-scan-core/src/index");
+  const { startCpanelHostingPlaceholderFixture } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/cpanel-hosting-placeholder");
+  const fixture = await startCpanelHostingPlaceholderFixture();
+  const directory = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/cpanel-report-"));
+  try {
+    const bundle = await runScan({ url: fixture.url, profile: "tiny", outDir: directory,
+      evidenceLane: "runtime_evidence", preConsentScreenshotMode: "never" });
+    assert.equal(bundle.scanNoGoAssessment?.decision, "no_go");
+    assert.ok(bundle.scanNoGoAssessment.corroboratorCodes.includes("cpanel_default_hosting_page_observed"));
+    const record = makeScanRecord();
+    record.scan = { ...record.scan, id: bundle.scanId, domainHostname: "127.0.0.1",
+      createdAt: bundle.startedAt, startedAt: bundle.startedAt, completedAt: bundle.completedAt };
+    // A stale pre-existing score must also be removed when this scan is materialized.
+    record.snapshot = { certscore_overall: 80, privacy_score: 94 };
+    const retainedBytes = await readFile(path.join(directory, "CanonicalEvidenceBundle.json"));
+    const retainedBundle = JSON.parse(retainedBytes.toString("utf8")) as CanonicalEvidenceBundle;
+    assert.equal(retainedBundle.scanId, bundle.scanId);
+    const detail = buildMaterializedLocalV2Detail(record, retainedBundle, {
+      policyTextEvidenceContext: {
+        scanId: bundle.scanId, generatedAt: bundle.completedAt, localOutDir: directory, artifactsById: new Map(),
+        sourceBundle: { verificationStatus: "verified", sha256: createHash("sha256").update(retainedBytes).digest("hex"),
+          sizeBytes: retainedBytes.length, schemaVersion: bundle.schemaVersion },
+      },
+    });
+    assert.equal(detail.snapshot?.final_effective_url, fixture.placeholderUrl);
+    assert.equal(detail.snapshot?.stop_reason_code, "homepage_parked_or_placeholder");
+    assert.equal(detail.snapshot?.certscore_overall, null);
+    assert.equal(detail.snapshot?.privacy_score, null);
+    assert.equal(detail.scan.pagesScanned, 0);
+    const pulse = buildPulseProjection({ scanRecord: detail, detail: "summary", format: "json", freshnessMode: "latest",
+      pulseRequestId: "local-placeholder", requestedUrl: bundle.url, resolutionMode: "existing_scan", waitSeconds: 0 });
+    assert.equal(pulse.summary.score, null);
+    assert.equal(pulse.noGo?.reasonCode, "parked_or_placeholder");
+    assert.equal("postureScores" in pulse.summary, false);
+  } finally {
+    await fixture.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("the Accept stop diagnostic requires the joined packet to belong to the verified parent", async () => {

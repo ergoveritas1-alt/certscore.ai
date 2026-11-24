@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
-import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,6 +14,7 @@ import type {
   RuntimeCoverageSummary,
   ScreenshotArtifact,
 } from "@certscore/contracts";
+import { startCpanelHostingPlaceholderFixture } from "./test-fixtures/cpanel-hosting-placeholder.js";
 import { scanEvidenceLaneAssessmentSchema } from "@certscore/contracts";
 import {
   buildScanEvidenceLaneAssessment,
@@ -76,27 +75,11 @@ test("cPanel no-go requires the terminal main document and same-document templat
 });
 
 test("localhost cPanel fallback stops both scan lanes before retaining score-bearing coverage", async () => {
-  const server = createServer((request, response) => {
-    if (request.url === "/") {
-      response.writeHead(302, { location: "/cgi-sys/defaultwebpage.cgi" }).end();
-    } else if (request.url === "/cgi-sys/defaultwebpage.cgi") {
-      response.writeHead(200, { "content-type": "text/html" }).end(
-        '<!doctype html><title>Hosting</title><img src="/img-sys/powered_by_cpanel.svg"><img src="/img-sys/server_misconfigured.png">',
-      );
-    } else if (request.url?.startsWith("/img-sys/")) {
-      response.writeHead(200, { "content-type": "image/svg+xml" }).end('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
-    } else {
-      response.writeHead(404).end();
-    }
-  });
+  const fixture = await startCpanelHostingPlaceholderFixture();
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-cpanel-fixture-"));
   try {
-    server.listen(0, "127.0.0.1");
-    await once(server, "listening");
-    const address = server.address();
-    assert.ok(address && typeof address !== "string");
     for (const evidenceLane of ["runtime_evidence", "consent_proof"] as const) {
-      const bundle = await runScan({ url: `http://127.0.0.1:${address.port}/`, profile: "tiny",
+      const bundle = await runScan({ url: fixture.url, profile: "tiny",
         outDir: path.join(directory, evidenceLane), evidenceLane, preConsentScreenshotMode: "never" });
       assert.equal(bundle.scanNoGoAssessment?.decision, "no_go", evidenceLane);
       assert.equal(bundle.scanNoGoAssessment.reasonCodes[0], "parked_or_placeholder", evidenceLane);
@@ -104,7 +87,7 @@ test("localhost cPanel fallback stops both scan lanes before retaining score-bea
       assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none", evidenceLane);
     }
   } finally {
-    server.close();
+    await fixture.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

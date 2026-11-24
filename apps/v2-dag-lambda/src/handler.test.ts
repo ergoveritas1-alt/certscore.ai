@@ -62,6 +62,7 @@ import {
   POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
   POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
   attachJoinedPostRefusalArtifactPointer,
+  awaitRejectWorkerWithLateClickAllowance,
   awaitPostRefusalWorkerWithinTailBudget,
   artifactPointersFromS3Keys,
   assessEgressProbeObservation,
@@ -724,6 +725,33 @@ test("Reject Path uses a 500 ms launch offset and an eight-second post-primary t
   }), false);
   assert.equal(timedOutController.signal.aborted, true);
   assert.ok(Date.now() - startedAt < 250);
+});
+
+test("a verified late ARIA click can finish the existing Reject window under one bounded deadline", async () => {
+  const barrier = Date.now() - 8_005;
+  const worker = () => new Promise<void>(resolve => setTimeout(resolve, 15));
+  const options = {
+    passiveLaneBarrierCompletedAtMs: barrier, maxTailWaitMs: 8_000, lateAriaDispatchAtMs: barrier - 320,
+    verifiedClickAtMs: () => barrier + 711,
+  };
+  const permitted = new AbortController();
+  const joined = await awaitRejectWorkerWithLateClickAllowance({ ...options, abortController: permitted, workerPromise: worker() });
+  assert.deepEqual(joined, { completed: true, maxTailWaitMs: 9_711 });
+  const verification = await awaitRejectWorkerWithLateClickAllowance({ ...options, abortController: permitted, workerPromise: worker(),
+    maxTailWaitMs: joined.maxTailWaitMs, verifiedClickAtMs: () => barrier + 1_900 });
+  assert.deepEqual(verification, joined, "Packet verification must reuse the original extension");
+  for (const unsafe of [
+    { verifiedClickAtMs: () => undefined },
+    { verifiedClickAtMs: () => barrier + 8_000 },
+    { lateAriaDispatchAtMs: barrier - 751 },
+    { lateAriaDispatchAtMs: barrier + 1 },
+    { absoluteDeadlineAtMs: barrier + 8_000 },
+  ]) {
+    const abortController = new AbortController();
+    const denied = await awaitRejectWorkerWithLateClickAllowance({ ...options, ...unsafe, abortController, workerPromise: worker() });
+    assert.deepEqual(denied, { completed: false, maxTailWaitMs: 8_000 });
+    assert.equal(abortController.signal.aborted, true);
+  }
 });
 
 test("Reject Path worker return and packet verification share one absolute tail deadline", async () => {

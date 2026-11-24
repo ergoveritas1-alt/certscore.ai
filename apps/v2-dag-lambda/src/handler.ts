@@ -596,6 +596,8 @@ type RejectPacketReady = {
   packet: { uri: string; sha256: string; sizeBytes: number };
 };
 
+type RejectClickProgress = (completedAtMs: number) => void;
+
 type InlineConsentBrowser = {
   browser: Promise<Browser>;
   pages: ReturnType<typeof shareConsentActionBrowser>;
@@ -616,6 +618,7 @@ type HandlerOptions = {
   resultPublishTimeoutMs?: number;
   onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady) => void;
   onRejectPacketReady?: (receipt: RejectPacketReady) => void;
+  onRejectClickProgress?: RejectClickProgress;
   runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: {
     deadlineAtMs?: number;
     artifactSignal?: AbortSignal;
@@ -2536,6 +2539,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   options: {
     artifactRoot: string;
     earlyActionPage?: Promise<PreparedConsentActionPage>;
+    onRejectClickProgress?: RejectClickProgress;
     onRejectPacketReady?: (receipt: RejectPacketReady) => void;
     prepared?: { browser: Browser; gate: RejectPreparationGate };
     s3Client?: S3PutClient;
@@ -2672,8 +2676,15 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
         onRejectGateFinalRecheck: (outcome: "passed" | "failed") => {
           gateRecheck = { outcome, observedAtMs: Date.now() };
         },
-        onExactRejectClickCompleted: (click: Parameters<NonNullable<PostRefusalObserverInput["onExactRejectClickCompleted"]>>[0]) =>
-          onExactRejectClickCompleted?.(click),
+        onExactRejectClickCompleted: (click: ExactClick) => {
+          onExactRejectClickCompleted?.(click);
+          if (!options.onRejectClickProgress || options.signal?.aborted ||
+              gateRecheck?.outcome !== "passed" || !firstLayerProof) return;
+          const checkpoint = buildConsentClickCheckpoint({ action: "reject", proof: firstLayerProof }, click.control, {
+            recheckedAtMs: gateRecheck.observedAtMs, dispatchedAtMs: click.dispatchedAtMs, completedAtMs: click.completedAtMs,
+          });
+          if (checkpoint) options.onRejectClickProgress(click.completedAtMs);
+        },
         onExactRejectPacketSealed: (sealed: PostRefusalEvidencePacket) => {
           if (gateRecheck?.outcome !== "passed" || earlyArchive || options.signal?.aborted) return;
           earlyArchive = beginArchive(Buffer.from(JSON.stringify(sealed)), true);
@@ -3163,6 +3174,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   } = { passiveAbsence: false, cancelledNoReject: false, settled: false, started: false, timedOut: false };
   let postRefusalWorkerPromise: Promise<void> | undefined;
   let earlyRejectPacket: ReturnType<typeof startRejectPacketVerification> | undefined;
+  let verifiedInlineRejectClickAtMs: number | undefined;
+  let lateAriaRejectDispatched = false;
   const postRefusalAbortController = new AbortController();
   postRefusalAbortController.signal.addEventListener("abort", () => {
     postRefusalState.error = postRefusalState.cancelledNoReject
@@ -3206,6 +3219,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           }
           if (preparationError) throw preparationError;
           postRefusalState.dispatchStartedAtMs = nowMs;
+          lateAriaRejectDispatched = !!options.inlineConsentBrowser && !preparationId &&
+            proof?.binding.labelSource === "aria_label" && payload.postRefusalObservation?.observationWindowMs === 8_000;
           if (preparationId && proof && prepared && sendRejectProof) {
             await sendRejectProof({
               scanId: payload.scanId, targetUrl: payload.targetUrl,
@@ -3220,6 +3235,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             signal: postRefusalWorkerSignal,
             ...(proof ? {rejectFirstLayerProof:proof} : {}),
             inlineConsentBrowser: options.inlineConsentBrowser,
+            ...(lateAriaRejectDispatched ? { onRejectClickProgress: (completedAtMs: number) => {
+              verifiedInlineRejectClickAtMs ??= completedAtMs;
+            } } : {}),
             ...(proof && useCloudConsentHandoff ? {
               onRejectPacketReady: (notice: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => {
                 earlyRejectPacket = startRejectPacketVerification(notice, expected, {
@@ -3744,6 +3762,18 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       workerPromise,
     });
   };
+  let postRefusalMaxTailWaitMs = POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+  const awaitRejectWithinBarrier = async (workerPromise: Promise<void>, workerAlreadySettled?: boolean) => {
+    const remaining = await awaitRejectWorkerWithLateClickAllowance({
+      abortController: postRefusalAbortController, passiveLaneBarrierCompletedAtMs,
+      maxTailWaitMs: postRefusalMaxTailWaitMs, absoluteDeadlineAtMs: options.deadlineAtMs,
+      lateAriaDispatchAtMs: lateAriaRejectDispatched ? postRefusalState.dispatchStartedAtMs : undefined,
+      verifiedClickAtMs: () => verifiedInlineRejectClickAtMs,
+      workerPromise, workerAlreadySettled,
+    });
+    postRefusalMaxTailWaitMs = remaining.maxTailWaitMs;
+    return remaining.completed;
+  };
   const joinPostRefusalWithinBarrier = async (): Promise<boolean | null> => {
     if (!postRefusalWorkerPromise) return null;
     try {
@@ -3751,13 +3781,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         const workerCompleted = await timeLambdaPhase(
           phaseTimings,
           "post_refusal_barrier_join",
-          () => awaitPostRefusalWorkerWithinTailBudget({
-            abortController: postRefusalAbortController,
-            maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
-            passiveLaneBarrierCompletedAtMs,
-            workerAlreadySettled: postRefusalState.settled,
-            workerPromise: postRefusalWorkerPromise!,
-          }),
+          () => awaitRejectWithinBarrier(postRefusalWorkerPromise!, postRefusalState.settled),
         );
         if (!workerCompleted) return false;
       }
@@ -3772,14 +3796,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       const packetCompleted = await timeLambdaPhase(
         phaseTimings,
         "post_refusal_packet_join",
-        () => awaitPostRefusalWorkerWithinTailBudget({
-          abortController: postRefusalAbortController,
-          maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
-          passiveLaneBarrierCompletedAtMs,
-          workerPromise: verification.then(verifiedPacket => {
-            packet = verifiedPacket;
-          }),
-        }),
+        () => awaitRejectWithinBarrier(verification.then(verifiedPacket => {
+          packet = verifiedPacket;
+        })),
       );
       if (packetCompleted && packet) joinedPostRefusalPacket = packet;
       return packetCompleted && Boolean(packet);
@@ -3881,7 +3900,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   if (postRefusalCompletedInsideBarrier === false && !postRefusalState.cancelledNoReject) {
     postRefusalState.error = "reject_path_exceeded_post_primary_join_budget";
     postRefusalState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
-      POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+      postRefusalMaxTailWaitMs;
     postRefusalState.settled = true;
     postRefusalState.timedOut = true;
   }
@@ -3911,7 +3930,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         contractVersion: "certscore.post_refusal_lane_outcome.v1",
         completedAt: outcomeCompletedAt,
         evidenceJoined: postRefusalJoin === "joined",
-        maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+        maxTailWaitMs: postRefusalMaxTailWaitMs,
         status: postRefusalJoin,
         ...(postRefusalJoin === "failed" && postRefusalState.error?.includes("Evidence validation failed:")
           ? { failureReason: "evidence_validation_failed" } : {}),
@@ -3993,6 +4012,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     coordinatorStartedAtMs,
     generatedAtMs: Date.now(),
     postAcceptMaxTailWaitMs,
+    postRefusalMaxTailWaitMs,
     passiveLaneBarrierCompletedAtMs,
     passiveWorkerResults: workerResults,
     postRefusal: {
@@ -4031,7 +4051,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       addedInitialBarrierWaitMs: laneTimingSummary.rejectLaneAddedWaitMs,
       featureEnabled: postRefusalState.started,
       join: postRefusalJoin,
-      maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+      maxTailWaitMs: postRefusalMaxTailWaitMs,
       workerError: postRefusalState.error ?? null,
     },
     postAcceptObservation: {
@@ -4071,7 +4091,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     },
     reject:{
       dispatchAtMs:postRefusalState.dispatchStartedAtMs, completedAtMs:postRefusalState.outcomeObservedAtMs,
-      deadlineAtMs:Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS),
+      deadlineAtMs:Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + postRefusalMaxTailWaitMs),
       packet:joinedPostRefusalPacket,
     },
   }) : undefined;
@@ -4086,7 +4106,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     }) } : {}),
     ...(shadow.baseline.reject ? { reject: consentActionStage({
       ...postRefusalState, workerReturned: Boolean(postRefusalState.result), workerFailed: postRefusalState.result?.status === "failed",
-      deadlineAtMs: passiveLaneBarrierCompletedAtMs + POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+      deadlineAtMs: passiveLaneBarrierCompletedAtMs + postRefusalMaxTailWaitMs,
       gateDeclined: gateDeclines.reject !== undefined, packetJoined: Boolean(joinedPostRefusalPacket),
       recheck: shadow.baseline.reject.finalRecheck?.outcome,
     }) } : {}),
@@ -4382,6 +4402,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   parentScanId: string;
   onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady, expected: LocalV2DagLambdaDispatchPayload) => void;
   onRejectPacketReady?: (receipt: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => void;
+  onRejectClickProgress?: RejectClickProgress;
   signal?: AbortSignal;
   workerLane: LocalV2DagLambdaWorkerLane;
 }): Promise<LocalV2DagLambdaShardResult> {
@@ -4459,6 +4480,8 @@ export async function invokeLocalV2DagLambdaWorker(input: {
       workspaceRoot: inline.workspaceRoot,
       ...(onConsentReady ? { onConsentEvidenceReady: (notice: LocalConsentEvidenceReady) =>
         onConsentReady(notice, workerPayload) } : {}),
+      ...(workerLane === "reject_observation" && input.onRejectClickProgress
+        ? { onRejectClickProgress: input.onRejectClickProgress } : {}),
       ...(onRejectReady ? { onRejectPacketReady: (notice: RejectPacketReady) =>
         onRejectReady(notice, workerPayload) } : {}),
     });
@@ -4523,6 +4546,40 @@ async function waitForPostActionDispatchDelay(delayMs: number, signal?: AbortSig
   });
 }
 
+/** When an inline ARIA action was released immediately before the barrier,
+ * allow its verified click to finish the existing observation and packet join.
+ * Wait for either stage against the same absolute deadline. */
+export async function awaitRejectWorkerWithLateClickAllowance(input: {
+  abortController: AbortController;
+  passiveLaneBarrierCompletedAtMs: number;
+  absoluteDeadlineAtMs?: number;
+  maxTailWaitMs: number;
+  lateAriaDispatchAtMs?: number;
+  verifiedClickAtMs: () => number | undefined;
+  workerPromise: Promise<void>;
+  workerAlreadySettled?: boolean;
+}) {
+  const base = POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+  const barrier = input.passiveLaneBarrierCompletedAtMs;
+  const dispatch = input.lateAriaDispatchAtMs;
+  const canExtend = input.maxTailWaitMs === base && dispatch !== undefined &&
+    dispatch <= barrier && barrier - dispatch <= 750 && !input.abortController.signal.aborted;
+  let maxTailWaitMs = input.maxTailWaitMs;
+  if (canExtend) {
+    const completed = await awaitPostRefusalWorkerWithinTailBudget({ ...input, abortController: new AbortController() });
+    if (completed) return { completed, maxTailWaitMs };
+    const click = input.verifiedClickAtMs();
+    if (click !== undefined && click >= dispatch && click < barrier + base) {
+      // Budget the existing eight-second observation plus up to one second for
+      // confirmation and verification. Never add more than two seconds total.
+      maxTailWaitMs = Math.max(base, Math.min(base + 2_000, click - barrier + 9_000,
+        (input.absoluteDeadlineAtMs ?? Infinity) - barrier));
+    }
+  }
+  const completed = await awaitPostRefusalWorkerWithinTailBudget({ ...input, maxTailWaitMs });
+  return { completed, maxTailWaitMs };
+}
+
 export async function awaitPostRefusalWorkerWithinTailBudget(input: {
   abortController: AbortController;
   maxTailWaitMs?: number;
@@ -4582,6 +4639,7 @@ export function buildLocalV2DagLambdaLaneTimingSummary(input: {
   coordinatorStartedAtMs: number;
   generatedAtMs: number;
   postAcceptMaxTailWaitMs?: number;
+  postRefusalMaxTailWaitMs?: number;
   passiveLaneBarrierCompletedAtMs: number;
   passiveWorkerResults: LocalV2DagLambdaShardResult[];
   postRefusal: {
@@ -4745,11 +4803,11 @@ export function buildLocalV2DagLambdaLaneTimingSummary(input: {
     generatedAt: new Date(input.generatedAtMs).toISOString(),
     lanes,
     ...(input.postAccept ? { maxAcceptTailWaitMs: input.postAcceptMaxTailWaitMs ?? POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS } : {}),
-    maxRejectTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+    maxRejectTailWaitMs: input.postRefusalMaxTailWaitMs ?? POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
     passiveLaneBarrierCompletedAt: new Date(passiveLaneBarrierCompletedAtMs).toISOString(),
     rejectCompletedBeforeOrAtPassiveBarrier: rejectTailDeltaMs === null ? null : rejectTailDeltaMs <= 0,
     rejectLaneAddedWaitMs: Math.min(
-      POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+      input.postRefusalMaxTailWaitMs ?? POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
       Math.max(0, Math.round(rejectTailDeltaMs ?? 0)),
     ),
     rejectLaneJoin: input.postRefusal.join,
@@ -7399,6 +7457,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         ? runLocalV2DagLambdaPostRefusalArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
             earlyActionPage,
+            onRejectClickProgress: options.onRejectClickProgress,
             onRejectPacketReady: dispatchPayload.targetEnvironment === "production" &&
               dispatchPayload.rejectFirstLayerProof && productionConsentGateEnforced(dispatchPayload, "reject")
               ? options.onRejectPacketReady : undefined,
