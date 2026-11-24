@@ -65,6 +65,9 @@ function eu(id: string, title: string, rows: string[], why: string, rule: string
   return { id, title, findingIds: regulatoryChecklistFindingIds(...rows), contexts: { gdpr_eprivacy: { why, rule, ruleUrl: rule.startsWith("ePrivacy") ? eprivacy : gdpr, cases, priority } } };
 }
 export const REGULATORY_REVIEW_TOPICS: RegulatoryReviewTopic[] = [
+  { id: "california-transport", title: "Protection of personal information in transit", findingIds: ["california_personal_data_transport_security"], contexts: { ccpa_cpra: {
+    why: "A weak connection on a form path can expose the personal information visitors are asked to provide.",
+    rule: "California Civil Code §1798.100(e)", ruleUrl: "https://cppa.ca.gov/pdf/20260101_ccpa_statute.pdf#page=4", cases: [], priority: 96 } } },
   eu("reviewed-notice-omissions", "Privacy notice disclosures", ["reviewed_notice_omissions"], "People need understandable information about the legal basis, storage periods and relevant complaint rights for the described processing.", "GDPR Arts. 12–14", [], 65),
   { id: "california-collection-notice-link", title: "Notice-at-collection link unavailable", findingIds: ["california_notice_at_collection_destination_error"], contexts: { ccpa_cpra: {
     why: "People should be able to read the applicable notice when information is collected. A confirmed missing named destination calls for repair and a check of the actual collection point.",

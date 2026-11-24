@@ -27,6 +27,7 @@ import { ReportPublicationInvariantError } from "./report-publication-invariant"
 import { projectFormDestinations } from "./form-destination-projection";
 import { assessCmsSecurityProjection } from "./cms-security-projection";
 import { projectSiteIntegrity } from "./site-integrity-projection";
+import { projectCaliforniaTransport } from "./california-transport-projection";
 import { projectOriginBoundBrowserStorage } from "./pre-consent-browser-storage-projection";
 import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
 import { projectSiteMetadata } from "./site-metadata-projection";
@@ -6580,6 +6581,8 @@ export function buildMaterializedLocalV2Detail(
     ) : null,
     formSnapshots: verifiedFormSnapshots(bundle).map(({ snapshot: { data: _data, ...metadata } }) => metadata),
     siteIntegrity: runtimeEvidenceReportable ? projectSiteIntegrity(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null,
+    californiaTransportSecurity: runtimeEvidenceReportable && bundle.scanId === scanRecord.scan.id
+      ? projectCaliforniaTransport(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null,
     formDestinations: runtimeEvidenceReportable ? projectFormDestinations(bundle, options.policyTextEvidenceContext?.sourceBundle) : null,
     cmsSecurity: cms?.projection ?? null,
     cmsProjectionDiagnostic: diagnosticSourceHash && !localV2NoGo && cmsDiagnostic ? [diagnosticSourceHash, cmsDiagnostic] : null,
@@ -7068,7 +7071,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v51";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v52";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
-import { connect as connectTcp, type Socket } from "node:net";
+import { connect as connectTcp } from "node:net";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { Duplex } from "node:stream";
 import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
@@ -59,7 +60,7 @@ test("strict TLS probe completes through the configured HTTP CONNECT proxy", asy
     body: "<!doctype html><title>proxied tls fixture</title>",
   });
   const proxy = createHttpServer();
-  const proxySockets = new Set<Socket>();
+  const proxySockets = new Set<Duplex>();
   let connectCount = 0;
   proxy.on("connect", (request, clientSocket, head) => {
     connectCount += 1;
@@ -102,7 +103,7 @@ test("strict TLS probe completes through the configured HTTP CONNECT proxy", asy
 
 test("strict TLS probe bounds a stalled proxy CONNECT as an unknown timeout", async () => {
   const proxy = createHttpServer();
-  const proxySockets = new Set<Socket>();
+  const proxySockets = new Set<Duplex>();
   proxy.on("connect", (_request, socket) => {
     proxySockets.add(socket);
     socket.once("close", () => proxySockets.delete(socket));
@@ -142,6 +143,15 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
           <form method="post" action="${assetServer.url}/submit?email=person@example.test">
             <label>Email <input type="email" name="email"></label>
             <label>Password <input type="password" name="password"></label>
+            <label>Address <input name="contact-address" autocomplete="street-address"></label>
+            <input type="tel" name="phone" disabled>
+            <input type="email" aria-label="Unnamed email input">
+          </form>
+          <form method="post" action="${assetServer.url}/submit?email=person@example.test">
+            <input type="email" name="email">
+            <input type="password" name="password">
+            <input name="birth-date" autocomplete="bday">
+            <input type="tel" name="phone" disabled>
           </form>
         </body>
       </html>
@@ -171,6 +181,7 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
     assert.equal(typeof observation.tlsProbe.certificateValidTo, "string");
     assert.equal(observation.tlsCertificateObservations.length, 1);
     assert.equal(observation.tlsCertificateObservations[0]?.validTo, observation.tlsProbe.certificateValidTo);
+    assert.equal(observation.tlsCertificateObservations[0]?.validationError, "DEPTH_ZERO_SELF_SIGNED_CERT");
     assert.equal(observation.summary.validTlsCertificate, false);
     assert.equal(observation.summary.mixedContentObserved, true);
     assert.ok(observation.mixedContent.observedCount > 0);
@@ -182,6 +193,7 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
     assert.equal(insecureForm.actionScheme, "http");
     assert.equal(insecureForm.hasEmailField, true);
     assert.equal(insecureForm.hasSensitiveFieldHint, true);
+    assert.deepEqual([...insecureForm.personalDataFieldCategories ?? []].sort(), ["address", "date_of_birth", "email", "password"]);
     assert.equal(insecureForm.actionUrl?.includes("person@example.test"), false);
     assert.equal(insecureForm.actionUrl?.includes("email=%5Bredacted%5D"), true);
 
@@ -190,6 +202,8 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
     ) as typeof observation;
     assert.equal(artifact.tlsProbe.validCertificate, false);
     assert.equal(artifact.summary.insecureFormTransportObserved, true);
+    assert.deepEqual(artifact.formTransports.find(form => form.formId === insecureForm.formId)?.personalDataFieldCategories,
+      insecureForm.personalDataFieldCategories);
   } finally {
     await closeServer(httpsServer.server);
     await closeServer(assetServer.server);

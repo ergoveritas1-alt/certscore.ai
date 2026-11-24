@@ -36,6 +36,7 @@ import { verifiedSaleSharingOptOutSchema, saleSharingOptOutLaneOutcomeSchema, ty
 export * from "./sale-sharing-opt-out";
 import { cookieClassificationSchema } from "./cookie-classification";
 import { CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION, privacyChoiceInspectionSchema, type PrivacyChoiceInspection } from "./california-privacy-review";
+import { definitiveTransportCertificateErrorSchema, transportPersonalDataCategorySchema } from "./california-transport-security";
 export * from "./california-privacy-review";
 export * from "./california-restriction-shadow";
 export * from "./california-opt-out-shadow";
@@ -1111,6 +1112,9 @@ export const transportSecuritySubresourceSchema = z.object({
   evidenceSource: z.enum(["network_request", "request_failed", "console", "dom"]),
 });
 
+export { CALIFORNIA_TRANSPORT_ACTION, CALIFORNIA_TRANSPORT_FINDING_ID, CALIFORNIA_TRANSPORT_SIGNAL, CALIFORNIA_TRANSPORT_SUMMARY,
+  CALIFORNIA_TRANSPORT_TITLE, californiaTransportProjectionSchema, definitiveTransportCertificateErrorSchema, transportPersonalDataCategories,
+  type CaliforniaTransportDefect, type CaliforniaTransportProjection } from "./california-transport-security";
 export const transportSecurityFormObservationSchema = z.object({
   formId: z.string(),
   pageUrl: transportUrlSchema,
@@ -1122,6 +1126,7 @@ export const transportSecurityFormObservationSchema = z.object({
   resolvesToHttps: z.boolean(),
   insecureTransportObserved: z.boolean(),
   fieldTypes: z.array(z.string().max(40)).max(24).default([]),
+  personalDataFieldCategories: z.array(transportPersonalDataCategorySchema).max(12).optional(),
   hasEmailField: z.boolean().default(false),
   hasSensitiveFieldHint: z.boolean().default(false),
 });
@@ -1129,6 +1134,7 @@ export const transportSecurityFormObservationSchema = z.object({
 const transportCertificateObservationSchema = z.object({
   inputUrl: transportUrlSchema,
   validCertificate: z.boolean().optional(),
+  validationError: definitiveTransportCertificateErrorSchema.optional(),
   subject: z.string().max(240).optional(),
   issuer: z.string().max(240).optional(),
   validFrom: z.string().max(40).optional(),

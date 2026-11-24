@@ -15,6 +15,7 @@ import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema, type Form
 import { CMS_SECURITY_FINDING_ID, cmsSecurityProjectionSchema, type CmsSecurityProjection } from "@certscore/contracts";
 import { CALIFORNIA_COMBINED_OPT_OUT_POLICY,californiaPrivacyReviewCopy,CALIFORNIA_PRIVACY_REVIEW_IDS, readCaliforniaPrivacyReviewFromConsent, type CaliforniaPrivacyReview } from "@certscore/contracts";
 import { SITE_INTEGRITY_FINDING_ID, siteIntegrityProjectionSchema, type SiteIntegrityProjection } from "@certscore/contracts";
+import { CALIFORNIA_TRANSPORT_FINDING_ID, californiaTransportProjectionSchema, type CaliforniaTransportProjection } from "@certscore/contracts";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 import { webmasterRemediation, webmasterRemediationText } from "./webmaster-remediation";
 import { readGpcActivityComparison } from "./gpc-activity-comparison";
@@ -130,6 +131,7 @@ export type UnifiedFindingDetails =
   | { family: "policy_choice_methods"; projection: ReturnType<typeof policyChoiceMethodsSchema.parse> }
   | { family: "frictionless_gpc_exception"; projection: FrictionlessGpcProjection }
   | { family: "site_integrity"; projection: SiteIntegrityProjection }
+  | { family: "california_transport_security"; projection: CaliforniaTransportProjection }
   | {
       family: "coverage_gap";
       gapKind: "surface_missing" | "fetch_failed" | "bounded_discovery_unresolved";
@@ -1894,6 +1896,10 @@ function buildUnifiedFindingDetails(input: {
   if (input.findingId === SITE_INTEGRITY_FINDING_ID) {
     const projection = siteIntegrityProjectionSchema.safeParse(input.fallbackEvidence?.siteIntegrity);
     return projection.success ? { family: "site_integrity", projection: projection.data } satisfies UnifiedFindingDetails : undefined;
+  }
+  if (input.findingId === CALIFORNIA_TRANSPORT_FINDING_ID) {
+    const projection = californiaTransportProjectionSchema.safeParse(input.fallbackEvidence?.californiaTransportSecurity);
+    return projection.success ? { family: "california_transport_security", projection: projection.data } satisfies UnifiedFindingDetails : undefined;
   }
   const family = getFindingFamily(input.findingId);
 

@@ -76,6 +76,8 @@ import {
   hasUnresolvedConsentDecision,
   UNRESOLVED_CONSENT_DECISION,
   classifyTransportHttpProbeOutcome,
+  definitiveTransportCertificateErrorSchema,
+  transportPersonalDataCategories,
   CONSENT_PREFERENCE_CATEGORY_REGISTRY,
   classifyConsentSurfaceText,
   classifyPrivacySurface,
@@ -158,6 +160,7 @@ import {
 } from "../transport-fallback.js";
 import {
   buildCollectionSurfaceInventory,
+  classifyCollectionSurfaceSemanticCategory,
   legacyCollectionSurfaceObservationsFromInventory,
   MAX_COLLECTION_SURFACE_INSPECTED_FIELDS,
   type CollectionSurfaceCaptureSnapshot,
@@ -12424,15 +12427,20 @@ function certificateObservationsFromTlsProbes(
       seenUrls.add(probe.inputUrl);
       return true;
     })
-    .map((probe) => ({
-      inputUrl: probe.inputUrl,
-      validCertificate: probe.validCertificate,
-      subject: probe.certificateSubject,
-      issuer: probe.certificateIssuer,
-      validFrom: probe.certificateValidFrom,
-      validTo: probe.certificateValidTo,
-      chainCertificateCount: probe.certificateChainCount,
-    }))
+    .map((probe) => {
+      const validationError = definitiveTransportCertificateErrorSchema.safeParse(probe.errorMessage);
+      return {
+        inputUrl: probe.inputUrl,
+        validCertificate: probe.validCertificate,
+        ...(probe.validCertificate === false && probe.errorCategory === "tls_or_certificate_failure" && validationError.success
+          ? { validationError: validationError.data } : {}),
+        subject: probe.certificateSubject,
+        issuer: probe.certificateIssuer,
+        validFrom: probe.certificateValidFrom,
+        validTo: probe.certificateValidTo,
+        chainCertificateCount: probe.certificateChainCount,
+      };
+    })
     .filter((observation) => observation.subject || observation.issuer || observation.validFrom || observation.validTo)
     .slice(0, 4);
 }
@@ -12473,10 +12481,16 @@ async function captureFormTransportObservations(page: Page, pageUrl: string): Pr
       documentUrl: window.location.href,
       formCount: forms.length,
       rows: Array.from({ length: Math.min(forms.length, 40) }, (_, index) => forms.item(index)!).map((form, index) => {
-        const fields = [...form.querySelectorAll("input, textarea, select")].slice(0, 24).map((element) => {
-          const input = element as HTMLInputElement;
+        const fields = [...form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select")].slice(0, 24).map((input) => {
+          const inputType = input.type;
+          const elementType = input instanceof HTMLInputElement ? "input" as const :
+            input instanceof HTMLTextAreaElement ? "textarea" as const : "select" as const;
           return {
-            type: (input.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
+            type: (input.getAttribute("type") || input.tagName.toLowerCase()).toLowerCase(),
+            inputType, elementType,
+            autocompleteToken: input.getAttribute("autocomplete") ?? undefined,
+            submitted: input.form === form && Boolean(input.name.trim()) && !input.matches(":disabled") &&
+              !["hidden", "submit", "reset", "button", "image"].includes(inputType),
             label: [
               input.getAttribute("aria-label"),
               input.getAttribute("placeholder"),
@@ -12514,6 +12528,10 @@ async function captureFormTransportObservations(page: Page, pageUrl: string): Pr
       resolvesToHttps: actionScheme === "https" || (!row.actionPresent && pageScheme === "https"),
       insecureTransportObserved: actionScheme === "http" || pageScheme === "http",
       fieldTypes: unique(row.fields.map((field) => field.type).filter(Boolean)).slice(0, 24),
+      personalDataFieldCategories: [...new Set(row.fields.filter(field => field.submitted)
+        .map(field => classifyCollectionSurfaceSemanticCategory({ ...field, label: field.label.slice(0, 180) }))
+        .filter((category): category is (typeof transportPersonalDataCategories)[number] =>
+          transportPersonalDataCategories.some(personal => personal === category)))],
       hasEmailField: /\bemail|e-mail\b/.test(haystack),
       hasSensitiveFieldHint: /password|ssn|social security|credit card|card number|health|medical|birth|date of birth/.test(haystack),
     };
@@ -12545,15 +12563,20 @@ function formTransportFromCollectionSurface(
 }
 
 function dedupeFormTransports(forms: TransportSecurityObservation["formTransports"]) {
-  const seen = new Set<string>();
-  return forms.filter((form) => {
+  const byDestination = new Map<string, TransportSecurityObservation["formTransports"][number]>();
+  for (const form of forms) {
     const key = `${form.pageUrl}|${form.actionUrl ?? ""}|${form.method}|${form.fieldTypes.join(",")}`;
-    if (seen.has(key)) {
-      return false;
+    const existing = byDestination.get(key);
+    if (!existing) {
+      byDestination.set(key, form);
+    } else if (form.personalDataFieldCategories?.length) {
+      existing.personalDataFieldCategories = [...new Set([
+        ...existing.personalDataFieldCategories ?? [],
+        ...form.personalDataFieldCategories,
+      ])];
     }
-    seen.add(key);
-    return true;
-  });
+  }
+  return [...byDestination.values()];
 }
 
 export function consolidateMixedContentSubresources(

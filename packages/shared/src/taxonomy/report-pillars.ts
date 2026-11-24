@@ -1,6 +1,7 @@
 import { PRIVACY_CHOICE_PRESENCE_SIGNAL, PRIVACY_CHOICE_PRESENCE_TITLE } from "@certscore/contracts";
 import { GDPR_NARROW_KINDS, GDPR_NARROW_RULES, gdprNarrowFindingId, GDPR_NARROW_SIGNAL } from "@certscore/contracts";
 import { FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
+import { CALIFORNIA_TRANSPORT_FINDING_ID, CALIFORNIA_TRANSPORT_SIGNAL, CALIFORNIA_TRANSPORT_TITLE } from "@certscore/contracts";
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, CALIFORNIA_PRIVACY_REVIEW_SIGNAL, californiaPrivacyReviewCopy } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL } from "@certscore/contracts";
 import { SITE_INTEGRITY_FINDING_ID, SITE_INTEGRITY_SIGNAL, SITE_INTEGRITY_COPY } from "@certscore/contracts";
@@ -2400,6 +2401,8 @@ export const REPORT_UNIFIED_FINDINGS = [
   ...CALIFORNIA_PRIVACY_REVIEW_IDS.map(id => defineReportUnifiedFinding({id, label: californiaPrivacyReviewCopy(id).title,
     owner: "consent_interface_control_availability", signalMappings: [{source: "runtime_artifact_signal", key: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`}] })),
   defineReportUnifiedFinding({ id: FORM_DESTINATION_FINDING_ID, label: "Form-data destination review", owner: "collection_surface_entry_points_and_handling_context", signalMappings: [{ source: "runtime_artifact_signal", key: FORM_DESTINATION_SIGNAL }] }),
+  defineReportUnifiedFinding({ id: CALIFORNIA_TRANSPORT_FINDING_ID, label: CALIFORNIA_TRANSPORT_TITLE,
+    owner: "collection_surface_entry_points_and_handling_context", signalMappings: [{ source: "runtime_artifact_signal", key: CALIFORNIA_TRANSPORT_SIGNAL }] }),
   defineReportUnifiedFinding({ id: CMS_SECURITY_FINDING_ID, label: "CMS security review", owner: "site_integrity_observations", signalMappings: [{ source: "runtime_artifact_signal", key: CMS_SECURITY_SIGNAL }] }),
   defineReportUnifiedFinding({ id: SITE_INTEGRITY_FINDING_ID, label: SITE_INTEGRITY_COPY.title,
     owner: "site_integrity_observations", signalMappings: [{ source: "runtime_artifact_signal", key: SITE_INTEGRITY_SIGNAL }] }),

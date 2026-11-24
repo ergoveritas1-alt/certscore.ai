@@ -22,6 +22,8 @@ import { formDestinationProjectionSchema, formDestinationCopy, qualifiesFormDest
 import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL, readCaliforniaPrivacyReviewFromConsent, californiaPrivacyReviewFindingIds, californiaPrivacyReviewCopy, CALIFORNIA_PRIVACY_REVIEW_SIGNAL } from "@certscore/contracts";
 import { projectConsentControlBehavior } from "./consent-control-behavior";
 import { siteIntegrityProjectionSchema, SITE_INTEGRITY_FINDING_ID, SITE_INTEGRITY_SIGNAL, SITE_INTEGRITY_COPY, SITE_INTEGRITY_POLICY_VERSION, LEGACY_SITE_INTEGRITY_POLICY_VERSION, SITE_INTEGRITY_SEVERITY } from "@certscore/contracts";
+import { CALIFORNIA_TRANSPORT_FINDING_ID, CALIFORNIA_TRANSPORT_SIGNAL, CALIFORNIA_TRANSPORT_SUMMARY,
+  CALIFORNIA_TRANSPORT_TITLE, californiaTransportProjectionSchema } from "@certscore/contracts";
 import { describeGpcBoundedObservation } from "@certscore/contracts";
 import { readGpcActivityComparison } from "./gpc-activity-comparison";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
@@ -4717,6 +4719,19 @@ function buildSiteIntegrityConcerns(runtimeArtifacts: Record<string, unknown> | 
   })];
 }
 
+function buildCaliforniaTransportConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const parsed = californiaTransportProjectionSchema.safeParse(runtimeArtifacts?.californiaTransportSecurity);
+  if (!parsed.success) return [];
+  const projection = parsed.data;
+  return [buildConcernFromSharedInput({
+    categoryId: "privacy", originType: "runtime_artifact", originKey: CALIFORNIA_TRANSPORT_SIGNAL,
+    title: CALIFORNIA_TRANSPORT_TITLE, description: CALIFORNIA_TRANSPORT_SUMMARY, observedValue: "verified_personal_data_form_transport",
+    severity: "high", sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: CALIFORNIA_TRANSPORT_SIGNAL,
+    signalLabel: CALIFORNIA_TRANSPORT_TITLE, evidence: [projection.documentUrl],
+    rawEvidence: { californiaTransportSecurity: projection, unifiedFindingId: CALIFORNIA_TRANSPORT_FINDING_ID, pageUrl: projection.documentUrl },
+  })];
+}
+
 function buildGdprNarrowConcerns(runtime: Record<string, unknown> | null | undefined) {
   const assessment = readBoundGdprNarrow(runtime);
   if (!assessment) return [];
@@ -4756,6 +4771,7 @@ export function buildNormalizedConcerns(input: {
       return normalizedFinding ? [normalizeConcernFromValidationFinding(normalizedFinding, input.domainContext, consentControlAssessment)] : [];
     }),
     ...buildSiteIntegrityConcerns(input.runtimeArtifacts),
+    ...buildCaliforniaTransportConcerns(input.runtimeArtifacts),
     ...buildAccessibilityAuditConcerns(input.runtimeArtifacts),
     ...buildFormDestinationConcerns(input.runtimeArtifacts),
     ...buildCmsSecurityConcerns(input.runtimeArtifacts),

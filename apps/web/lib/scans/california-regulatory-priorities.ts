@@ -6,6 +6,14 @@ import {buildCanonicalGpcResponseProjection} from "./gpc-response-projection";
 import { CALIFORNIA_COMBINED_OPT_OUT_POLICY,californiaPrivacyReviewFindingIds, californiaPrivacyReviewCopy } from "@certscore/contracts";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import type { SitePriorityFinding } from "./full-site-priority-review";
+import { CALIFORNIA_TRANSPORT_ACTION, CALIFORNIA_TRANSPORT_FINDING_ID, CALIFORNIA_TRANSPORT_SUMMARY, CALIFORNIA_TRANSPORT_TITLE } from "@certscore/contracts";
+import { verifiedCaliforniaTransportFinding } from "./california-transport-score-policy";
+
+const transportDefectLabels = {
+  plaintext_page: "Form page served over plaintext HTTP",
+  plaintext_form_destination: "Form destination is configured as plaintext HTTP",
+  certificate_validation_failure: "TLS certificate validation failed",
+};
 
 /** Consume policy-eligible persisted unified outputs, never lane labels or workpaper evidence. */
 export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDisplayPacket[]): Omit<SitePriorityFinding, "pages" | "rank">[] {
@@ -16,6 +24,15 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
   const gpcObservation=gpc?.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? gpc.assessment.observation : undefined;
   const result: Omit<SitePriorityFinding, "pages" | "rank">[] = [];
   for (const finding of eligible) {
+    if (finding.unifiedFindingId === CALIFORNIA_TRANSPORT_FINDING_ID) {
+      const proof = verifiedCaliforniaTransportFinding(finding);
+      if (!proof) continue;
+      result.push({ id: CALIFORNIA_TRANSPORT_FINDING_ID, title: CALIFORNIA_TRANSPORT_TITLE, summary: CALIFORNIA_TRANSPORT_SUMMARY,
+        severity: "high", priority: "high", status: "Potential gap",
+        evidence: proof.issues.map(issue => `${issue.authority} · ${issue.defects.map(defect => transportDefectLabels[defect]).join(" · ")}`),
+        evidenceJson: { findingId: CALIFORNIA_TRANSPORT_FINDING_ID, transport: proof }, correctionSteps: [CALIFORNIA_TRANSPORT_ACTION] });
+      continue;
+    }
     if (finding.unifiedFindingId === CALIFORNIA_AGENT_REGISTRATION_ID && finding.details?.family === "california_agent_registration") {
       const parsed = californiaAgentRegistrationProjectionSchema.safeParse(finding.details.projection);
       if (!parsed.success) continue;

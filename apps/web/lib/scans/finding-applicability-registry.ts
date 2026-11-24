@@ -30,6 +30,10 @@ function california(key: string, findingIds: string[], when: string, checks: str
 }
 
 export const FINDING_APPLICABILITY_REGISTRY: readonly ApplicabilityEntry[] = [
+  { key: "california-transport", findingIds: ["california_personal_data_transport_security"], modes: ["ccpa_cpra"], scope: "california",
+    when: "California Civil Code §1798.100(e) requires a covered business to maintain reasonable security appropriate to the personal information it collects.",
+    checks: ["Verify the affected page and submission destination with a standard client.", "Confirm the kinds of personal information the form asks people to provide."],
+    sources: [{ label: "California Civil Code §1798.100(e)", url: "https://cppa.ca.gov/pdf/20260101_ccpa_statute.pdf#page=4" }] },
   california("california-collection-notice", ["california_notice_at_collection_destination_error"],
     "A covered business collecting personal information must provide the applicable notice at or before collection (§7012).",
     ["Identify where collection occurs: form, account flow or page load.", "Check the notice available there for categories, purposes, sale/sharing and retention; a footer policy may not suffice."]),

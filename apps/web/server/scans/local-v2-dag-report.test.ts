@@ -5,7 +5,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test, { before } from "node:test";
-import { consentControlAssessmentSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { CALIFORNIA_TRANSPORT_FINDING_ID, consentControlAssessmentSchema, transportSecurityObservationSchema,
+  type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -824,6 +825,46 @@ test("a verified usable visit keeps its California score basis when a partial ru
   ]){const changed=structuredClone(bundle);mutate(changed);const m=buildMaterializedLocalV2Detail(record,changed,options);assert.equal(californiaChild(m),undefined);}
   const unverified=buildMaterializedLocalV2Detail(record,bundle,{policyTextEvidenceContext:{...options.policyTextEvidenceContext,sourceBundle:{...sourceBundle,verificationStatus:"unavailable" as const}}});
   assert.equal(californiaChild(unverified),undefined);
+});
+
+test("verified materialization makes plaintext personal-information form transport reportable in California", async () => {
+  const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
+  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const { withOriginalRuntimeForPublication } = require("./consent-canary-accuracy.fixture");
+  const bundle = gpcRuntimeFixture({ enabled: false }) as CanonicalEvidenceBundle;
+  const url = bundle.normalizedUrl;
+  bundle.completedAt = new Date(Date.parse(bundle.startedAt) + 1000).toISOString();
+  bundle.domSnapshots = [{ artifactId: "dom", path: "/retained/page.txt", url, capturedAtMs: 100,
+    documentIdentity: { source: "cdp_loader_id", token: "consent" }, textExcerpt: "Public information and useful services.",
+    pagePhase: "network_idle", consentStateAtTime: "pre_consent" }];
+  withOriginalRuntimeForPublication(bundle);
+  bundle.transportSecurityObservations = [transportSecurityObservationSchema.parse({
+    observationId: "transport_security_pre_consent", observedAtMs: 100,
+    sourceScanner: "pre_consent_runtime", scenario: "fresh_pre_consent", directVsInferred: "direct", confidence: .94,
+    requestedUrl: url, normalizedUrl: url, requestedScheme: "https", finalUrl: url, finalScheme: "https", pageHttpsObserved: true,
+    httpProbe: { attempted: false }, tlsProbe: { attempted: false }, mixedContent: { observedCount: 0 },
+    summary: { mixedContentObserved: false, insecureFormTransportObserved: true },
+    evidenceRefs: [{ refId: "ref_transport_security", artifactId: "transport_security_observation" }],
+    formTransports: [{ formId: "form_0", pageUrl: url, pageScheme: "https", method: "post", actionPresent: true,
+      actionUrl: "http://forms.example.test/submit", actionScheme: "http", resolvesToHttps: false, insecureTransportObserved: true,
+      personalDataFieldCategories: ["email"] }],
+  })];
+  const record = makeScanRecord();
+  record.scan = { ...record.scan, id: bundle.scanId, domainHostname: new URL(url).hostname,
+    createdAt: bundle.startedAt, startedAt: bundle.startedAt, completedAt: bundle.completedAt };
+  const sourceBundle = { verificationStatus: "verified" as const, sha256: "a".repeat(64), schemaVersion: bundle.schemaVersion,
+    uri: "s3://fixture/original.json", sizeBytes: 1 };
+  const materialize = (source: typeof sourceBundle | (Omit<typeof sourceBundle, "verificationStatus"> & { verificationStatus: "unavailable" })) =>
+    buildMaterializedLocalV2Detail(record, bundle, {
+      policyTextEvidenceContext: { sourceBundle: source, scanId: bundle.scanId, generatedAt: bundle.completedAt,
+        localOutDir: null, artifactsById: new Map() },
+    });
+  const hasFinding = (detail: ScanDetailResponse) => buildScanReportUnifiedFindingsForScan(detail)
+    .some(row => row.unifiedFindingId === CALIFORNIA_TRANSPORT_FINDING_ID && row.surfacingDecision?.reportable);
+  const verified = materialize(sourceBundle);
+  assert.ok(verified.runtimeArtifacts?.californiaTransportSecurity);
+  assert.equal(hasFinding(verified), true);
+  assert.equal(hasFinding(materialize({ ...sourceBundle, verificationStatus: "unavailable" })), false);
 });
 
 test("summarizeFirstLayerConsentChoices fails closed when control geometry is missing", async () => {

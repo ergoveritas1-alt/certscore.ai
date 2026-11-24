@@ -12,6 +12,7 @@ import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@ce
 import { CMS_SECURITY_FINDING_ID, qualifiesCmsSecurityReview } from "@certscore/contracts";
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, californiaPrivacyReviewFindingIds } from "@certscore/contracts";
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
+import { CALIFORNIA_TRANSPORT_FINDING_ID, californiaTransportProjectionSchema } from "@certscore/contracts";
 import {
   REPORT_UNIFIED_FINDINGS,
   type ReportUnifiedFindingId
@@ -391,6 +392,7 @@ const CONTEXT_IDS = [
   CMS_SECURITY_FINDING_ID,
   FORM_DESTINATION_FINDING_ID,
   SITE_INTEGRITY_FINDING_ID,
+  CALIFORNIA_TRANSPORT_FINDING_ID,
   "regulator_operated_mock_investment_example",
   "scan_quality_visual_artifact_missing",
   "scan_quality_visual_no_go",
@@ -1987,6 +1989,14 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
     overrideDecision(decision, { state: eligible ? "review" : "suppressed", lane: eligible ? "main" : "suppressed",
       tier: "section", reason: "Canonical site-integrity concern policy; review only, with no regulatory or score effect.", ruleId: "evidence.context.keep_review" });
+    return;
+  }
+  if (packet.unifiedFindingId === CALIFORNIA_TRANSPORT_FINDING_ID) {
+    const eligible = packet.details?.family === "california_transport_security" &&
+      californiaTransportProjectionSchema.safeParse(packet.details.projection).success &&
+      packet.concernContext?.promotionEligibilities.includes("eligible") && packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision, { state: eligible ? "review" : "suppressed", lane: eligible ? "main" : "suppressed", tier: "headline",
+      reason: "Verified transport defect bound to a form that collects personal information.", ruleId: "evidence.context.keep_review" });
     return;
   }
   const evidenceFlags = new Set(packet.evidence?.flags ?? []);

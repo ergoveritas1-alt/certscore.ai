@@ -23,6 +23,8 @@ import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@ce
 import { CMS_SECURITY_FINDING_ID, qualifiesCmsSecurityReview } from "@certscore/contracts";
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, californiaPrivacyReviewFindingIds, readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
 import { californiaFindingScoreEffect } from "./california-regulatory-score";
+import { CALIFORNIA_TRANSPORT_FINDING_ID } from "@certscore/contracts";
+import { californiaTransportScoreEffect } from "./california-transport-score-policy";
 import { buildSiteIntegrityScoreEffects } from "./site-integrity-score-policy";
 import { buildAccessibilityScoreEffects, buildFocusAccessibilityScoreEffects } from "./accessibility-score-policy";
 import { qualifiesSiteIntegrityReview, SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
@@ -2675,6 +2677,13 @@ export function deriveConcernPolicy(input: {
     return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [],
       regulatoryChecklistEligibility: "none", scoreEffects: eligible && knownPolicy ? buildSiteIntegrityScoreEffects(input.rawEvidence?.siteIntegrity, version === LEGACY_SITE_INTEGRITY_POLICY_VERSION ? version : SITE_INTEGRITY_POLICY_VERSION) : [] };
+  }
+  if (input.concern.suggestedUnifiedFindingId === CALIFORNIA_TRANSPORT_FINDING_ID) {
+    const effects = input.concern.originType === "runtime_artifact"
+      ? californiaTransportScoreEffect(input.rawEvidence?.californiaTransportSecurity) : [];
+    return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: effects.length ? "eligible" : "suppress",
+      promotionEligibility: effects.length ? "eligible" : "blocked", negativeEvidenceFlags: [],
+      regulatoryChecklistEligibility: "none", scoreEffects: effects };
   }
   if (["zoom_restriction_accessibility_issue", "target_size_accessibility_issue"].includes(input.concern.suggestedUnifiedFindingId ?? "")) {
     const effects = input.concern.originType === "runtime_artifact"
