@@ -1,3 +1,4 @@
+import { takePreparedConsentActionPage, type PreparedConsentActionPage } from "./consent-action-browser";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
 import { observeCookieScriptReload } from "./cookiescript-reload-persistence.js";
 import { observeTrustArcReload } from "./trustarc-terminal-reload.js";
@@ -262,6 +263,7 @@ export interface PostRefusalObserverInput {
   resultBudgetMs?: number;
   browserMode?: "headless" | "headed";
   browser?: Browser;
+  preparedActionPage?: PreparedConsentActionPage;
   signal?: AbortSignal;
   /** Legacy preparation notification; it does not establish input dispatch. */
   onLifecycleEvent?: (event: {
@@ -512,8 +514,8 @@ export async function runPostRefusalObserver(
   const pendingResponseHeaderCaptures = new Set<Promise<void>>();
   let nextRequestNumber = 0;
   let activeRequestIdsAtRegistration: string[] = [];
-  let browser = input.browser;
-  let ownsBrowser = false;
+  let browser = input.preparedActionPage?.browser ?? input.browser;
+  let ownsBrowser = Boolean(input.preparedActionPage);
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let budgetContextClose: Promise<void> | undefined;
@@ -773,18 +775,22 @@ export async function runPostRefusalObserver(
       ownsBrowser = true;
     }
     const blankSetupStartedAtMs = prepared ? Date.now() : 0;
-    context = await operation(() => browser!.newContext({ ...browserContextConfiguration, ignoreHTTPSErrors: false }), value => value.close());
-    await operation(() => installWebBotAuthRoute(context!));
-    if (input.interactionAuthorization.kind === "scan_target_resolution") {
-      await operation(() => installPublicNetworkGuardRoute(context!));
-    }
+    const needsPublicNetworkGuard = input.interactionAuthorization.kind === "scan_target_resolution";
     let prematureRequest = false;
     const holdBlank = async (route: Route) => {
       prematureRequest = true;
       await route.abort();
     };
-    if (prepared) await operation(() => context!.route("**/*", holdBlank));
-    page = await operation(() => context!.newPage(), value => value.close());
+    if (input.preparedActionPage) {
+      if (prepared) throw new Error("Reject worker received two browser preparation paths.");
+      ({ context, page } = takePreparedConsentActionPage(input.preparedActionPage, needsPublicNetworkGuard));
+    } else {
+      context = await operation(() => browser!.newContext({ ...browserContextConfiguration, ignoreHTTPSErrors: false }), value => value.close());
+      await operation(() => installWebBotAuthRoute(context!));
+      if (needsPublicNetworkGuard) await operation(() => installPublicNetworkGuardRoute(context!));
+      if (prepared) await operation(() => context!.route("**/*", holdBlank));
+      page = await operation(() => context!.newPage(), value => value.close());
+    }
     const setupPage = page;
     await operation(async () => {
       const page = setupPage;
@@ -1032,6 +1038,7 @@ export async function runPostRefusalObserver(
           ownsBrowser = false;
           const {
             browser: _ignoredBrowser,
+            preparedActionPage: _ignoredPreparedPage,
             outDir: _ignoredOutDir,
             onExactRejectPacketSealed: _ignoredEarlyArchive,
             ...retryInput
@@ -3046,9 +3053,19 @@ async function probeCookieInformationReject(
   const selector = "#coiOverlay #coi-banner-wrapper #declineButton";
   const control = page.locator(selector).and(page.locator(recipe.controlSelector));
   if (waitForVisible) {
-    const visible = await readWithinActionBoundary(() =>
-      control.waitFor({ state: "visible", timeout: Math.max(1, deadlineAtMs - Date.now()) })
-        .then(() => true, () => false), false, deadlineAtMs, signal);
+    // The locator's retry backoff can outlast a short, delayed first-layer
+    // banner. Use the browser's render cadence inside this same proof slice.
+    // The ordinary uniqueness, geometry and live action checks still follow.
+    const visible = await readWithinActionBoundary(async () => {
+      const witness = await page.waitForFunction(selector => {
+        const button = document.querySelector(selector);
+        if (!(button instanceof HTMLButtonElement)) return false;
+        const rect = button.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && getComputedStyle(button).visibility === "visible";
+      }, selector, { polling: "raf", timeout: Math.max(1, deadlineAtMs - Date.now()) });
+      void witness.dispose().catch(() => undefined);
+      return true;
+    }, false, deadlineAtMs, signal).catch(() => false);
     if (!visible) return undefined;
   }
   const owned = await readWithinActionBoundary(() => page.evaluate(selector => {

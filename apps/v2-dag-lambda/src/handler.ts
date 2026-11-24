@@ -13,6 +13,7 @@ import { isRejectPreparationId, newRejectPreparationId, rejectPreparationCanaryE
   prepareRejectProofSender, takeRejectPreparationRelease, warmRejectPreparationClassifier, withPreparedRejectBrowser,
   type RejectPreparationGate } from "./reject-preparation-canary.js";
 import type { Browser } from "playwright";
+import { prepareConsentActionPage, type PreparedConsentActionPage } from "@certscore/scan-core/consent-action-browser";
 import type { PostRefusalObserverInput } from "@certscore/scan-core/post-refusal-observer";
 import { retainRuntimeCmsMetadataSnapshot } from "@certscore/contracts";
 import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
@@ -553,7 +554,9 @@ type S3GetClient = {
   send(command: GetObjectCommand, options?: { abortSignal?: AbortSignal }): Promise<GetObjectCommandOutput>;
 };
 
-function localV2DagLambdaS3Client(region: string, maxAttempts?: number): S3Client {
+export function localV2DagLambdaS3Client(
+  region: string, maxAttempts?: number, requestHandler?: S3Client["config"]["requestHandler"],
+): S3Client {
   const endpoint = compactString(process.env.S3_ENDPOINT);
   const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true" ||
     process.env.S3_FORCE_PATH_STYLE === "1";
@@ -565,6 +568,7 @@ function localV2DagLambdaS3Client(region: string, maxAttempts?: number): S3Clien
     ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
     region: compactString(process.env.S3_REGION) ?? region,
     ...(maxAttempts === undefined ? {} : { maxAttempts }),
+    ...(requestHandler ? { requestHandler } : {}),
   });
 }
 
@@ -2457,10 +2461,29 @@ function consentClickCheckpointSink(
   };
 }
 
+export async function startBlankExactActionBrowser(timeoutMs: number) {
+  const { chromium } = await import("playwright");
+  const options = chromiumLaunchOptions({ headless: true });
+  const browserReady = chromium.launch({
+    ...options,
+    args: [...(options.args ?? []), "--disable-background-networking"],
+    timeout: timeoutMs,
+  });
+  // This is synchronous CPU work. Start the separate Chromium process first.
+  setImmediate(warmRejectPreparationClassifier);
+  const browser = await browserReady;
+  if (browser.contexts().length !== 0) {
+    await browser.close().catch(() => undefined);
+    throw new Error("Exact action browser was not blank.");
+  }
+  return browser;
+}
+
 export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     artifactRoot: string;
+    earlyActionPage?: Promise<PreparedConsentActionPage>;
     prepared?: { browser: Browser; gate: RejectPreparationGate };
     s3Client?: S3PutClient;
     signal?: AbortSignal;
@@ -2523,14 +2546,17 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
         confirmation: config.resolver.confirmation,
       })].flatMap((recipe) => recipe ? [recipe] : []);
   let trustArcSources: Parameters<NonNullable<PostRefusalObserverInput["onTrustArcResponseCapture"]>>[0] | undefined;
+  const uploadClient = options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion);
+  const checkpointClient = options.s3Client ??
+    (enforce ? localV2DagLambdaS3Client(payload.awsRegion,1,(uploadClient as S3Client).config.requestHandler) : undefined);
   const beginArchive = (body: Buffer) => {
     const sha256 = createHash("sha256").update(body).digest("hex");
     const bucket = requireArtifactBucket();
     const key = `${artifactKeyPrefix(payload).replace(/^\/+|\/+$/g, "")}/PostRefusalEvidencePacket.json`;
     void checkpoint("packet_validated");
     const uploaded = timeLambdaPhase(phaseTimings, "post_refusal_artifact_upload", async () => {
-      await checkpoint("artifact_upload_started");
-      await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({
+      void checkpoint("artifact_upload_started");
+      await uploadClient.send(new PutObjectCommand({
         Body: body,
         Bucket: bucket,
         ContentType: "application/json",
@@ -2544,7 +2570,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
         // coordinator and report readers receive only the ordinary Reject packet.
         const sourceKey = key.replace(/PostRefusalEvidencePacket\.json$/, "TrustArcResponseBodies.json");
         try {
-          await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({
+          await uploadClient.send(new PutObjectCommand({
             Body: trustArcSourceBody, Bucket: bucket, ContentType: "application/json", Key: sourceKey,
             Metadata: { sha256: createHash("sha256").update(trustArcSourceBody).digest("hex"), "reject-packet-sha256": sha256 },
           }), { abortSignal: options.signal });
@@ -2566,9 +2592,11 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     }
     const { runPostRefusalObserver } = await import("@certscore/scan-core/post-refusal-observer");
     const clickSink = (proof: RejectFirstLayerProof) =>
-      consentClickCheckpointSink(payload, { action: "reject", proof }, options, () => gateRecheck);
+      consentClickCheckpointSink(payload, { action: "reject", proof }, { ...options, s3Client:checkpointClient }, () => gateRecheck);
     let onExactRejectClickCompleted = firstLayerProof ? clickSink(firstLayerProof) : undefined;
+    const preparedActionPage = await options.earlyActionPage;
     return runPostRefusalObserver({
+      ...(preparedActionPage ? { preparedActionPage } : {}),
       ...(firstLayerProof ? { firstLayerProof } : {}),
       ...(prepared ? { browser: prepared.browser, preparedFirstLayer: {
         parentDispatchSha256: payload.parentDispatchSha256!,
@@ -2656,6 +2684,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     artifactRoot: string;
+    earlyActionPage?: Promise<PreparedConsentActionPage>;
     s3Client?: S3PutClient;
     signal?: AbortSignal;
   },
@@ -2697,7 +2726,9 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
       });
     }
     const { runPostAcceptObserver } = await import("@certscore/scan-core/post-accept-observer");
+    const preparedActionPage = await options.earlyActionPage;
     return runPostAcceptObserver({
+      ...(preparedActionPage ? { preparedActionPage } : {}),
       ...(firstLayerProof ? {firstLayerProof, onAcceptGateFinalRecheck: (outcome:"passed" | "failed") => {
         gateRecheck = {outcome,observedAtMs:Date.now()};
       }} : {}),
@@ -3226,13 +3257,18 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     reject: enforced.reject || isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "reject"),
   };
   const useCloudConsentHandoff = enforced.reject && !options.lambdaClient;
+  const sharedEvidenceStore = useCloudConsentHandoff && !options.s3GetClient
+    ? localV2DagLambdaS3Client(payload.awsRegion) : undefined;
+  const evidenceReader = options.s3GetClient ?? sharedEvidenceStore;
+  const streamReader = options.s3GetClient ?? (sharedEvidenceStore
+    ? localV2DagLambdaS3Client(payload.awsRegion,1,sharedEvidenceStore.config.requestHandler) : undefined);
   let streamedConsent: { receipt: LocalConsentEvidenceReady; verified: ReturnType<typeof readConsentEvidenceReady> } | undefined;
   let earlyReject: ReturnType<typeof evaluateConsentGateShadow>["reject"];
   const receiveConsentEvidence = (receipt: LocalConsentEvidenceReady, expected: LocalV2DagLambdaDispatchPayload) => {
     if (!receipt.bundle || !receipt.geometry) throw new Error("Consent worker early notice is incomplete.");
     const verified = readConsentEvidenceReady({
       receipt, expected, signal: options.signal,
-      s3GetClient: options.s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion,1),
+      s3GetClient: streamReader!,
     }, true).then(evidence => {
       if (!options.signal?.aborted) {
         const decision = evaluateConsentGateShadow({
@@ -3652,7 +3688,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           passiveLaneBarrierCompletedAtMs,
           workerPromise: readPostRefusalPacketFromArtifactResult(postRefusalState.result!, {
             awsRegion: payload.awsRegion,
-            s3GetClient: options.s3GetClient,
+            s3GetClient: evidenceReader,
             signal: postRefusalAbortController.signal,
           }).then((verifiedPacket) => {
             packet = verifiedPacket;
@@ -7067,6 +7103,7 @@ async function replayCompletedSqsDispatch(input: {
 }
 
 export async function handler(event: unknown, options: HandlerOptions = {}) {
+  let earlyActionPage: Promise<PreparedConsentActionPage> | undefined;
   let payload: LocalV2DagLambdaDispatchPayload | null = null;
   let handlerOutcome: "completed" | "failed" | "unknown" = "unknown";
   const now = options.now ?? (() => new Date());
@@ -7103,6 +7140,38 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     payload = parseLocalV2DagLambdaDispatchPayload(dispatchEvent.payload);
     if (payload.targetEnvironment === "production" && !publicNetworkGuardEnabled(process.env)) {
       throw new Error("Production scanner network guard must remain enabled.");
+    }
+    if (!options.runArtifactChain && payload.orchestrationMode === "worker") {
+      const accept = payload.workerLane === "accept_observation" && isPostAcceptWorkerEnabled(payload)
+        ? payload.acceptFirstLayerProof : undefined;
+      const reject = payload.workerLane === "reject_observation" && isPostRefusalRejectWorkerEnabled(payload)
+        ? payload.rejectFirstLayerProof : undefined;
+      const nowMs = Date.now();
+      let proof: AcceptFirstLayerProof | RejectFirstLayerProof | undefined;
+      if (accept && accept.parentDispatchSha256 === payload.parentDispatchSha256 &&
+          acceptFirstLayerProofMatches(accept, payload.scanId, payload.targetUrl, nowMs)) {
+        proof = accept;
+      } else if (reject && rejectFirstLayerProofMatches(
+        reject, payload.scanId, payload.targetUrl, payload.parentDispatchSha256, nowMs,
+      )) {
+        proof = reject;
+      }
+      if (proof) {
+        // Setup can finish while validating the target. Only the observer can
+        // navigate, after the normal target checks and exact proof validation.
+        const authorization = accept ? payload.postAcceptObservation?.interactionAuthorization
+          : payload.postRefusalObservation?.interactionAuthorization;
+        earlyActionPage = startBlankExactActionBrowser(Math.max(1, proof.expiresAtMs - Date.now()))
+          .then(async browser => {
+            try {
+              return await prepareConsentActionPage(browser, authorization?.kind === "scan_target_resolution");
+            } catch (error) {
+              await browser.close().catch(() => undefined);
+              throw error;
+            }
+          });
+        void earlyActionPage.catch(() => undefined);
+      }
     }
     const validatedTarget = await assertPublicNetworkUrl(payload.targetUrl);
     if (validatedTarget.hostname.toLowerCase() !== payload.hostname.toLowerCase()) {
@@ -7149,12 +7218,14 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         : dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "reject_observation"
         ? runLocalV2DagLambdaPostRefusalArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
+            earlyActionPage,
             s3Client: options.s3Client,
             signal: runOptions.signal,
           })
         : dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "accept_observation"
         ? runLocalV2DagLambdaPostAcceptArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
+            earlyActionPage,
             s3Client: options.s3Client,
             signal: runOptions.signal,
           })
@@ -7589,6 +7660,10 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     }
     return result;
   } finally {
+    if (earlyActionPage) {
+      const cleanup = earlyActionPage.then(({browser}) => browser.isConnected() ? browser.close() : undefined);
+      await withHandlerSafetyTimeout(cleanup, 250).catch(() => undefined);
+    }
     const durationMs = Math.max(0, Date.now() - handlerStartedAtMs);
     if (payload && durationMs >= LOCAL_V2_DAG_LAMBDA_DURATION_WARNING_MS) {
       console.warn(JSON.stringify({

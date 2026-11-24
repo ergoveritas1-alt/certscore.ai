@@ -1,3 +1,4 @@
+import { takePreparedConsentActionPage, type PreparedConsentActionPage } from "./consent-action-browser";
 import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
 import { observeCookieScriptReload } from "./cookiescript-reload-persistence.js";
@@ -243,6 +244,7 @@ export interface PostAcceptObserverInput {
   actionSearchTimeoutMs?: number;
   resultBudgetMs?: number;
   browser?: Browser;
+  preparedActionPage?: PreparedConsentActionPage;
   signal?: AbortSignal;
   /** Legacy preparation notification; it does not establish input dispatch. */
   onLifecycleEvent?: (event: { type: "action_dispatched"; atMs: number }) => void;
@@ -495,8 +497,8 @@ export async function runPostAcceptObserver(
   let decisionEvidence: PostAcceptEvidencePacket["decisionEvidence"] = {
     policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified",
   };
-  let browser = input.browser;
-  let ownsBrowser = false;
+  let browser = input.preparedActionPage?.browser ?? input.browser;
+  let ownsBrowser = Boolean(input.preparedActionPage);
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
@@ -697,13 +699,16 @@ export async function runPostAcceptObserver(
       });
     }
     stage("context_setup");
-    context = await operation(() => browser!.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false }), value => value.close());
-    await operation(() => installWebBotAuthRoute(context!));
-    if (input.interactionAuthorization.kind === "scan_target_resolution") {
-      await operation(() => installPublicNetworkGuardRoute(context!));
+    const needsPublicNetworkGuard = input.interactionAuthorization.kind === "scan_target_resolution";
+    if (input.preparedActionPage) {
+      ({ context, page } = takePreparedConsentActionPage(input.preparedActionPage, needsPublicNetworkGuard));
+    } else {
+      context = await operation(() => browser!.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false }), value => value.close());
+      await operation(() => installWebBotAuthRoute(context!));
+      if (needsPublicNetworkGuard) await operation(() => installPublicNetworkGuardRoute(context!));
+      stage("page_setup");
+      page = await operation(() => context!.newPage(), value => value.close());
     }
-    stage("page_setup");
-    page = await operation(() => context!.newPage(), value => value.close());
     const setupPage = page;
     await operation(async () => {
       const page = setupPage;
