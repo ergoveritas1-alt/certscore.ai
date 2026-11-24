@@ -104,7 +104,7 @@ import {
 import { readFile, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { connect as tlsConnect } from "node:tls";
-import { chromium, type Browser, type BrowserContext, type CDPSession, type Frame, type Page, type Request, type Response, type Route } from "playwright";
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type CDPSession, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import { consentGeometryProofCdpBudget, consentProminenceSettleBudgetMs } from "../consent-geometry-proof-budget.js";
 import { isPairedConsentGeometryReady } from "../consent-paired-geometry-readiness.js";
@@ -298,6 +298,7 @@ export interface PreConsentRuntimeScannerInput {
   gpcComparisonMinDurationMs?: 5000 | 15000;
   localGpcAdaptiveParticipant?: import("../local-gpc-adaptive.js").LocalGpcAdaptiveParticipant;
   browser?: Browser;
+  openBrowserContext?: (options: BrowserContextOptions, signal?: AbortSignal) => Promise<BrowserContext>;
   browserMode?: "headless" | "headed";
   stubHeavyResources?: boolean;
   routeFulfillers?: FixtureRouteFulfiller[];
@@ -342,9 +343,10 @@ export interface PreConsentRuntimeScannerInput {
 async function createPassiveBrowserContext(
   browser: Browser,
   globalPrivacyControlEnabled: boolean,
+  openContext = (options: BrowserContextOptions) => browser.newContext(options),
 ): Promise<BrowserContext> {
   const baseOptions = chromiumContextOptions();
-  const context = await browser.newContext({
+  const context = await openContext({
     ...baseOptions,
     ...(globalPrivacyControlEnabled
       ? {
@@ -776,6 +778,9 @@ export async function preConsentRuntimeScanner(
     const newContext = await createPassiveBrowserContext(
       browser,
       input.globalPrivacyControlEnabled === true,
+      input.openBrowserContext && (options => input.openBrowserContext!(options,
+        input.signal && input.softDeadlineSignal ? AbortSignal.any([input.signal, input.softDeadlineSignal])
+          : input.signal ?? input.softDeadlineSignal)),
     );
     const newPage = await newContext.newPage();
     return { newContext, newPage };

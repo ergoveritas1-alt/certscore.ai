@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext, CDPSession, Page } from "playwright";
+import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Page } from "playwright";
 import { installConsentActionDiscovery, type ConsentActionDiscovery } from "./consent-action-discovery";
 import { chromiumContextOptions } from "./playwright-runtime";
 import { installPostRefusalStorageWriteProbe } from "./post-refusal-storage-write-probe";
@@ -35,8 +35,9 @@ async function openConsentActionPage(
   needsPublicNetworkGuard: boolean,
   action?: ConsentAction,
   borrowedBrowser = false,
+  openContext: (options: BrowserContextOptions) => Promise<BrowserContext> = options => browser.newContext(options),
 ): Promise<PreparedConsentActionPage> {
-  const context = await browser.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false });
+  const context = await openContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false });
   try {
     await installWebBotAuthRoute(context);
     if (needsPublicNetworkGuard) await installPublicNetworkGuardRoute(context);
@@ -61,34 +62,54 @@ async function openConsentActionPage(
   }
 }
 
-/** One fresh context per exact action, created only after passive capture
- * releases all its contexts. Only setup is serialized; observations overlap. */
+/** Allocate distinct passive, Accept, and Reject contexts on one process.
+ * Eligibility stays in the caller. Only blank context setup is serialized. */
 export function shareConsentActionBrowser(ready: Promise<Browser>) {
-  const reserved = new Set<ConsentAction>();
+  const reserved = new Set<"passive" | ConsentAction>();
   const contexts = new Set<BrowserContext>();
   let setup: Promise<void> = Promise.resolve();
-  return {
-    async prepare(action: ConsentAction, needsPublicNetworkGuard: boolean, signal?: AbortSignal) {
+  async function prepareSlot<T>(
+    lane: "passive" | ConsentAction,
+    signal: AbortSignal | undefined,
+    open: (browser: Browser, newContext: (options: BrowserContextOptions) => Promise<BrowserContext>) => Promise<T>,
+  ) {
+    signal?.throwIfAborted();
+    if (reserved.has(lane)) throw new Error("Consent browser context already reserved.");
+    reserved.add(lane);
+    const prepared = setup.then(async () => {
+      const browser = await ready;
       signal?.throwIfAborted();
-      if (reserved.has(action)) throw new Error("Exact action browser context already reserved.");
-      reserved.add(action);
-      const prepared = setup.then(async () => {
-        const browser = await ready;
+      if (!browser.isConnected() || browser.contexts().some(context => !contexts.has(context))) {
+        throw new Error("Consent browser has an unowned context.");
+      }
+      let owned: BrowserContext | undefined;
+      try {
+        const result = await open(browser, async options => {
+          if (owned) throw new Error("Consent browser context already opened.");
+          owned = await browser.newContext(options);
+          contexts.add(owned);
+          return owned;
+        });
         signal?.throwIfAborted();
-        if (!browser.isConnected() || browser.contexts().some(context => !contexts.has(context))) {
-          throw new Error("Consent browser still has a passive or unowned context.");
-        }
-        const page = await openConsentActionPage(browser, needsPublicNetworkGuard, action, true);
-        contexts.add(page.context);
-        if (signal?.aborted) {
-          await page.context.close().catch(() => undefined);
-          signal.throwIfAborted();
-        }
+        return result;
+      } catch (error) {
+        await owned?.close().catch(() => undefined);
+        throw error;
+      }
+    });
+    setup = prepared.then(() => undefined, () => undefined);
+    return prepared;
+  }
+  return {
+    openPassiveContext(options: BrowserContextOptions, signal?: AbortSignal) {
+      return prepareSlot("passive", signal, (_browser, openContext) => openContext(options));
+    },
+    prepare(action: ConsentAction, needsPublicNetworkGuard: boolean, signal?: AbortSignal) {
+      return prepareSlot(action, signal, async (browser, openContext) => {
+        const page = await openConsentActionPage(browser, needsPublicNetworkGuard, action, true, openContext);
         sharedActionPages.set(page, action);
         return page;
       });
-      setup = prepared.then(() => undefined, () => undefined);
-      return prepared;
     },
   };
 }

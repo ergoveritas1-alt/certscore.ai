@@ -58,7 +58,7 @@ import {
 import { isExplicitBlockingChallengeText } from "./consent-geometry-access.js";
 import { resolveCanonicalVendor, resolveVendorObservations } from "@certscore/vendor-resolver";
 import { isKnownCmpInfrastructureHost, type ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions } from "playwright";
 import { createArtifactWriter, type ArtifactWriter } from "./artifact-writer.js";
 import { withBoundedCookieInitiatorMetadata } from "./bounded-initiator-url.js";
 import {
@@ -293,6 +293,7 @@ export interface RunScanInput {
   browserReuseMode?: "per_module" | "single";
   /** Trusted consent-lane browser. The caller closes it after a clean context handoff. */
   borrowedConsentBrowser?: Browser;
+  openBorrowedConsentContext?: (options: BrowserContextOptions, signal?: AbortSignal) => Promise<BrowserContext>;
   /**
    * Isolates independently mergeable evidence work for Lambda fan-out. The
    * default preserves the existing single-process scan behavior.
@@ -498,9 +499,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const useSingleBrowser = input.browserReuseMode === "single" && (preConsentEnabled || policySurfaceEnabled);
   const borrowedConsentBrowser = input.borrowedConsentBrowser;
   if (borrowedConsentBrowser && (evidenceLane !== "consent_proof" || !preConsentEnabled ||
-      !borrowedConsentBrowser.isConnected() || borrowedConsentBrowser.contexts().length !== 0)) {
-    throw new Error("Passive consent requires a connected browser with no open context.");
+      !borrowedConsentBrowser.isConnected() || !input.openBorrowedConsentContext)) {
+    throw new Error("Passive consent requires a connected browser and a reserved context factory.");
   }
+  let passiveContext: BrowserContext | undefined;
   let sharedBrowser = borrowedConsentBrowser;
   const policySurfaceAbortController = new AbortController();
   if (useSingleBrowser && !sharedBrowser) {
@@ -623,6 +625,12 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           scenario: evidenceLane === "gpc_observation" ? "gpc" : "pre_consent", startedAt,
         } : undefined,
         browser: sharedBrowser,
+        ...(borrowedConsentBrowser ? {
+          openBrowserContext: async (options: BrowserContextOptions, signal?: AbortSignal) => {
+            passiveContext = await input.openBorrowedConsentContext!(options, signal);
+            return passiveContext;
+          },
+        } : {}),
         stubHeavyResources: input.captureReplay,
         screenshotCaptureMode: "viewport_first",
         localRuntimeViewportEnabled: input.localRuntimeViewportEnabled === true && input.preConsentScreenshotMode !== "never",
@@ -1554,9 +1562,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       new Error("Policy-surface work canceled because the scan core is closing."),
     );
     if (borrowedConsentBrowser) {
-      // The entire passive visit must be retired before emitting a proof when
-      // its Chromium process is retained for a separately isolated action.
-      await Promise.all(borrowedConsentBrowser.contexts().map(context => context.close()));
+      await passiveContext?.close();
     } else if (sharedBrowser) {
       await phaseRecorder.record("shared_browser_close", "started");
       await sharedBrowser.close().catch(() => undefined);

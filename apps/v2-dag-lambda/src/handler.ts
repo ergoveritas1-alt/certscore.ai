@@ -1395,7 +1395,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     artifactSignal?: AbortSignal;
     allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
-    borrowedConsentBrowser?: Promise<Browser>;
+    borrowedConsentBrowser?: InlineConsentBrowser;
     externalBaselinePlanning?: "enrich" | "reuse_only";
     forceAllowedScenarioPlanning?: boolean;
     onScanCoreComplete?: () => void;
@@ -1505,7 +1505,7 @@ async function runLocalV2DagLambdaScanBundle(
     localPolicyNanoAssistProvider?: RunScanInput["localPolicyNanoAssistProvider"];
     allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
-    borrowedConsentBrowser?: Promise<Browser>;
+    borrowedConsentBrowser?: InlineConsentBrowser;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
     onRuntimePreviewComplete?: RunScanInput["onPreConsentRuntimePreview"];
@@ -1538,11 +1538,12 @@ async function runLocalV2DagLambdaScanBundle(
     try {
       const { runScan } = await import("@certscore/scan-core");
       if (localGpcAdaptiveEnabled(payload) && !options.localGpcAdaptiveParticipant) throw new Error("Adaptive local comparison requires the paired simulator.");
-      const borrowedConsentBrowser = await options.borrowedConsentBrowser;
+      const borrowedConsentBrowser = await options.borrowedConsentBrowser?.browser;
       options.signal?.throwIfAborted();
       const bundle = await runScan({
         scanId: payload.scanId,
         borrowedConsentBrowser,
+        openBorrowedConsentContext: options.borrowedConsentBrowser?.pages.openPassiveContext,
         localPolicyNanoAssistProvider: options.localPolicyNanoAssistProvider,
         resourceInventoryCrawl: payload.resourceInventoryCrawl,
         resourceInventoryDiscovery: payload.resourceInventoryDiscovery,
@@ -3310,7 +3311,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           parentPayload: payload,
           parentScanId: payload.scanId,
           signal: postAcceptWorkerSignal,
-          ...(proof ? {acceptFirstLayerProof:proof, inlineConsentBrowser:options.inlineConsentBrowser} : {}),
+          ...(proof ? {acceptFirstLayerProof:proof} : {}),
+          inlineConsentBrowser: options.inlineConsentBrowser,
           workerLane: "accept_observation",
         });
       })
@@ -4441,9 +4443,12 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const onConsentReady = isCloudConsentHandoffPayload(workerPayload) ? input.onConsentEvidenceReady : undefined;
   const onRejectReady = workerLane === "reject_observation" && workerPayload.targetEnvironment === "production" &&
     input.rejectFirstLayerProof && !input.rejectPreparationId ? input.onRejectPacketReady : undefined;
-  const inlineAccept = workerLane === "accept_observation" && input.acceptFirstLayerProof &&
-    productionConsentGateEnforced(workerPayload, "accept");
-  if (input.inlineConsentBrowser && (onConsentReady || onRejectReady || inlineAccept)) {
+  const inlineAction = workerLane === "accept_observation"
+    ? isPostAcceptWorkerEnabled(workerPayload) &&
+      (!productionConsentGateEnforced(workerPayload, "accept") || Boolean(input.acceptFirstLayerProof))
+    : workerLane === "reject_observation" && !input.rejectPreparationId && isPostRefusalRejectWorkerEnabled(workerPayload) &&
+      (!productionConsentGateEnforced(workerPayload, "reject") || Boolean(input.rejectFirstLayerProof));
+  if (input.inlineConsentBrowser && (workerLane === "consent_proof" || inlineAction)) {
     const inline = input.inlineConsentBrowser;
     // Retain the same worker parser, network validation, scan deadlines, and
     // original evidence checks. Only the physical invocation is shared.
@@ -7305,17 +7310,20 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       )) {
         proof = reject;
       }
-      if (proof) {
-        // Setup can finish while validating the target. Only the observer can
-        // navigate, after the normal target checks and exact proof validation.
-        const authorization = accept ? payload.postAcceptObservation?.interactionAuthorization
+      const action = payload.workerLane === "accept_observation" && isPostAcceptWorkerEnabled(payload) ? "accept"
+        : payload.workerLane === "reject_observation" && isPostRefusalRejectWorkerEnabled(payload) ? "reject" : undefined;
+      const legacySharedAction = options.inlineConsentBrowser && action !== undefined &&
+        !productionConsentGateEnforced(payload, action);
+      if (action && (proof || legacySharedAction)) {
+        // Blank context setup can overlap URL validation. The worker still
+        // follows the configured eligibility policy and its existing checks.
+        const authorization = action === "accept" ? payload.postAcceptObservation?.interactionAuthorization
           : payload.postRefusalObservation?.interactionAuthorization;
-        const action = accept ? "accept" : "reject";
         const needsNetworkGuard = authorization?.kind === "scan_target_resolution";
         const borrowed = options.inlineConsentBrowser;
         earlyActionPage = borrowed
           ? borrowed.pages.prepare(action, needsNetworkGuard, options.callerSignal)
-          : startBlankExactActionBrowser(Math.max(1, proof.expiresAtMs - Date.now())).then(async browser => {
+          : startBlankExactActionBrowser(Math.max(1, proof!.expiresAtMs - Date.now())).then(async browser => {
             try {
               options.callerSignal?.throwIfAborted();
               return await prepareConsentActionPage(browser, needsNetworkGuard, action);
@@ -7361,10 +7369,10 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     }
     if (!options.runArtifactChain && !options.lambdaClient &&
         payload.orchestrationMode === "sharded" && payload.targetEnvironment === "production" &&
-        isAwsLambdaRuntime() && isPostRefusalRejectWorkerEnabled(payload) &&
-        productionConsentGateEnforced(payload, "reject") && !rejectPreparationCanaryEnabled(payload)) {
-      // The passive lane would launch Chromium anyway. Start that same process
-      // here so Reject can use a clean context without a second cold launch.
+        isAwsLambdaRuntime() && (isPostRefusalRejectWorkerEnabled(payload) || isPostAcceptWorkerEnabled(payload)) &&
+        !rejectPreparationCanaryEnabled(payload)) {
+      // The passive lane would launch Chromium anyway. Each enabled action
+      // keeps its own context, dispatch delay and eligibility policy.
       const browser = startBlankExactActionBrowser(LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS);
       void browser.catch(() => undefined);
       ownedConsentBrowser = {
@@ -7419,7 +7427,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         : runLocalV2DagLambdaArtifactChain(dispatchPayload, {
             localGpcAdaptiveParticipant: localGpcAdaptiveEnabled(dispatchPayload) ? options.localGpcAdaptiveParticipant : undefined,
             ...runOptions,
-            borrowedConsentBrowser: dispatchPayload.workerLane === "consent_proof" ? options.inlineConsentBrowser?.browser : undefined,
+            borrowedConsentBrowser: dispatchPayload.workerLane === "consent_proof" ? options.inlineConsentBrowser : undefined,
             onConsentEvidenceReady: options.onConsentEvidenceReady && isCloudConsentHandoffPayload(dispatchPayload)
               ? options.onConsentEvidenceReady : undefined,
             s3Client: options.s3Client,
