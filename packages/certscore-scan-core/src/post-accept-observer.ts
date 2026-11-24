@@ -228,6 +228,12 @@ export interface PostAcceptObserverInput {
   /** Local coordinator proof for the fail-closed pre-click prototype. */
   firstLayerProof?: AcceptFirstLayerProof;
   onAcceptGateFinalRecheck?: (outcome: "passed" | "failed") => void;
+  /** Completed trusted input on the original exact control, independent of follow-up. */
+  onExactAcceptClickCompleted?: (event: {
+    control: ConsentActionControlProof;
+    dispatchedAtMs: number;
+    completedAtMs: number;
+  }) => void;
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
@@ -886,8 +892,39 @@ export async function runPostAcceptObserver(
       firstLayerProof.geometrySha256 && authorizedExactTargetUrl &&
       firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
       ? cookieScriptAcceptRecipe() : undefined;
-    const exactActionDeadline = exactCookieScriptRecipe ? firstLayerProof!.expiresAtMs : Infinity;
+    const cookieInformationSelector = firstLayerProof?.exactSelector;
+    const exactCookieInformation = cookieInformationSelector && /^#[a-zA-Z][a-zA-Z0-9_-]{0,127}$/.test(cookieInformationSelector) &&
+      firstLayerProof?.geometrySha256 && authorizedExactTargetUrl &&
+      firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
+      acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
+      ? recipes.find(recipe => recipe.cmpId === "Cookie Information" && isRegisteredLoadingConsentRecipe(recipe, "accept"))
+      : undefined;
+    const exactActionDeadline = exactCookieScriptRecipe || exactCookieInformation ? firstLayerProof!.expiresAtMs : Infinity;
     const searchDeadline = Math.min(resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs), exactActionDeadline);
+    let readyCookieInformationControl: Locator | undefined;
+    const probeExactCookieInformation = async (sliceMs:number, signal:AbortSignal, waitForVisible=false) => {
+      if (!exactCookieInformation || !cookieInformationSelector || !page) return undefined;
+      const deadlineAtMs = Math.min(Date.now()+sliceMs,searchDeadline,resultBudgetDeadlineAtMs ?? Infinity);
+      const scope = page;
+      const selector = `#coiOverlay #coi-banner-wrapper ${cookieInformationSelector}`;
+      const control = scope.locator(selector).and(scope.locator(exactCookieInformation.controlSelector));
+      if (waitForVisible && !await readWithinAcceptDeadline(() => control.waitFor({
+        state:"visible",timeout:Math.max(1,deadlineAtMs-Date.now()),
+      }).then(()=>true,()=>false),false,deadlineAtMs,signal)) return undefined;
+      const owned = await readWithinAcceptDeadline(() => scope.evaluate(({selector, unique}) => {
+        const native = document.querySelector(selector);
+        const api = (window as Window & { CookieInformation?: {getConsentGivenFor?:unknown} }).CookieInformation;
+        return native instanceof HTMLButtonElement && native.getRootNode() === document &&
+          document.querySelectorAll("#coiOverlay").length === 1 &&
+          document.querySelectorAll(unique).length === 1 && typeof api?.getConsentGivenFor === "function";
+      },{selector,unique:cookieInformationSelector}).catch(()=>false),false,deadlineAtMs,signal);
+      if (!owned) return undefined;
+      const readiness = await inspectLocatorConsentReadiness(control,{deadlineAtMs,signal,scope});
+      if (signal.aborted || Date.now()>=deadlineAtMs || !readiness.scopeInteractive ||
+          !locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) return undefined;
+      readyCookieInformationControl = control;
+      return {status:"found" as const,recipe:exactCookieInformation,control,scope};
+    };
     deferredPrimingController = new AbortController();
     // Optional loader priming must never serialize ordinary control discovery.
     // Abort its pending read before leaving resolution so it cannot move the
@@ -920,6 +957,8 @@ export async function runPostAcceptObserver(
       return actionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
       await waitForConsentDocumentOrNamedControl<AcceptRecipeResolution>({page:page!,deadlineAtMs:searchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
         probe:async (sliceMs,probeSignal)=>{
+          const exact = await probeExactCookieInformation(sliceMs,probeSignal);
+          if (exact) return exact;
           const active=await resolveActiveRuntimeRecipes(page!,recipes,actionDiscovery);
           if(active.length!==1 || !isRegisteredLoadingConsentRecipe(active[0]!,"accept"))return undefined;
           const candidate=await waitForDeterministicRecipe(page!,active,sliceMs,probeSignal,actionDiscovery,recordResolverSnapshot);
@@ -931,7 +970,9 @@ export async function runPostAcceptObserver(
     if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot({ source: "named_recipe", state: documentReady ? "binding_budget_exhausted" : "document_loading",
       selectorMatchCount: 0, visibleCount: 0, enabledCount: 0, labelMatchCount: 0, actionableCount: 0, cmpIds: [], controlLabels: [] });
     const searchRemaining = () => actionSearchTimeoutMs === 0 ? 0 : Math.max(1, searchDeadline - Date.now());
-    let resolution: AcceptRecipeResolution = await readWithinAcceptDeadline<AcceptRecipeResolution>(async () => readiness.resolution ?? ((!documentReady || searchEnded)
+    const exactResolution = !readiness.resolution && documentReady && !searchEnded && actionSearchTimeoutMs > 0
+      ? await probeExactCookieInformation(250,effectiveSignal,true) : undefined;
+    let resolution: AcceptRecipeResolution = await readWithinAcceptDeadline<AcceptRecipeResolution>(async () => readiness.resolution ?? exactResolution ?? ((!documentReady || searchEnded)
       ? { status: effectiveSignal?.aborted ? "aborted" : "not_found" }
       : input.allowCanonicalAcceptDiscovery
       ? await waitForDeterministicOrCanonicalAcceptRecipe(
@@ -1038,7 +1079,7 @@ export async function runPostAcceptObserver(
       signal: effectiveSignal, scope: confirmationScope,
     });
     try {
-      if (!exactCookieScriptRecipe) await trialAcceptControl(page, control, selectedRecipe);
+      if (!exactCookieScriptRecipe && control !== readyCookieInformationControl) await trialAcceptControl(page, control, selectedRecipe);
     } catch (error) {
       actionabilityError = error;
     }
@@ -1398,6 +1439,12 @@ export async function runPostAcceptObserver(
     } finally {
       page.off("framenavigated", watchActionDocument);
     }
+    if (firstLayerProof?.exactSelector && actionDispatched && !clickError) {
+      try {
+        input.onExactAcceptClickCompleted?.({ control: proofResolution.proof,
+          dispatchedAtMs: actionDispatchedAtEpochMs, completedAtMs: Date.now() });
+      } catch { limitations.push("lifecycle_listener_failed"); }
+    }
     if (actionDispatched) {
       try { input.onActionDispatchCommitted?.({type: "action_dispatched", atMs: actionDispatchedAtMs}); }
       catch { limitations.push("lifecycle_listener_failed"); }
@@ -1405,6 +1452,9 @@ export async function runPostAcceptObserver(
     if (!actionDispatched) {
       const cancelledBeforeInput = cancellation();
       limitations.push("accept_dispatch_guard_failed");
+      if (firstLayerProof && Date.now() >= firstLayerProof.expiresAtMs) {
+        limitations.push("accept_first_layer_proof_expired_before_dispatch");
+      }
       return await finalize({resolverFound: true, resolverReason: "dispatch_guard_failed_before_action",
         registration: unconfirmedRegistration(cancelledBeforeInput ? "aborted" : "not_attempted",
           cancelledBeforeInput ? "abort_requested_before_action" : "dispatch_guard_failed_before_action"),

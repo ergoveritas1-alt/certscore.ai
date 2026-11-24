@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium, type CDPSession } from "playwright";
-import { bindAccessibilityNodesToDom, AX_DOM_BINDING_MAX_NODES } from "./consent-accessibility-dom-binding.js";
+import { bindAccessibilityNodesToDom, passiveButtonSelectorMatches, AX_DOM_BINDING_MAX_NODES } from "./consent-accessibility-dom-binding.js";
 import { consentControlsFromAccessibilityTree, filterAccessibilityTreeToFirstLayer, type ConsentAccessibilityTreeNode } from "./scanners/pre-consent-runtime-scanner.js";
 import {buildConsentUiObservationFromEvidence,mergeConsentUiObservations} from "./scanners/pre-consent-runtime-scanner.js";
 import {consentUiObservationSchema} from "@certscore/contracts";
@@ -99,20 +99,42 @@ test("native binding is optional, capped, and ignores late, duplicate or unverif
   assert.equal(partial[1]!.domBinding, undefined);
 });
 
-test("real AX controls retain their actual native tags and source identities", async () => {
-  const browser = await chromium.launch({headless: true});
+test("local Chromium verifies only unique same-document native button IDs against the original AX nodes", async t => {
+  const flag = "CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW";
+  const previous = process.env[flag];
+  process.env[flag] = "1";
+  t.after(() => {
+    if (previous === undefined) delete process.env[flag];
+    else process.env[flag] = previous;
+  });
+  const browser = await chromium.launch({headless: true, args:["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
   try {
     const page = await browser.newPage();
-    await page.route(document.url, route => route.fulfill({contentType: "text/html", body:
-      '<section role="dialog" aria-label="We use cookies. Choose your preferences"><button>Accept all</button><button>Reject optional cookies</button></section>'}));
+    await page.route("**/*", route => route.request().url() !== document.url ? route.abort() :
+      route.fulfill({contentType: "text/html", body:
+      '<section role="dialog" aria-label="We use cookies. Choose your preferences"><button id="acceptAll">Accept all</button><button id="rejectAll">Reject optional cookies</button></section>'}));
     await page.goto(document.url);
     const client = await page.context().newCDPSession(page);
+    const loader = (await client.send("Page.getFrameTree")).frameTree.frame.loaderId;
+    const capture = {url: document.url, identity:{source: "cdp_loader_id" as const, token: loader}};
     const tree = await client.send("Accessibility.getFullAXTree");
     const visible = await filterAccessibilityTreeToFirstLayer(client, tree.nodes, page.viewportSize());
-    const bound = await bindAccessibilityNodesToDom(client, visible, document);
+    const bound = await bindAccessibilityNodesToDom(client, visible, capture);
     const controls = consentControlsFromAccessibilityTree(bound, document.url).controls;
     assert.equal(controls.length, 2);
     assert.ok(controls.every(c => c.tagName === "button" && c.selectorHint === `ax:${c.domBinding!.axNodeId}`));
+    for (const [action, selector] of [["accept","#acceptAll"],["reject","#rejectAll"]] as const) {
+      const control = controls.find(c => c.domBinding?.verifiedButtonSelector === selector);
+      assert.ok(control, selector);
+      assert.equal(control.domBinding?.version, "ax_backend_dom_binding.v5");
+      assert.ok(passiveButtonSelectorMatches(control, selector, action, document.url, loader));
+      assert.ok(!passiveButtonSelectorMatches(control, selector, action, document.url, "changed-loader"));
+      assert.ok(!passiveButtonSelectorMatches(control, selector, action, document.url + "other", loader));
+      assert.ok(!passiveButtonSelectorMatches(control, "#other", action, document.url, loader));
+    }
+    await page.locator("#acceptAll").evaluate(button => button.after(button.cloneNode(true)));
+    const duplicate = await bindAccessibilityNodesToDom(client, visible, capture);
+    assert.ok(duplicate.every(entry => entry.domBinding?.verifiedButtonSelector !== "#acceptAll"));
     await client.detach();
   } finally { await browser.close(); }
 });

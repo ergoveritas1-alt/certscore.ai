@@ -1,3 +1,4 @@
+import { exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled } from "./exact-native-consent-button-selector.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import type { CDPSession } from "playwright";
 import { consentAccessibilityDomBindingSchema, boundOptOutControlFromAttributes, type BrowserDocumentIdentity, type ConsentAccessibilityDomBinding } from "@certscore/contracts";
@@ -24,28 +25,33 @@ export async function bindAccessibilityNodesToDom(client: CDPSession, nodes: Con
   const bindings = new Map<string, ConsentAccessibilityDomBinding>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let rootRead: Promise<number> | undefined;
+  let nativeLookups = 0;
+  const exactNativeCapture = exactAcceptSelectorCaptureEnabled() || exactRejectSelectorCaptureEnabled();
   async function verifiedButton(node: {localName: string; attributes?: string[]; backendNodeId: number}) {
     if (!node.attributes) return;
     const index = node.attributes.findIndex((name, i) => i % 2 === 0 && name === "id");
     const id = index >= 0 ? node.attributes[index + 1] : undefined;
     const cookieScript = node.localName === "div" && (id === "cookiescript_accept" || id === "cookiescript_reject");
-    if (!cookieScript) return;
-    const selector = id === "cookiescript_accept" ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : COOKIE_SCRIPT_REJECT_ROLE_SELECTOR;
+    const native = exactNativeCapture && node.localName === "button" && typeof id === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(id);
+    if (!cookieScript && (!native || nativeLookups >= 2)) return;
+    if (native) nativeLookups++;
+    const selector = cookieScript
+      ? id === "cookiescript_accept" ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : COOKIE_SCRIPT_REJECT_ROLE_SELECTOR
+      : `#${id}`;
     rootRead ??= client.send("DOM.getDocument", {depth: 0, pierce: false}).then(response => response.root.nodeId);
     const root = await rootRead;
     if (Date.now() >= deadline) return;
     const [matched, ids] = await Promise.all([
       client.send("DOM.querySelectorAll", {nodeId: root, selector}),
-      client.send("DOM.querySelectorAll", {nodeId: root,
-        selector: id === "cookiescript_accept" ? COOKIE_SCRIPT_ACCEPT_IDS : COOKIE_SCRIPT_REJECT_IDS}),
+      cookieScript ? client.send("DOM.querySelectorAll", {nodeId: root,
+        selector: id === "cookiescript_accept" ? COOKIE_SCRIPT_ACCEPT_IDS : COOKIE_SCRIPT_REJECT_IDS}) : undefined,
     ]);
     const {nodeIds} = matched;
-    if (nodeIds.length !== 1 || ids.nodeIds.length !== 2 || Date.now() >= deadline) return;
+    if (nodeIds.length !== 1 || (cookieScript && ids?.nodeIds.length !== 2) || Date.now() >= deadline) return;
     const match = await client.send("DOM.describeNode", {nodeId: nodeIds[0]!, depth: 0});
     if (Date.now() > deadline || match.node.backendNodeId !== node.backendNodeId) return;
-    return {version:"ax_backend_dom_binding.v4" as const,
-      verifiedButtonSelector:id === "cookiescript_accept" ? "#cookiescript_accept" as const : "#cookiescript_reject" as const};
-
+    return cookieScript ? { version:"ax_backend_dom_binding.v4" as const, verifiedButtonSelector: `#${id}` } :
+      { version:"ax_backend_dom_binding.v5" as const, verifiedButtonSelector: selector };
   }
   try {
     await Promise.race([
@@ -79,7 +85,9 @@ export function passiveButtonSelectorMatches(control: {
 }, selector: string, action: "accept" | "reject", documentUrl: string, loader: string): boolean {
   const binding = control.domBinding;
   if (!binding) return control.selectorHint === selector;
-  const expected = binding.version === "ax_backend_dom_binding.v4" && control.tagName === "div" && binding.tagName === "div"
+  const expected = binding.version === "ax_backend_dom_binding.v5" && control.tagName === "button" && binding.tagName === "button"
+    ? binding.verifiedButtonSelector
+    : binding.version === "ax_backend_dom_binding.v4" && control.tagName === "div" && binding.tagName === "div"
     ? (action === "accept" ? "#cookiescript_accept" : "#cookiescript_reject")
     : undefined;
   return selector === expected &&

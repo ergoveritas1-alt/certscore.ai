@@ -235,7 +235,7 @@ export function deriveAcceptFirstLayerProof(input: {
   }
   const nativeAccept = input.geometry && exactGeometryAccept(input.geometry, bundle, committedDocument, input.requireExactSelector === true);
   const matches: Array<{ document: string; label: string; selector?: string; passiveSelector?: string;
-    labelSource?: "aria_label"; scopedLabelConflict?: true }> = [];
+    labelSource?: "aria_label"; scopedLabelConflict?: true; backendNodeId?: number }> = [];
   let missing: AcceptGateBlockReason = "no_first_layer_accept";
   for (const observation of bundle.consentUiObservations) {
     if (observation.controls.length > MAX_CONTROLS) return block("passive_capture_incomplete");
@@ -267,6 +267,7 @@ export function deriveAcceptFirstLayerProof(input: {
 
     if (!observation.acceptControlObserved) continue;
 
+    const previouslyMatched = matches.length;
     for (const control of observation.controls) {
       if (control.actionType !== "accept_all" || !control.visible) continue;
       const direct = !scopedLabelConflict && control.layer === "first_layer" && control.consentContextEvidence === "local_surface";
@@ -277,12 +278,10 @@ export function deriveAcceptFirstLayerProof(input: {
         (control.label === nativeAccept.label || control.label === nativeAccept.sourceLabel) &&
         (!nativeAccept.cookieScriptRole || control.role === "button") &&
         control.tagName === nativeAccept.tagName &&
-        (nativeAccept.cookieScriptRole
-          ? passiveButtonSelectorMatches(control, nativeAccept.inventorySelector, "accept", committedDocument.url, documentToken)
-          : control.selectorHint === nativeAccept.inventorySelector && (!input.requireExactSelector || !control.domBinding));
+        passiveButtonSelectorMatches(control, nativeAccept.inventorySelector, "accept", committedDocument.url, documentToken);
       if ((!direct || input.requireExactSelector) && !handoff) {
         missing = "control_binding_unverified";
-        if (control.layer === "first_layer") return block(missing);
+        if (control.layer === "first_layer" || (input.requireExactSelector && control.layer === undefined)) return block(missing);
         continue;
       }
       if (!isConsentControlInteractionEligible(control) ||
@@ -290,15 +289,22 @@ export function deriveAcceptFirstLayerProof(input: {
         (control.domBinding && (targetHash(control.domBinding.documentUrl) !== document ||
           control.domBinding.documentIdentity.token !== observation.documentIdentity.token))) return block("control_binding_unverified");
       if (!isActionableAcceptLabel(control.label)) return block("control_binding_unverified");
+      if (matches.length !== previouslyMatched) return block("control_ambiguous");
       matches.push(handoff
-        ? { document, label: hash(nativeAccept.label), selector: hash(nativeAccept.selector), labelSource: nativeAccept.labelSource,
+        ? { document, label: hash(nativeAccept.label), selector: hash(nativeAccept.selector), labelSource: nativeAccept.labelSource, backendNodeId: control.domBinding?.backendNodeId,
             ...(scopedLabelConflict ? { scopedLabelConflict: true } : {}) }
         : { document, label: labelHash(control.label), passiveSelector: control.selectorHint });
     }
   }
   if (!matches.length) return block(missing);
-  if (matches.length !== 1) return block("control_ambiguous");
   const match = matches[0]!;
+  // Repeated complete inventory observations can independently name the
+  // same exact element in the already verified geometry. Keep ambiguity
+  // for multiple controls in one observation and for conflicting bindings.
+  if (matches.length > 1 && (!match.selector || !matches.every(other =>
+    other.selector === match.selector && other.document === match.document &&
+    other.label === match.label && other.labelSource === match.labelSource &&
+    other.backendNodeId === match.backendNodeId && other.scopedLabelConflict === match.scopedLabelConflict))) return block("control_ambiguous");
   if (deadlineAtMs <= nowMs) return block("proof_expired");
   const proof = readAcceptFirstLayerProof({
     version: "certscore.accept-first-layer-proof.v1", scanId, sourceSha256, parentDispatchSha256,

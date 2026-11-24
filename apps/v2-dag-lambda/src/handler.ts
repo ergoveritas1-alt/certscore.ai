@@ -1,9 +1,18 @@
+import { readConsentEvidenceWorkerStream } from "./consent-evidence-stream.js";
+import { buildConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES, REJECT_CLICK_CHECKPOINT_MAX_BYTES,
+  verifyConsentClickCheckpoint, type VerifiedConsentClickCheckpoint } from "./reject-click-checkpoint.js";
 import { acceptFirstLayerProofMatches, readAcceptFirstLayerProof, type AcceptFirstLayerGeometrySource,
   type AcceptFirstLayerProof } from "@certscore/scan-core/accept-first-layer-gate";
 import { acceptGateProofDigest, readAcceptGateWorkerRecheck, type AcceptGateWorkerRecheck } from "@certscore/scan-core/accept-gate-shadow-receipt";
 import { readRejectFirstLayerProof, readRejectGateWorkerRecheck, rejectFirstLayerProofMatches,
   type RejectFirstLayerProof, type RejectGateWorkerRecheck } from "@certscore/scan-core/reject-gate-shadow-receipt";
-import { buildProductionConsentGateShadow, evaluateConsentGateShadow, type ProductionConsentGateShadowFields } from "./consent-gate-production-shadow.js";
+import { buildProductionConsentGateShadow, evaluateConsentGateShadow, evaluatePreparationGateRejectFirst,
+  type ProductionConsentGateShadowFields } from "./consent-gate-production-shadow.js";
+import { consentActionStage } from "./consent-action-stage.js";
+import { isRejectPreparationId, newRejectPreparationId, rejectPreparationCanaryEnabled, REJECT_PREPARATION_RELEASE_TIMEOUT_MS,
+  prepareRejectProofSender, takeRejectPreparationRelease, warmRejectPreparationClassifier, withPreparedRejectBrowser,
+  type RejectPreparationGate } from "./reject-preparation-canary.js";
+import type { Browser } from "playwright";
 import type { PostRefusalObserverInput } from "@certscore/scan-core/post-refusal-observer";
 import { retainRuntimeCmsMetadataSnapshot } from "@certscore/contracts";
 import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
@@ -27,7 +36,7 @@ import { actionWorkerCheckpoints, retainedActionStage } from "./action-worker-ch
 import { assertOriginalRuntimeVisitForReport, buildRuntimeVisitEligibilityDiagnostic, hasRepresentativeRuntimeEvidence } from "./runtime-representative-evidence.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
-import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
+import { InvokeCommand, InvokeWithResponseStreamCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
 import { createHash } from "node:crypto";
@@ -178,6 +187,8 @@ export type LocalV2DagLambdaDispatchPayload = {
   /** Verified same-scan proof is permitted on its matching action worker only. */
   acceptFirstLayerProof?: AcceptFirstLayerProof;
   rejectFirstLayerProof?: RejectFirstLayerProof;
+  /** Isolated browser preparation identifies a one-use, proof-bound release. */
+  rejectPreparationId?: string;
   /** Exact digest of the coordinator dispatch, propagated only to workers. */
   parentDispatchSha256?: string;
   saleSharingOptOut?: SaleSharingOptOutDispatch;
@@ -365,6 +376,9 @@ export function attachJoinedPostAcceptArtifactPointer<T extends {
     },
   } as T;
 }
+const CONSENT_GEOMETRY_FILE = "ConsentControlGeometryEvidence.json";
+const MAX_CONSENT_GEOMETRY_BYTES = 2 * 1024 * 1024;
+
 type LocalV2DagLambdaAuxiliaryArtifact = {
   fileName: string;
   sha256: string;
@@ -497,6 +511,7 @@ type LocalV2DagLambdaConsentActionRecipe = {
   }>;
 };
 type LocalV2DagLambdaShardResult = {
+  consentGeometry?: LocalV2DagLambdaAuxiliaryArtifact;
   acceptGateWorkerRecheck?: AcceptGateWorkerRecheck;
   rejectGateWorkerRecheck?: RejectGateWorkerRecheck;
   failureReason?: "gpc_worker_failed" | "gpc_artifact_unverifiable";
@@ -538,7 +553,7 @@ type S3GetClient = {
   send(command: GetObjectCommand, options?: { abortSignal?: AbortSignal }): Promise<GetObjectCommandOutput>;
 };
 
-function localV2DagLambdaS3Client(region: string): S3Client {
+function localV2DagLambdaS3Client(region: string, maxAttempts?: number): S3Client {
   const endpoint = compactString(process.env.S3_ENDPOINT);
   const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true" ||
     process.env.S3_FORCE_PATH_STYLE === "1";
@@ -549,6 +564,7 @@ function localV2DagLambdaS3Client(region: string): S3Client {
     ...(endpoint || forcePathStyle ? { forcePathStyle } : {}),
     ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
     region: compactString(process.env.S3_REGION) ?? region,
+    ...(maxAttempts === undefined ? {} : { maxAttempts }),
   });
 }
 
@@ -557,6 +573,7 @@ type LambdaInvokeClient = {
 };
 
 type ArtifactChainResult = {
+  consentGeometry?: LocalV2DagLambdaAuxiliaryArtifact;
   acceptGateWorkerRecheck?: AcceptGateWorkerRecheck;
   rejectGateWorkerRecheck?: RejectGateWorkerRecheck;
   artifactMetadata?: LocalV2DagLambdaResultMessage["artifactMetadata"];
@@ -577,6 +594,7 @@ type HandlerOptions = {
   lambdaClient?: LambdaInvokeClient;
   now?: () => Date;
   resultPublishTimeoutMs?: number;
+  onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady) => void;
   runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: {
     deadlineAtMs?: number;
     artifactSignal?: AbortSignal;
@@ -928,7 +946,15 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
         !productionConsentGateEnforced(payload,"reject")) throw new Error("reject_gate_proof_not_allowed");
     payload.rejectFirstLayerProof = proof;
   }
-  if (gatedActionDispatch && !payload.acceptFirstLayerProof && !payload.rejectFirstLayerProof) {
+  if (record.rejectPreparationId !== undefined) {
+    if (!gatedActionDispatch || !isRejectPreparationId(record.rejectPreparationId) || payload.rejectFirstLayerProof ||
+        payload.orchestrationMode !== "worker" || payload.workerLane !== "reject_observation" ||
+        !productionConsentGateEnforced(payload,"reject") || !rejectPreparationCanaryEnabled(payload)) {
+      throw new Error("reject_preparation_canary_not_authorized");
+    }
+    payload.rejectPreparationId = record.rejectPreparationId;
+  }
+  if (gatedActionDispatch && !payload.acceptFirstLayerProof && !payload.rejectFirstLayerProof && !payload.rejectPreparationId) {
     throw new Error("consent_gated_action_dispatch_requires_exact_proof");
   }
   return payload;
@@ -1351,6 +1377,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     externalBaselinePlanning?: "enrich" | "reuse_only";
     forceAllowedScenarioPlanning?: boolean;
     onScanCoreComplete?: () => void;
+    onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady) => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
     onRuntimePreviewComplete?: RunScanInput["onPreConsentRuntimePreview"];
     readBrowserPolicyLinks?: RunScanInput["readBrowserPolicyLinks"];
@@ -1430,6 +1457,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     s3Client: options.s3Client,
     scanTuning,
     screenshotSafetyReviewCoordinator,
+    onConsentEvidenceReady: options.onConsentEvidenceReady,
     signal: options.artifactSignal ?? options.signal
   });
   return artifacts;
@@ -1559,6 +1587,29 @@ async function runLocalV2DagLambdaScanBundle(
   });
 }
 
+export type LocalConsentEvidenceReady = {
+  scanId: string;
+  targetUrl: string;
+  parentDispatchSha256: string;
+  bundle: { uri: string; sha256: string; sizeBytes: number };
+  geometry: LocalV2DagLambdaAuxiliaryArtifact;
+};
+
+function isLocalConsentHandoffPayload(payload: LocalV2DagLambdaDispatchPayload) {
+  return payload.targetEnvironment === "local" && payload.workerLane === "consent_proof" &&
+    payload.orchestrationMode === "worker" && payload.resultPurpose === "synthetic_verification" &&
+    payload.artifactOnly && !payload.productionFindingIntegration &&
+    isLoopbackPostRefusalTarget(payload.targetUrl) &&
+    typeof payload.parentDispatchSha256 === "string" && /^[a-f0-9]{64}$/.test(payload.parentDispatchSha256);
+}
+
+function isCloudConsentHandoffPayload(payload: LocalV2DagLambdaDispatchPayload) {
+  return payload.targetEnvironment === "production" && payload.workerLane === "consent_proof" &&
+    payload.orchestrationMode === "worker" && productionConsentGateEnforced(payload,"reject") &&
+    !isLoopbackPostRefusalTarget(payload.targetUrl) &&
+    typeof payload.parentDispatchSha256 === "string" && /^[a-f0-9]{64}$/.test(payload.parentDispatchSha256);
+}
+
 export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   consentGateShadow?: ProductionConsentGateShadowFields;
   conditionalOptOutDecision?: ConditionalOptOutDecision;
@@ -1571,15 +1622,25 @@ export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   payload: LocalV2DagLambdaDispatchPayload;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   s3Client?: S3PutClient;
+  onLocalConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady) => void;
+  onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady) => void;
   scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
   screenshotSafetyReviewCoordinator?: HomepageScreenshotSafetyReviewCoordinator;
   signal?: AbortSignal;
 }): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
+  consentGeometry?: LocalV2DagLambdaAuxiliaryArtifact;
   artifactPointers: LocalV2DagLambdaArtifactPointers;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
 }> {
-  const { artifactRoot, payload, phaseTimings, scanTuning } = input;
+  const { artifactRoot, payload, phaseTimings, scanTuning, onLocalConsentEvidenceReady } = input;
+  if (onLocalConsentEvidenceReady && (!input.s3Client || !isLocalConsentHandoffPayload(payload))) {
+    throw new Error("Early consent evidence handoff requires an injected store and a loopback synthetic consent worker.");
+  }
+  if (input.onConsentEvidenceReady && !isCloudConsentHandoffPayload(payload)) {
+    throw new Error("Cloud consent handoff requires the production-enforced consent worker.");
+  }
+  const publishConsentEvidence = input.onConsentEvidenceReady ?? onLocalConsentEvidenceReady;
   const screenshotSafetyReviewCoordinator = input.screenshotSafetyReviewCoordinator ??
     createHomepageScreenshotSafetyReviewCoordinator({ artifactRoot, signal: input.signal });
   const bundle = await timeLambdaPhase(
@@ -1613,24 +1674,52 @@ export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     ...(joinedPostAcceptPacketUri ? { postAcceptPacketUri: joinedPostAcceptPacketUri } : {}),
     ...(joinedPostRefusalPacketUri ? { postRefusalPacketUri: joinedPostRefusalPacketUri } : {}),
   };
-  // Make the canonical evidence bundle durable before auxiliary uploads start.
-  // Large screenshot sets must not contend with or starve the core artifact.
-  const scanArtifactMetadata = await timeLambdaPhase(phaseTimings, "scan_artifact_upload", () => uploadArtifactFiles({
+  const geometryFile = publishConsentEvidence
+    ? await stat(path.join(artifactRoot, CONSENT_GEOMETRY_FILE)).catch(() => undefined)
+    : undefined;
+  const overlapGeometry = geometryFile?.isFile() && geometryFile.size > 0 && geometryFile.size <= MAX_CONSENT_GEOMETRY_BYTES;
+  const evidenceStore = input.s3Client ?? (overlapGeometry ? localV2DagLambdaS3Client(payload.awsRegion) : undefined);
+  const bundleUpload = timeLambdaPhase(phaseTimings, "scan_artifact_upload", () => uploadArtifactFiles({
     fields: ["scanArtifactUri"],
     manifestPath,
     payload,
     pointers,
     scanArtifactPath,
-    s3Client: input.s3Client,
-    signal: input.signal
+    s3Client: evidenceStore,
+    ...(overlapGeometry && !input.s3Client ? {maxAttempts: LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS} : {}),
+    signal: input.signal,
   }));
-  const auxiliaryArtifacts = await timeLambdaPhase(phaseTimings, "auxiliary_upload", () => uploadAuxiliaryArtifactFiles({
-    artifactRoot,
-    bundle,
-    payload,
-    s3Client: input.s3Client,
-    signal: input.signal
-  }));
+  const auxiliaryInput = { artifactRoot, bundle, payload, s3Client: evidenceStore, signal: input.signal,
+    ...(overlapGeometry && !input.s3Client ? {maxAttempts: LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS} : {}),
+  };
+  // The bounded geometry file can overlap the bundle in the localhost handoff.
+  // Screenshots and other auxiliary objects still wait for the bundle.
+  const geometryUpload = overlapGeometry
+    ? timeLambdaPhase(phaseTimings, "consent_geometry_upload", () =>
+      uploadAuxiliaryArtifactFiles({ ...auxiliaryInput, consentGeometry: "only" }))
+    : Promise.resolve([]);
+  const remainingUploads = bundleUpload.then(() => timeLambdaPhase(phaseTimings, "auxiliary_upload", () =>
+    uploadAuxiliaryArtifactFiles({
+      ...auxiliaryInput, ...(overlapGeometry ? { consentGeometry: "exclude" as const } : {}),
+    })));
+  const readiness = Promise.all([bundleUpload, geometryUpload]).then(([bundleMetadata, geometryArtifacts]) => {
+    const bundleReceipt = bundleMetadata.scanArtifactUri;
+    const geometry = readConsentGeometryDescriptor(geometryArtifacts[0]);
+    if (publishConsentEvidence && bundleReceipt && geometry && !input.signal?.aborted) {
+      publishConsentEvidence({
+        scanId: payload.scanId,
+        targetUrl: payload.targetUrl,
+        parentDispatchSha256: payload.parentDispatchSha256!,
+        bundle: { uri: corePointers.scanArtifactUri!, ...bundleReceipt },
+        geometry,
+      });
+    }
+    return { bundleMetadata, geometryArtifacts };
+  });
+  const [{ bundleMetadata: scanArtifactMetadata, geometryArtifacts }, remainingArtifacts] =
+    await Promise.all([readiness, remainingUploads]);
+  const auxiliaryArtifacts = [...geometryArtifacts, ...remainingArtifacts].sort((left, right) =>
+    left.fileName < right.fileName ? -1 : left.fileName > right.fileName ? 1 : 0);
   await timeLambdaPhase(phaseTimings, "manifest_write", () => writeManifest({ conditionalOptOutDecision: input.conditionalOptOutDecision,executedSaleSharingOptOut:input.executedSaleSharingOptOut,
     artifactRoot,
     auxiliaryArtifacts,
@@ -1676,6 +1765,9 @@ export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
         : {}),
     },
     artifactPointers: pointers,
+    ...(payload.workerLane === "consent_proof" ? {
+      consentGeometry: auxiliaryArtifacts.find(file => file.fileName === CONSENT_GEOMETRY_FILE),
+    } : {}),
     phaseTimings
   };
 }
@@ -2331,10 +2423,45 @@ function unsupportedPostRefusalPacket(input: {
   });
 }
 
+type ClickProofBinding = Parameters<typeof buildConsentClickCheckpoint>[0];
+type ExactClick = Parameters<NonNullable<PostRefusalObserverInput["onExactRejectClickCompleted"]>>[0];
+
+function consentClickCheckpointEnabled(action: ClickProofBinding["action"]) {
+  return process.env[action === "accept" ? "CERTSCORE_ACCEPT_CLICK_CHECKPOINT_ENABLED" :
+    "CERTSCORE_REJECT_CLICK_CHECKPOINT_ENABLED"] === "1";
+}
+
+function consentClickCheckpointSink(
+  payload: LocalV2DagLambdaDispatchPayload,
+  binding: ClickProofBinding,
+  options: { s3Client?: S3PutClient; signal?: AbortSignal },
+  readRecheck: () => { outcome: "passed" | "failed"; observedAtMs: number } | undefined,
+): ((click: ExactClick) => void) | undefined {
+  if (!consentClickCheckpointEnabled(binding.action)) return;
+  let started = false;
+  return ({ control, dispatchedAtMs, completedAtMs }) => {
+    const recheck = readRecheck();
+    if (started || recheck?.outcome !== "passed" || options.signal?.aborted) return;
+    const body = buildConsentClickCheckpoint(binding, control, {
+      recheckedAtMs: recheck.observedAtMs, dispatchedAtMs, completedAtMs,
+    });
+    if (!body) return;
+    started = true;
+    const timeout = AbortSignal.timeout(500);
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+    void (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion, 1)).send(new PutObjectCommand({
+      Bucket: requireArtifactBucket(), Key: `${artifactKeyPrefix(payload)}/${CONSENT_CLICK_CHECKPOINT_FILES[binding.action]}`,
+      Body: body, IfNoneMatch: "*", ContentType: "application/json",
+      Metadata: { sha256: createHash("sha256").update(body).digest("hex") },
+    }), { abortSignal: signal }).catch(() => undefined);
+  };
+}
+
 export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     artifactRoot: string;
+    prepared?: { browser: Browser; gate: RejectPreparationGate };
     s3Client?: S3PutClient;
     signal?: AbortSignal;
   },
@@ -2346,14 +2473,42 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     throw new Error(`Post-refusal worker requires ${POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG}=1.`);
   }
   const config = payload.postRefusalObservation;
+  const preparationId = payload.rejectPreparationId;
+  if (preparationId) {
+    if (!isRejectPreparationId(preparationId) || !rejectPreparationCanaryEnabled(payload) ||
+        !productionConsentGateEnforced(payload,"reject") || !payload.parentDispatchSha256 || payload.rejectFirstLayerProof) {
+      throw new Error("reject_preparation_canary_not_authorized");
+    }
+    const browserOptions = chromiumLaunchOptions({ headless: true });
+    const { chromium } = await import("playwright");
+    const binding = {scanId:payload.scanId,targetUrl:payload.targetUrl,
+      parentDispatchSha256:payload.parentDispatchSha256,preparationId};
+    return withPreparedRejectBrowser({
+      launch:() => chromium.launch({ ...browserOptions, timeout: 2_500,
+        args: [...(browserOptions.args ?? []), "--disable-background-networking"] }),
+      takeProof:signal => takeRejectPreparationRelease(binding, signal),
+      run: (browser, gate) => {
+        warmRejectPreparationClassifier();
+        return runLocalV2DagLambdaPostRefusalArtifactChain(
+          { ...payload, rejectPreparationId: undefined },
+          { ...options, prepared: { browser, gate } },
+        );
+      },
+      signal:options.signal,
+    });
+  }
   if (
     config.interactionAuthorization.kind === "loopback" && payload.targetEnvironment !== "local"
   ) {
     throw new Error("Loopback post-refusal authorization requires the local target environment.");
   }
-  const firstLayerProof = payload.rejectFirstLayerProof;
+  let firstLayerProof = payload.rejectFirstLayerProof;
   const enforce = productionConsentGateEnforced(payload,"reject");
-  if ((enforce || firstLayerProof) && (!enforce || !rejectFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,payload.parentDispatchSha256,Date.now()))) {
+  const prepared = options.prepared;
+  if (prepared && (!enforce || firstLayerProof || !payload.parentDispatchSha256 || !rejectPreparationCanaryEnabled(payload))) {
+    throw new Error("reject_preparation_canary_not_authorized");
+  }
+  if (!prepared && (enforce || firstLayerProof) && (!enforce || !rejectFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,payload.parentDispatchSha256,Date.now()))) {
     throw new Error("reject_gate_worker_proof_missing_invalid_or_expired");
   }
   let gateRecheck: {outcome:"passed" | "failed"; observedAtMs:number} | undefined;
@@ -2368,6 +2523,39 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
         confirmation: config.resolver.confirmation,
       })].flatMap((recipe) => recipe ? [recipe] : []);
   let trustArcSources: Parameters<NonNullable<PostRefusalObserverInput["onTrustArcResponseCapture"]>>[0] | undefined;
+  const beginArchive = (body: Buffer) => {
+    const sha256 = createHash("sha256").update(body).digest("hex");
+    const bucket = requireArtifactBucket();
+    const key = `${artifactKeyPrefix(payload).replace(/^\/+|\/+$/g, "")}/PostRefusalEvidencePacket.json`;
+    void checkpoint("packet_validated");
+    const uploaded = timeLambdaPhase(phaseTimings, "post_refusal_artifact_upload", async () => {
+      await checkpoint("artifact_upload_started");
+      await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({
+        Body: body,
+        Bucket: bucket,
+        ContentType: "application/json",
+        Key: key,
+        Metadata: { sha256 },
+      }), { abortSignal: options.signal });
+      await checkpoint("artifact_upload_completed");
+      if (trustArcSources) {
+        const trustArcSourceBody = Buffer.from(JSON.stringify(trustArcSources));
+        // Keep vendor source bodies in the private scanner archive only. The
+        // coordinator and report readers receive only the ordinary Reject packet.
+        const sourceKey = key.replace(/PostRefusalEvidencePacket\.json$/, "TrustArcResponseBodies.json");
+        try {
+          await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({
+            Body: trustArcSourceBody, Bucket: bucket, ContentType: "application/json", Key: sourceKey,
+            Metadata: { sha256: createHash("sha256").update(trustArcSourceBody).digest("hex"), "reject-packet-sha256": sha256 },
+          }), { abortSignal: options.signal });
+        } catch {
+          console.warn("[v2-lambda-post-refusal] TrustArc response archive upload failed", { scanId: payload.scanId });
+        }
+      }
+    });
+    return { body, bucket, key, sha256, uploaded };
+  };
+  let earlyArchive: ReturnType<typeof beginArchive> | undefined;
   const packet = await timeLambdaPhase(phaseTimings, "post_refusal_observation", async () => {
     const recipe = recipes[0];
     if (!recipe) {
@@ -2377,10 +2565,33 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
       });
     }
     const { runPostRefusalObserver } = await import("@certscore/scan-core/post-refusal-observer");
+    const clickSink = (proof: RejectFirstLayerProof) =>
+      consentClickCheckpointSink(payload, { action: "reject", proof }, options, () => gateRecheck);
+    let onExactRejectClickCompleted = firstLayerProof ? clickSink(firstLayerProof) : undefined;
     return runPostRefusalObserver({
-      ...(firstLayerProof ? {firstLayerProof, onRejectGateFinalRecheck: (outcome:"passed" | "failed") => {
-        gateRecheck = {outcome,observedAtMs:Date.now()};
-      }} : {}),
+      ...(firstLayerProof ? { firstLayerProof } : {}),
+      ...(prepared ? { browser: prepared.browser, preparedFirstLayer: {
+        parentDispatchSha256: payload.parentDispatchSha256!,
+        signal: prepared.gate.signal,
+        waitForProof: async () => {
+          const proof = await prepared.gate.waitForProof();
+          firstLayerProof = proof;
+          onExactRejectClickCompleted = clickSink(proof);
+          return proof;
+        },
+      } } : {}),
+      ...(enforce ? {
+        onRejectGateFinalRecheck: (outcome: "passed" | "failed") => {
+          gateRecheck = { outcome, observedAtMs: Date.now() };
+        },
+        onExactRejectClickCompleted: (click: Parameters<NonNullable<PostRefusalObserverInput["onExactRejectClickCompleted"]>>[0]) =>
+          onExactRejectClickCompleted?.(click),
+        onExactRejectPacketSealed: (sealed: PostRefusalEvidencePacket) => {
+          if (gateRecheck?.outcome !== "passed" || earlyArchive || options.signal?.aborted) return;
+          earlyArchive = beginArchive(Buffer.from(JSON.stringify(sealed)));
+          void earlyArchive.uploaded.catch(() => undefined);
+        },
+      } : {}),
       runtimeGraph: payload.runtimeGraph,
       onTrustArcResponseCapture: capture => { trustArcSources = capture; },
       onActionDispatchCommitted: () => { void checkpoint("action_dispatched"); },
@@ -2408,35 +2619,10 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     });
   });
   const body = Buffer.from(JSON.stringify(postRefusalEvidencePacketSchema.parse(packet)));
-  await checkpoint("packet_validated");
-  const sha256 = createHash("sha256").update(body).digest("hex");
-  const bucket = requireArtifactBucket();
-  const key = `${artifactKeyPrefix(payload).replace(/^\/+|\/+$/g, "")}/PostRefusalEvidencePacket.json`;
-  await timeLambdaPhase(phaseTimings, "post_refusal_artifact_upload", async () => {
-    await checkpoint("artifact_upload_started");
-    await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({
-      Body: body,
-      Bucket: bucket,
-      ContentType: "application/json",
-      Key: key,
-      Metadata: { sha256 },
-    }), { abortSignal: options.signal });
-    await checkpoint("artifact_upload_completed");
-    if (trustArcSources) {
-      const trustArcSourceBody = Buffer.from(JSON.stringify(trustArcSources));
-      // Keep vendor source bodies in the private scanner archive only. The
-      // coordinator and report readers receive only the ordinary Reject packet.
-      const sourceKey = key.replace(/PostRefusalEvidencePacket\.json$/, "TrustArcResponseBodies.json");
-      try {
-        await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({
-          Body: trustArcSourceBody, Bucket: bucket, ContentType: "application/json", Key: sourceKey,
-          Metadata: { sha256: createHash("sha256").update(trustArcSourceBody).digest("hex"), "reject-packet-sha256": sha256 },
-        }), { abortSignal: options.signal });
-      } catch {
-        console.warn("[v2-lambda-post-refusal] TrustArc response archive upload failed", { scanId: payload.scanId });
-      }
-    }
-  });
+  const archive = earlyArchive ?? beginArchive(body);
+  if (!archive.body.equals(body)) throw new Error("Reject packet changed after it was sealed.");
+  await archive.uploaded;
+  const { bucket, key, sha256 } = archive;
   const packetPointer = s3Uri(bucket, key);
   const descriptor = postRefusalLambdaEvidenceDescriptorSchema.parse({
     artifactOnly: true,
@@ -2515,6 +2701,10 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
       ...(firstLayerProof ? {firstLayerProof, onAcceptGateFinalRecheck: (outcome:"passed" | "failed") => {
         gateRecheck = {outcome,observedAtMs:Date.now()};
       }} : {}),
+      ...(enforce && firstLayerProof ? {
+        onExactAcceptClickCompleted: consentClickCheckpointSink(payload, { action: "accept", proof: firstLayerProof },
+          options, () => gateRecheck),
+      } : {}),
       onDiagnosticStage: stage => { void checkpoint.stage(stage); },
       formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
       runtimeGraph: payload.runtimeGraph,
@@ -2835,6 +3025,19 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     accept: isPostAcceptWorkerEnabled(payload) && productionConsentGateEnforced(payload,"accept"),
     reject: isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateEnforced(payload,"reject"),
   };
+  const usePreparedReject = enforced.reject && rejectPreparationCanaryEnabled(payload);
+  let finishRejectRelease: (() => void) | undefined;
+  const rejectReleaseSettled = usePreparedReject ? new Promise<void>(resolve => {
+    finishRejectRelease = resolve;
+  }) : undefined;
+  const sendRejectProof = usePreparedReject ? prepareRejectProofSender() : undefined;
+  if (usePreparedReject) setImmediate(() => {
+    if (!options.signal?.aborted) warmRejectPreparationClassifier();
+  });
+  let resolveRejectProof!: (value?: ReturnType<typeof evaluateConsentGateShadow>["reject"]) => void;
+  const rejectProofReady = new Promise<ReturnType<typeof evaluateConsentGateShadow>["reject"]>(resolve => {
+    resolveRejectProof = resolve;
+  });
   let resolveConsentProof!: (value?: ReturnType<typeof evaluateConsentGateShadow>) => void;
   const consentProofReady = new Promise<ReturnType<typeof evaluateConsentGateShadow> | undefined>(resolve => {
     resolveConsentProof = resolve;
@@ -2849,6 +3052,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     dispatchStartedAtMs?: number;
     error?: string;
     outcomeObservedAtMs?: number;
+    workerReturnedAtMs?: number;
     result?: LocalV2DagLambdaShardResult;
     settled: boolean;
     started: boolean;
@@ -2875,28 +3079,47 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       postRefusalWorkerSignal,
     )
       .then(async () => {
-        const decision = enforced.reject ? (await consentProofReady)?.reject : undefined;
+        const preparationId = usePreparedReject ? newRejectPreparationId() : undefined;
+        const prepared = preparationId ? invokeLocalV2DagLambdaWorker({
+          lambdaClient:options.lambdaClient, parentPayload:payload,parentScanId:payload.scanId,
+          signal:postRefusalWorkerSignal,rejectPreparationId:preparationId,workerLane:"reject_observation",
+        }) : undefined;
+        let preparationError: unknown;
+        void prepared?.catch(error => { preparationError = error; });
+        const decision = enforced.reject ? await rejectProofReady : undefined;
         const proof = decision?.outcome === "qualified" ? {...decision,scanId:payload.scanId} : undefined;
 
-        postRefusalWorkerSignal.throwIfAborted();
-        const nowMs = Date.now();
-        if (enforced.reject && (nowMs >= consentGateDispatchDeadlineMs.reject || !(rejectFirstLayerProofMatches(proof,payload.scanId,payload.targetUrl,consentParentSha256,nowMs)))) {
-          gateDeclines.reject = decision?.outcome === "blocked" ? decision.reason :
-            decision?.outcome === "qualified" ? "proof_expired" : "source_unavailable";
-          postRefusalState.error = gateDeclines.reject;
-          postRefusalState.outcomeObservedAtMs = nowMs;
-          postRefusalState.settled = true;
-          return undefined;
+        try {
+          postRefusalWorkerSignal.throwIfAborted();
+          const nowMs = Date.now();
+          if (enforced.reject && (nowMs >= consentGateDispatchDeadlineMs.reject || !(rejectFirstLayerProofMatches(proof,payload.scanId,payload.targetUrl,consentParentSha256,nowMs)))) {
+            gateDeclines.reject = decision?.outcome === "blocked" ? decision.reason :
+              decision?.outcome === "qualified" ? "proof_expired" : "source_unavailable";
+            postRefusalState.error = gateDeclines.reject;
+            postRefusalState.outcomeObservedAtMs = nowMs;
+            postRefusalState.settled = true;
+            return undefined;
+          }
+          if (preparationError) throw preparationError;
+          postRefusalState.dispatchStartedAtMs = nowMs;
+          if (preparationId && proof && prepared && sendRejectProof) {
+            await sendRejectProof({
+              scanId: payload.scanId, targetUrl: payload.targetUrl,
+              parentDispatchSha256: consentParentSha256, preparationId,
+            }, proof, postRefusalWorkerSignal);
+            return prepared;
+          }
+          return invokeLocalV2DagLambdaWorker({
+            lambdaClient: options.lambdaClient,
+            parentPayload: payload,
+            parentScanId: payload.scanId,
+            signal: postRefusalWorkerSignal,
+            ...(proof ? {rejectFirstLayerProof:proof} : {}),
+            workerLane: "reject_observation",
+          });
+        } finally {
+          finishRejectRelease?.();
         }
-        postRefusalState.dispatchStartedAtMs = nowMs;
-        return invokeLocalV2DagLambdaWorker({
-          lambdaClient: options.lambdaClient,
-          parentPayload: payload,
-          parentScanId: payload.scanId,
-          signal: postRefusalWorkerSignal,
-          ...(proof ? {rejectFirstLayerProof:proof} : {}),
-          workerLane: "reject_observation",
-        });
       })
       .then((result) => {
         if (!result) return;
@@ -2906,10 +3129,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         // decision, and never give it an independent publication path.
         if (postRefusalState.cancelledNoReject || postRefusalState.timedOut) return;
         postRefusalState.result = result;
-        postRefusalState.outcomeObservedAtMs = Date.now();
+        postRefusalState.workerReturnedAtMs = Date.now();
+        postRefusalState.outcomeObservedAtMs = postRefusalState.workerReturnedAtMs;
         postRefusalState.settled = true;
       })
       .catch((error) => {
+        finishRejectRelease?.();
         if (postRefusalState.timedOut || postRefusalState.cancelledNoReject) return;
         postRefusalState.error = error instanceof Error ? error.message : String(error);
         postRefusalState.outcomeObservedAtMs = Date.now();
@@ -2927,6 +3152,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     dispatchStartedAtMs?: number;
     error?: string;
     outcomeObservedAtMs?: number;
+    workerReturnedAtMs?: number;
     result?: LocalV2DagLambdaShardResult;
     settled: boolean;
     started: boolean;
@@ -2980,7 +3206,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         if (!result) return;
         if (postAcceptState.cancelledNoAccept || postAcceptState.timedOut) return;
         postAcceptState.result = result;
-        postAcceptState.outcomeObservedAtMs = Date.now();
+        postAcceptState.workerReturnedAtMs = Date.now();
+        postAcceptState.outcomeObservedAtMs = postAcceptState.workerReturnedAtMs;
         postAcceptState.settled = true;
       })
       .catch((error) => {
@@ -2998,6 +3225,38 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     accept: enforced.accept || isPostAcceptWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "accept"),
     reject: enforced.reject || isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "reject"),
   };
+  const useCloudConsentHandoff = enforced.reject && !options.lambdaClient;
+  let streamedConsent: { receipt: LocalConsentEvidenceReady; verified: ReturnType<typeof readConsentEvidenceReady> } | undefined;
+  let earlyReject: ReturnType<typeof evaluateConsentGateShadow>["reject"];
+  const receiveConsentEvidence = (receipt: LocalConsentEvidenceReady, expected: LocalV2DagLambdaDispatchPayload) => {
+    if (!receipt.bundle || !receipt.geometry) throw new Error("Consent worker early notice is incomplete.");
+    const verified = readConsentEvidenceReady({
+      receipt, expected, signal: options.signal,
+      s3GetClient: options.s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion,1),
+    }, true).then(evidence => {
+      if (!options.signal?.aborted) {
+        const decision = evaluateConsentGateShadow({
+          ...evidence, channels:{accept:false,reject:true}, scanId:expected.scanId,
+          targetUrl:expected.targetUrl, parentDispatchSha256:expected.parentDispatchSha256!,
+          nowMs:Date.now(), deadlineAtMs:options.deadlineAtMs ?? Infinity,
+        }).reject;
+        if (decision?.outcome === "qualified") {
+          earlyReject = decision;
+          resolveRejectProof(decision);
+          console.info(JSON.stringify({
+            event:"consent_evidence_ready.v1", scanId:expected.scanId,
+            issuedAtMs:decision.issuedAtMs, sourceSha256:decision.binding.sourceSha256,
+          }));
+        }
+      }
+      return evidence;
+    });
+    void verified.catch(() => undefined);
+    streamedConsent = { receipt, verified };
+  };
+  if (useCloudConsentHandoff && !usePreparedReject) setImmediate(() => {
+    if (!options.signal?.aborted) warmRejectPreparationClassifier();
+  });
   let shadowConsentResult: LocalV2DagLambdaShardResult | undefined;
   let earlyConsentMirror: ReturnType<typeof mirrorWorkerArtifactsIntoFinalArtifactRoot> | undefined;
   let shadowPassive: ReturnType<typeof evaluateConsentGateShadow> | undefined;
@@ -3009,28 +3268,69 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     const sourceSha256 = result.artifactMetadata?.scanArtifactUri?.sha256;
     if (result.parentDispatchSha256 !== parentDispatchSha256 || !sourceSha256) return;
     shadowConsentResult = result;
-    const read = earlyConsentReads.get(result) ?? readLocalV2DagLambdaWorkerBundle(result, {
+    const streamed = streamedConsent;
+    if (streamed && (result.artifactPointers?.scanArtifactUri !== streamed.receipt.bundle.uri ||
+        sourceSha256 !== streamed.receipt.bundle.sha256 ||
+        result.artifactMetadata?.scanArtifactUri?.sizeBytes !== streamed.receipt.bundle.sizeBytes ||
+        result.consentGeometry?.uri !== streamed.receipt.geometry.uri ||
+        result.consentGeometry.sha256 !== streamed.receipt.geometry.sha256 ||
+        result.consentGeometry.sizeBytes !== streamed.receipt.geometry.sizeBytes)) {
+      throw new Error("Consent worker terminal evidence changed after its early notice.");
+    }
+    const readBundle = () => readLocalV2DagLambdaWorkerBundle(result, {
       awsRegion:payload.awsRegion, s3GetClient:options.s3GetClient,
     });
+    const read = earlyConsentReads.get(result) ?? (streamed
+      ? streamed.verified.then(evidence => evidence.bundle, readBundle) : readBundle());
     earlyConsentReads.set(result, read);
+    let deliverGeometry!: (geometry?: AcceptFirstLayerGeometrySource) => void;
+    const geometryReady = new Promise<AcceptFirstLayerGeometrySource | undefined>(resolve => {
+      deliverGeometry = resolve;
+    });
+    const expectedConsentRoot = enforced.reject && result.consentGeometry
+      ? `${s3Uri(requireArtifactBucket(), artifactKeyPrefix(payload))}/lanes/consent_proof`
+      : undefined;
     earlyConsentMirror = mirrorWorkerArtifactsIntoFinalArtifactRoot({
       artifactRoot, awsRegion:payload.awsRegion, s3GetClient:options.s3GetClient,
-      workerResults:[result], shadowGeometry:{result,targetUrl:payload.targetUrl},
+      workerResults:[result],
+      shadowGeometry:{result,targetUrl:payload.targetUrl,onVerified:deliverGeometry,
+        ...(streamed ? { readGeometry: streamed.verified.then(evidence => evidence.geometry, () => undefined) } : {}),
+        ...(expectedConsentRoot ? { expectedConsentRoot } : {})},
     });
-    void Promise.all([read, earlyConsentMirror]).then(([bundle, geometry]) => {
-      if (bundle && !options.signal?.aborted) shadowPassive = evaluateConsentGateShadow({
+    // Artifact publication still waits for every mirror. Dispatch proof only
+    // needs the verified original bundle and its exact geometry bytes.
+    void earlyConsentMirror.then(deliverGeometry, () => deliverGeometry());
+    void Promise.all([read, geometryReady]).then(async ([bundle, geometry]) => {
+      if (!bundle || options.signal?.aborted) return;
+      const input = {
         channels:shadowChannels, bundle, scanId:payload.scanId, targetUrl:payload.targetUrl,
         sourceSha256, parentDispatchSha256, nowMs:Date.now(), deadlineAtMs:options.deadlineAtMs ?? Infinity, geometry,
-      });
+      };
+      shadowPassive = earlyReject?.outcome === "qualified" &&
+          geometry?.sha256 === earlyReject.binding.geometrySha256 && sourceSha256 === earlyReject.binding.sourceSha256
+        ? { ...evaluateConsentGateShadow({...input,channels:{...shadowChannels,reject:false}}), reject:earlyReject }
+        : usePreparedReject
+        ? await evaluatePreparationGateRejectFirst(input, partial => {
+            shadowPassive = partial;
+            resolveRejectProof(partial.reject);
+            return rejectReleaseSettled && withHandlerSafetyTimeout(
+              rejectReleaseSettled, REJECT_PREPARATION_RELEASE_TIMEOUT_MS,
+            ).catch(() => undefined);
+          }, options.signal)
+        : evaluateConsentGateShadow(input);
     }).catch(() => { /* Existing coordinator joins handle artifact failures. */ })
-      .finally(() => resolveConsentProof(shadowPassive));
+      .finally(() => {
+        resolveRejectProof(shadowPassive?.reject);
+        resolveConsentProof(shadowPassive);
+      });
   };
   const workerResults = await timeLambdaPhase(phaseTimings, "worker_invocations", () =>
     invokeLocalV2DagLambdaWorkers({
       lambdaClient: options.lambdaClient,
+      ...(useCloudConsentHandoff ? { onConsentEvidenceReady:receiveConsentEvidence } : {}),
       onWorkerResult: (result) => {
-        considerConditionalOptOut(result);
         considerConsentShadow(result);
+        considerConditionalOptOut(result);
         if (
           result.workerLane !== "consent_proof" ||
           !result.consentRejectAvailability
@@ -3118,7 +3418,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const passiveLaneBarrierCompletedAtMs = Date.now();
   consentGateDispatchDeadlineMs.accept = Math.min(consentGateDispatchDeadlineMs.accept,passiveLaneBarrierCompletedAtMs+POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS);
   consentGateDispatchDeadlineMs.reject = Math.min(consentGateDispatchDeadlineMs.reject,passiveLaneBarrierCompletedAtMs+POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS);
-  if (!shadowConsentResult) resolveConsentProof();
+  if (!shadowConsentResult) {
+    resolveRejectProof();
+    resolveConsentProof();
+  }
 
   const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", async () => {
     const settled = await Promise.allSettled(workerResults.map((result) => earlyConsentReads.get(result) ?? readLocalV2DagLambdaWorkerBundle(result, {
@@ -3398,10 +3701,61 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       return true;
     }
   };
+  const verifiedClicks: Partial<Record<ClickProofBinding["action"], VerifiedConsentClickCheckpoint>> = {};
+  const clickCheckpointReadController = new AbortController();
+  const scheduleClickCheckpointRead = (action: ClickProofBinding["action"], maxTailMs: number) => {
+    if (!enforced[action] || !consentClickCheckpointEnabled(action)) return;
+    const deadlineAtMs = Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + maxTailMs);
+    return setTimeout(() => {
+      const state = action === "accept" ? postAcceptState : postRefusalState;
+      const dispatchAt = state.dispatchStartedAtMs;
+      const joined = action === "accept" ? joinedPostAcceptPacket : joinedPostRefusalPacket;
+      const cancelled = action === "accept" ? postAcceptState.cancelledNoAccept : postRefusalState.cancelledNoReject;
+      if (joined || dispatchAt === undefined || cancelled || options.signal?.aborted || Date.now() >= deadlineAtMs) return;
+      let binding: ClickProofBinding | undefined;
+      if (action === "accept" && shadowPassive?.accept?.outcome === "qualified") {
+        binding = { action, proof: shadowPassive.accept.proof };
+      }
+      if (action === "reject" && shadowPassive?.reject?.outcome === "qualified") {
+        const proof = readRejectFirstLayerProof({ ...shadowPassive.reject, scanId: payload.scanId });
+        if (proof) binding = { action, proof };
+      }
+      if (!binding) return;
+      const boundProof = binding;
+      const timeout = AbortSignal.timeout(Math.max(1, Math.min(500, deadlineAtMs - Date.now())));
+      const signal = AbortSignal.any([clickCheckpointReadController.signal, timeout, ...(options.signal ? [options.signal] : [])]);
+      void (async () => {
+        try {
+          const response = await (options.s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion, 1)).send(new GetObjectCommand({
+            Bucket: requireArtifactBucket(),
+            Key: `${artifactKeyPrefix(payload)}/lanes/${action}_observation/${CONSENT_CLICK_CHECKPOINT_FILES[action]}`,
+            Range: `bytes=0-${REJECT_CLICK_CHECKPOINT_MAX_BYTES - 1}`,
+          }), { abortSignal: signal });
+          if (!response.ContentLength || response.ContentLength > REJECT_CLICK_CHECKPOINT_MAX_BYTES ||
+              response.ContentRange !== `bytes 0-${response.ContentLength - 1}/${response.ContentLength}`) return;
+          const body = await streamToBuffer(response.Body);
+          if (signal.aborted || body.length !== response.ContentLength) return;
+          verifiedClicks[action] = verifyConsentClickCheckpoint({
+            body, metadataSha256: response.Metadata?.sha256, binding: boundProof,
+            coordinatorDispatchAtMs: dispatchAt, verifiedAtMs: Date.now(), deadlineAtMs,
+          });
+        } catch { /* A click receipt cannot delay or change the observation join. */ }
+      })();
+    }, Math.max(0, deadlineAtMs - Date.now() - 750));
+  };
+  const clickCheckpointReadTimers = [
+    scheduleClickCheckpointRead("accept", POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS),
+    scheduleClickCheckpointRead("reject", POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS),
+  ];
   const [postRefusalCompletedInsideBarrier, postAcceptCompletedInsideBarrier] = await Promise.all([
     joinPostRefusalWithinBarrier(),
     joinPostAcceptWithinBarrier(),
-  ]);
+  ]).finally(() => {
+    for (const timer of clickCheckpointReadTimers) clearTimeout(timer);
+    clickCheckpointReadController.abort();
+  });
+  const acceptClickCheckpoint = joinedPostAcceptPacket ? undefined : verifiedClicks.accept;
+  const rejectClickCheckpoint = joinedPostRefusalPacket ? undefined : verifiedClicks.reject;
   if (postRefusalCompletedInsideBarrier === false && !postRefusalState.cancelledNoReject) {
     postRefusalState.error = "reject_path_exceeded_post_primary_join_budget";
     postRefusalState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
@@ -3599,9 +3953,26 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       packet:joinedPostRefusalPacket,
     },
   }) : undefined;
+  const consentActionStages = shadow && {
+    version: "certscore.consent-action-stages.v1" as const,
+    scanId: payload.scanId,
+    ...(shadow.baseline.accept ? { accept: consentActionStage({
+      ...postAcceptState, workerReturned: Boolean(postAcceptState.result), workerFailed: postAcceptState.result?.status === "failed",
+      deadlineAtMs: passiveLaneBarrierCompletedAtMs + postAcceptMaxTailWaitMs,
+      gateDeclined: gateDeclines.accept !== undefined, packetJoined: Boolean(joinedPostAcceptPacket),
+      recheck: shadow.baseline.accept.finalRecheck?.outcome,
+    }) } : {}),
+    ...(shadow.baseline.reject ? { reject: consentActionStage({
+      ...postRefusalState, workerReturned: Boolean(postRefusalState.result), workerFailed: postRefusalState.result?.status === "failed",
+      deadlineAtMs: passiveLaneBarrierCompletedAtMs + POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+      gateDeclined: gateDeclines.reject !== undefined, packetJoined: Boolean(joinedPostRefusalPacket),
+      recheck: shadow.baseline.reject.finalRecheck?.outcome,
+    }) } : {}),
+  };
   const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({
     ...(shadow ? { consentGateShadow: {
       acceptGateShadowReceipt:shadow.acceptGateShadowReceipt, rejectGateShadowReceipt:shadow.rejectGateShadowReceipt,
+      consentActionStages, acceptClickCheckpoint, rejectClickCheckpoint,
     } } : {}),
     conditionalOptOutDecision,
     ...(optOutOutcome?{executedSaleSharingOptOut:optOutDispatchPayload.saleSharingOptOut}:{}),
@@ -3622,7 +3993,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   });
   if (shadow) console.info(JSON.stringify({
     event:enforced.accept || enforced.reject ? "consent_gate_enforced.v1" : "consent_gate_shadow.v1", scanId:payload.scanId, region:payload.awsRegion, buildGitSha:process.env.BUILD_GIT_SHA,
-    ...shadow.baseline, manifestUri:artifacts.artifactPointers.manifestUri,
+    ...shadow.baseline, consentActionStages, acceptClickCheckpoint, rejectClickCheckpoint, manifestUri:artifacts.artifactPointers.manifestUri,
     manifestSha256:artifacts.artifactMetadata.manifestUri?.sha256,
   }));
   let artifactsWithLaneTimings = { ...artifacts, laneTimingSummary };
@@ -3839,6 +4210,7 @@ export async function invokeLocalV2DagLambdaWorkers(input: {
   parentPayload: LocalV2DagLambdaDispatchPayload;
   parentScanId: string;
   onWorkerResult?: (result: LocalV2DagLambdaShardResult) => void;
+  onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady, expected: LocalV2DagLambdaDispatchPayload) => void;
   workerLanes: readonly LocalV2DagLambdaWorkerLane[];
   signal?: AbortSignal;
 }): Promise<LocalV2DagLambdaShardResult[]> {
@@ -3852,6 +4224,7 @@ export async function invokeLocalV2DagLambdaWorkers(input: {
         lambdaClient,
         parentPayload: input.parentPayload,
         parentScanId: input.parentScanId,
+        onConsentEvidenceReady: workerLane === "consent_proof" ? input.onConsentEvidenceReady : undefined,
         workerLane,
         signal: input.signal,
       });
@@ -3877,17 +4250,22 @@ export async function invokeLocalV2DagLambdaWorkers(input: {
 export async function invokeLocalV2DagLambdaWorker(input: {
   acceptFirstLayerProof?: AcceptFirstLayerProof;
   rejectFirstLayerProof?: RejectFirstLayerProof;
+  rejectPreparationId?: string;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   lambdaClient?: LambdaInvokeClient;
   parentPayload: LocalV2DagLambdaDispatchPayload;
   parentScanId: string;
+  onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady, expected: LocalV2DagLambdaDispatchPayload) => void;
   signal?: AbortSignal;
   workerLane: LocalV2DagLambdaWorkerLane;
 }): Promise<LocalV2DagLambdaShardResult> {
   assertPrivacyCaptureProfile(input.parentPayload, input.workerLane);
   const workerLane = input.workerLane;
-  const enforceWorker = input.acceptFirstLayerProof !== undefined || input.rejectFirstLayerProof !== undefined;
-  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,
+  const enforceWorker = input.acceptFirstLayerProof !== undefined || input.rejectFirstLayerProof !== undefined ||
+    input.rejectPreparationId !== undefined;
+  const lambdaClient = input.rejectPreparationId
+    ? new LambdaClient({ region:input.parentPayload.awsRegion, maxAttempts:1 })
+    : input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,
     ...(enforceWorker || input.parentPayload.saleSharingOptOut?.canaryAuthorization ||
       input.parentPayload.privacyCaptureProfile===CONDITIONAL_OPT_OUT_CAPTURE_PROFILE ? {maxAttempts:1} : {}) });
   const { gpcObservation: parentGpcObservation, acceptFirstLayerProof: _acceptProof, rejectFirstLayerProof: _rejectProof,
@@ -3905,6 +4283,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
       ? {
           parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload),
           ...(input.rejectFirstLayerProof ? {rejectFirstLayerProof:input.rejectFirstLayerProof} : {}),
+          ...(input.rejectPreparationId ? {rejectPreparationId:input.rejectPreparationId} : {}),
           postRefusalObservation: {
             ...input.parentPayload.postRefusalObservation,
             dispatchDelayMs: 0,
@@ -3934,20 +4313,34 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   // An older Lambda runtime rejects this worker-only envelope before browser startup.
   const workerDispatch = enforceWorker ? {...workerPayload,contractVersion:CONSENT_GATED_ACTION_DISPATCH_VERSION} : workerPayload;
   const invocationStartedAtMs = Date.now();
-  const response = await lambdaClient.send(new InvokeCommand({
-    FunctionName: input.parentPayload.functionName,
-    InvocationType: "RequestResponse",
-    Payload: Buffer.from(JSON.stringify(workerDispatch))
-  }), { abortSignal: input.signal });
+  let responsePayload: Uint8Array | undefined;
+  if (input.onConsentEvidenceReady && isCloudConsentHandoffPayload(workerPayload)) {
+    const streamClient = new LambdaClient({ region:workerPayload.awsRegion,maxAttempts:1 });
+    try {
+      const streamed = await streamClient.send(new InvokeWithResponseStreamCommand({
+        FunctionName: input.parentPayload.functionName,
+        InvocationType: "RequestResponse",
+        Payload: Buffer.from(JSON.stringify({ ...workerDispatch, consentEvidenceStreaming:true })),
+      }), { abortSignal: input.signal });
+      responsePayload = await readConsentEvidenceWorkerStream(streamed, receipt => input.onConsentEvidenceReady!(receipt,workerPayload));
+    } finally {
+      streamClient.destroy();
+    }
+  } else {
+    const response = await lambdaClient.send(new InvokeCommand({
+      FunctionName: input.parentPayload.functionName,
+      InvocationType: "RequestResponse",
+      Payload: Buffer.from(JSON.stringify(workerDispatch)),
+    }), { abortSignal: input.signal });
+    if ((response.StatusCode ?? 0) < 200 || (response.StatusCode ?? 0) >= 300) {
+      throw new Error(`Local v2 DAG Lambda worker ${workerLane} was not accepted: status ${response.StatusCode ?? 0}.`);
+    }
+    if (response.FunctionError) throw new Error(`Local v2 DAG Lambda worker ${workerLane} failed: ${response.FunctionError}.`);
+    responsePayload = response.Payload;
+  }
   const responseReceivedAtMs = Date.now();
-  if ((response.StatusCode ?? 0) < 200 || (response.StatusCode ?? 0) >= 300) {
-    throw new Error(`Local v2 DAG Lambda worker ${workerLane} was not accepted: status ${response.StatusCode ?? 0}.`);
-  }
-  if (response.FunctionError) {
-    throw new Error(`Local v2 DAG Lambda worker ${workerLane} failed: ${response.FunctionError}.`);
-  }
   const result = {
-    ...parseLocalV2DagLambdaShardResult(response.Payload, workerLane),
+    ...parseLocalV2DagLambdaShardResult(responsePayload, workerLane),
     coordinatorTiming: {
       durationMs: Math.max(0, responseReceivedAtMs - invocationStartedAtMs),
       invocationStartedAt: new Date(invocationStartedAtMs).toISOString(),
@@ -3986,11 +4379,15 @@ export async function awaitPostRefusalWorkerWithinTailBudget(input: {
   workerAlreadySettled?: boolean;
   workerPromise: Promise<void>;
 }): Promise<boolean> {
+  // Packet reads can already be in flight when this join reaches its deadline.
+  // Consume a later abort rejection even when no budget remains to await it.
+  void input.workerPromise.catch(() => undefined);
   if (input.abortController.signal.aborted) return false;
   const maxTailWaitMs = Math.max(0, Math.round(
     input.maxTailWaitMs ?? POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
   ));
-  const remainingMs = input.passiveLaneBarrierCompletedAtMs + maxTailWaitMs - Date.now();
+  const deadlineAtMs = input.passiveLaneBarrierCompletedAtMs + maxTailWaitMs;
+  const remainingMs = deadlineAtMs - Date.now();
   if (remainingMs <= 0) {
     // A join that reaches its own absolute deadline must still consume a
     // worker result that was already terminal before that deadline. This
@@ -4003,7 +4400,13 @@ export async function awaitPostRefusalWorkerWithinTailBudget(input: {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
-      input.workerPromise.then(() => true),
+      input.workerPromise.then(() => {
+        if (Date.now() < deadlineAtMs) return true;
+        // A delayed timer callback must not admit a packet first completed
+        // after the original coordinator deadline.
+        input.abortController.abort(new Error("Post-action result arrived after its join deadline."));
+        return false;
+      }),
       new Promise<false>((resolve) => {
         timer = setTimeout(() => {
           input.abortController.abort(new Error("Reject Path exceeded its post-primary join budget."));
@@ -4264,6 +4667,7 @@ function parseLocalV2DagLambdaShardResult(
   ) {
     throw new Error(`Local v2 DAG Lambda worker ${expectedWorkerLane} did not return a scan artifact URI.`);
   }
+  const consentGeometry = workerLane === "consent_proof" ? readConsentGeometryDescriptor(parsed.consentGeometry) : undefined;
   const acceptGateWorkerRecheck = workerLane === "accept_observation" ? readAcceptGateWorkerRecheck(parsed.acceptGateWorkerRecheck) : undefined;
   const rejectGateWorkerRecheck = workerLane === "reject_observation" ? readRejectGateWorkerRecheck(parsed.rejectGateWorkerRecheck) : undefined;
   return {
@@ -4278,6 +4682,7 @@ function parseLocalV2DagLambdaShardResult(
     ...(rejectGateWorkerRecheck ? {rejectGateWorkerRecheck} : {}),
     ...(postAcceptEvidence ? { postAcceptEvidence } : {}),
     ...(consentRejectAvailability ? { consentRejectAvailability } : {}),
+    ...(consentGeometry ? { consentGeometry } : {}),
     scanId: requireString(parsed, "scanId"),
     status: "completed",
     workerLane
@@ -4686,12 +5091,82 @@ export async function verifiedPostAcceptLateFormProgress(
   } catch { return false; }
 }
 
+function readConsentGeometryDescriptor(value: unknown): LocalV2DagLambdaAuxiliaryArtifact | undefined {
+  const { fileName, uri, sha256, sizeBytes } = asRecord(value);
+  if (fileName === CONSENT_GEOMETRY_FILE && typeof uri === "string" && uri.length <= 2_048 &&
+      typeof sha256 === "string" && /^[a-f0-9]{64}$/.test(sha256) &&
+      typeof sizeBytes === "number" && Number.isSafeInteger(sizeBytes) && sizeBytes > 0 &&
+      sizeBytes <= MAX_CONSENT_GEOMETRY_BYTES) {
+    return { fileName, uri, sha256, sizeBytes };
+  }
+}
+
+async function readBoundedConsentGeometry(
+  artifact: LocalV2DagLambdaAuxiliaryArtifact, s3Client: S3GetClient,
+): Promise<Buffer> {
+  const { bucket, key } = parseS3Uri(artifact.uri);
+  const end = artifact.sizeBytes - 1;
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key, Range: `bytes=0-${end}` }));
+  if (response.ContentLength !== artifact.sizeBytes ||
+      response.ContentRange !== `bytes 0-${end}/${artifact.sizeBytes}`) {
+    throw new Error("Consent geometry range or length mismatch.");
+  }
+  const body = await streamToBuffer(response.Body);
+  if (body.byteLength !== artifact.sizeBytes || createHash("sha256").update(body).digest("hex") !== artifact.sha256) {
+    throw new Error("Consent geometry worker descriptor checksum or length mismatch.");
+  }
+  return body;
+}
+
+export async function readLocalConsentEvidenceReady(input: {
+  receipt: LocalConsentEvidenceReady;
+  expected: LocalV2DagLambdaDispatchPayload;
+  s3GetClient: S3GetClient;
+  signal?: AbortSignal;
+}) {
+  return readConsentEvidenceReady(input,false);
+}
+
+async function readConsentEvidenceReady(input: Parameters<typeof readLocalConsentEvidenceReady>[0], cloud: boolean) {
+  input.signal?.throwIfAborted();
+  const { receipt, expected, s3GetClient } = input;
+  const fail = () => new Error("Early consent evidence binding did not verify.");
+  if (!(cloud ? isCloudConsentHandoffPayload(expected) : isLocalConsentHandoffPayload(expected)) || receipt.scanId !== expected.scanId ||
+      receipt.targetUrl !== expected.targetUrl || receipt.parentDispatchSha256 !== expected.parentDispatchSha256) {
+    throw fail();
+  }
+  const root = s3Uri(requireArtifactBucket(), artifactKeyPrefix(expected));
+  const geometry = readConsentGeometryDescriptor(receipt.geometry);
+  const { uri, sha256, sizeBytes } = receipt.bundle;
+  if (uri !== `${root}/CanonicalEvidenceBundle.json` || geometry?.uri !== `${root}/auxiliary/${CONSENT_GEOMETRY_FILE}` ||
+      !/^[a-f0-9]{64}$/.test(sha256) || !Number.isSafeInteger(sizeBytes) ||
+      sizeBytes <= 0 || sizeBytes > CANONICAL_ARTIFACT_MAX_DECODED_BYTES) {
+    throw fail();
+  }
+  const [bundle, geometryBytes] = await Promise.all([
+    readLocalV2DagLambdaWorkerBundle({
+      workerLane: "consent_proof", scanId: receipt.scanId, status: "completed",
+      artifactPointers: { scanArtifactUri: uri }, artifactMetadata: { scanArtifactUri: { sha256, sizeBytes } },
+    }, { awsRegion: expected.awsRegion, s3GetClient }),
+    readBoundedConsentGeometry(geometry, s3GetClient),
+  ]);
+  input.signal?.throwIfAborted();
+  if (!bundle || bundle.scanId !== receipt.scanId || bundle.url !== receipt.targetUrl) throw fail();
+  return {
+    bundle, sourceSha256: sha256,
+    geometry: { bytes: geometryBytes, sha256: geometry.sha256, sizeBytes: geometry.sizeBytes },
+  };
+}
+
 export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
   artifactRoot: string;
   awsRegion?: LocalV2DagLambdaAwsRegion;
   s3GetClient?: S3GetClient;
   workerResults: LocalV2DagLambdaShardResult[];
-  shadowGeometry?: { result: LocalV2DagLambdaShardResult; targetUrl: string };
+  shadowGeometry?: { result: LocalV2DagLambdaShardResult; targetUrl: string;
+    expectedConsentRoot?: string;
+    onVerified?: (geometry: AcceptFirstLayerGeometrySource) => void;
+    readGeometry?: Promise<AcceptFirstLayerGeometrySource | undefined> };
 }): Promise<AcceptFirstLayerGeometrySource | undefined> {
   const s3Client = input.s3GetClient ?? localV2DagLambdaS3Client(input.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION);
   let geometry: AcceptFirstLayerGeometrySource | undefined;
@@ -4702,12 +5177,25 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
       if (!manifestUri) {
         return;
       }
+      const shadow = input.shadowGeometry;
+      const descriptor = result === shadow?.result && result.workerLane === "consent_proof" &&
+        shadow.expectedConsentRoot && manifestUri === `${shadow.expectedConsentRoot}/LocalV2DagLambdaManifest.json` &&
+        result.artifactPointers?.scanArtifactUri === `${shadow.expectedConsentRoot}/CanonicalEvidenceBundle.json` &&
+        result.consentGeometry?.uri === `${shadow.expectedConsentRoot}/auxiliary/${CONSENT_GEOMETRY_FILE}`
+        ? readConsentGeometryDescriptor(result.consentGeometry) : undefined;
+      // This is the same read used by the mirror. Its bytes cannot reach the gate
+      // until the independently verified manifest confirms the exact descriptor.
+      const earlyGeometry = descriptor && Promise.resolve(shadow?.readGeometry).then(cached =>
+        cached && cached.sha256 === descriptor.sha256 && cached.sizeBytes === descriptor.sizeBytes
+          ? cached.bytes : readBoundedConsentGeometry(descriptor, s3Client),
+      ).then(body => ({ body }), (error: unknown) => ({ error }));
       const manifestBody = await readS3ObjectBody(manifestUri, s3Client);
       const manifestFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-LocalV2DagLambdaManifest.json`);
-      await writeFile(path.join(input.artifactRoot, manifestFileName), manifestBody);
       const manifest = asRecord(JSON.parse(manifestBody.toString("utf8")));
+      const manifestWrite = writeFile(path.join(input.artifactRoot, manifestFileName), manifestBody);
+      if (!earlyGeometry) await manifestWrite;
       const auxiliaryArtifacts = Array.isArray(manifest.auxiliaryArtifacts) ? manifest.auxiliaryArtifacts : [];
-      const geometryName = "ConsentControlGeometryEvidence.json";
+      const geometryName = CONSENT_GEOMETRY_FILE;
       const manifestMetadata = result.artifactMetadata?.manifestUri;
       const scanUri = result.artifactPointers?.scanArtifactUri;
       const manifestDirectory = manifestUri.endsWith("/LocalV2DagLambdaManifest.json")
@@ -4721,7 +5209,7 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
         manifest.scanId === result.scanId && manifest.targetUrl === input.shadowGeometry.targetUrl &&
         asRecord(manifest.pointers).scanArtifactUri === scanUri &&
         auxiliaryArtifacts.filter(value => asRecord(value).fileName === geometryName).length === 1;
-      await Promise.all(auxiliaryArtifacts.flatMap((value) => {
+      const auxiliaryWrites = auxiliaryArtifacts.flatMap((value) => {
         const artifact = asRecord(value);
         const fileName = compactString(artifact.fileName);
         const uri = compactString(artifact.uri);
@@ -4729,8 +5217,10 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
           return [];
         }
         return [async () => {
-          const body = await readS3ObjectBody(uri, s3Client);
           const expectedSha256 = compactString(artifact.sha256);
+          const early = uri === descriptor?.uri && earlyGeometry ? await earlyGeometry : undefined;
+          if (early && "error" in early) throw early.error;
+          const body = early?.body ?? await readS3ObjectBody(uri, s3Client);
           const sha256 = createHash("sha256").update(body).digest("hex");
           if (expectedSha256 && expectedSha256 !== sha256) {
             throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact checksum mismatch for ${fileName}.`);
@@ -4739,17 +5229,25 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
           if (expectedSizeBytes !== null && expectedSizeBytes !== body.byteLength) {
             throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact size mismatch for ${fileName}.`);
           }
-          if (verifiedConsentManifest && fileName === geometryName && uri === `${manifestDirectory}/auxiliary/${geometryName}` &&
-            expectedSha256 === sha256 && expectedSizeBytes === body.byteLength) {
+          const verifiedGeometry = verifiedConsentManifest && fileName === geometryName &&
+            uri === `${manifestDirectory}/auxiliary/${geometryName}` &&
+            expectedSha256 === sha256 && expectedSizeBytes === body.byteLength;
+          if (early && verifiedGeometry) {
             geometry = { bytes: body, sha256, sizeBytes: expectedSizeBytes };
+            shadow?.onVerified?.(geometry);
           }
           const workerFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-${fileName}`);
           await writeFile(path.join(input.artifactRoot, workerFileName), body);
           if (shouldPromoteEvidenceLaneArtifact(result.workerLane, fileName)) {
             await writeFile(path.join(input.artifactRoot, safeAuxiliaryFileName(fileName)), body);
           }
+          if (!early && verifiedGeometry) {
+            geometry = { bytes: body, sha256, sizeBytes: expectedSizeBytes };
+            shadow?.onVerified?.(geometry);
+          }
         }];
-      }).map((mirror) => mirror()));
+      }).map((mirror) => mirror());
+      await Promise.all([manifestWrite, ...auxiliaryWrites]);
     } catch (error) {
       if (result.workerLane !== "gpc_observation") throw error;
       result.status = "failed";
@@ -5808,6 +6306,7 @@ export async function uploadAuxiliaryArtifactFiles(input: {
   payload: LocalV2DagLambdaDispatchPayload;
   s3Client?: S3PutClient;
   signal?: AbortSignal;
+  consentGeometry?: "only" | "exclude";
 }): Promise<LocalV2DagLambdaAuxiliaryArtifact[]> {
   const entries = await readdir(input.artifactRoot, { withFileTypes: true });
   const bundle = input.bundle;
@@ -5817,6 +6316,8 @@ export async function uploadAuxiliaryArtifactFiles(input: {
   const fileNames = entries
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
+    .filter(fileName => input.consentGeometry === undefined ||
+      (fileName === CONSENT_GEOMETRY_FILE) === (input.consentGeometry === "only"))
     .filter((fileName) => isSupportedAuxiliaryFileName(fileName) && !CORE_ARTIFACT_FILE_NAMES.has(fileName))
     .filter(fileName => !fileName.endsWith(RUNTIME_VIEWPORT_FILENAME) ||
       (shot && path.resolve(input.artifactRoot, fileName) === path.resolve(shot.path)))
@@ -6671,6 +7172,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         : runLocalV2DagLambdaArtifactChain(dispatchPayload, {
             localGpcAdaptiveParticipant: localGpcAdaptiveEnabled(dispatchPayload) ? options.localGpcAdaptiveParticipant : undefined,
             ...runOptions,
+            onConsentEvidenceReady: options.onConsentEvidenceReady && isCloudConsentHandoffPayload(dispatchPayload)
+              ? options.onConsentEvidenceReady : undefined,
             s3Client: options.s3Client,
             workspaceRoot,
           }));
@@ -6900,6 +7403,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           ? { postAcceptEvidence: artifactResult.postAcceptEvidence }
           : {}),
         ...(consentRejectAvailability ? { consentRejectAvailability } : {}),
+        ...(payload.workerLane === "consent_proof" && artifactResult.consentGeometry
+          ? { consentGeometry: artifactResult.consentGeometry } : {}),
         ...(payload.parentDispatchSha256 ? { parentDispatchSha256: payload.parentDispatchSha256 } : {}),
         scanId: payload.scanId,
         status: "completed" as const,

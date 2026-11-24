@@ -91,6 +91,28 @@ test("owned-canary authorization is exact-host and path scoped", () => {
   ), undefined);
 });
 
+test("fresh recovery fixtures authorize only their exact owned HTTPS routes", () => {
+  const authorization = {
+    authorizationId: ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
+    kind: "owned_canary" as const,
+  };
+  const root = "https://www.ergoveritas.com/testar-recovery-20261123-";
+  for (const scenario of [
+    "visible-text", "native-aria", "delayed-banner", "reject-first",
+    "nested-caption", "quiet-reject", "deferred-aria", "quiet-aria",
+  ]) {
+    const target = root + scenario + ".html";
+    assert.equal(authorizePostRefusalTarget(target, authorization).authorized, true);
+    for (const changed of [
+      target.replace("www.", ""), target.replace("https:", "http:"),
+      target.replace(".com/", ".com:444/"), target + "?test=1", target + "#other",
+    ]) {
+      assert.equal(authorizePostRefusalTarget(changed, authorization).authorized, false);
+    }
+  }
+  assert.equal(authorizePostRefusalTarget(root + "other.html", authorization).authorized, false);
+});
+
 test("explicit public authorization requires an exact HTTPS host and path prefix", () => {
   const authorization = {
     authorizationId: "calibration-run-123",

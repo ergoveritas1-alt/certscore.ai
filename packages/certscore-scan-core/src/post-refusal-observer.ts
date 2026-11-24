@@ -69,6 +69,7 @@ import {
   type Locator,
   type Page,
   type Request,
+  type Route,
 } from "playwright";
 import {
   chromiumContextOptions,
@@ -246,6 +247,12 @@ export interface PostRefusalObserverInput {
   boundControlDispatch?: boolean;
   /** Verified passive control for the local loopback dispatch prototype. */
   firstLayerProof?: RejectFirstLayerProof;
+  /** Isolated owned canary handoff. Only the about:blank page may be set up while waiting. */
+  preparedFirstLayer?: {
+    parentDispatchSha256: string;
+    waitForProof(): Promise<RejectFirstLayerProof>;
+    signal: AbortSignal;
+  };
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
@@ -264,6 +271,14 @@ export interface PostRefusalObserverInput {
   /** Input attempt committed; notification runs after the dispatch call settles. */
   onActionDispatchCommitted?: (event: { type: "action_dispatched"; atMs: number }) => void;
   onRejectGateFinalRecheck?: (outcome: "passed" | "failed") => void;
+  /** A successful trusted input on the proof-bound original control; no observation claim. */
+  onExactRejectClickCompleted?: (event: {
+    control: ConsentActionControlProof;
+    dispatchedAtMs: number;
+    completedAtMs: number;
+  }) => void;
+  /** Notification of an exact, fully observed packet before local write and browser cleanup. */
+  onExactRejectPacketSealed?: (packet: PostRefusalEvidencePacket) => void;
   /** Internal scanner artifact sink. Source bytes never enter the Reject packet. */
   onTrustArcResponseCapture?: (capture: TrustArcResponseCapture) => void;
   outDir?: string;
@@ -396,6 +411,16 @@ type RefusalConfirmationState = {
 export async function runPostRefusalObserver(
   input: PostRefusalObserverInput,
 ): Promise<PostRefusalEvidencePacket> {
+  const prepared = input.preparedFirstLayer;
+  const preClickTiming = prepared && {} as Partial<Record<
+    "proofAcceptedAtMs" | "navigationStartedAtMs" | "resolverStartedAtMs" | "resolverFinishedAtMs" |
+    "initialStorageAtMs" | "actionabilityFinishedAtMs" | "confirmationBaselineAtMs" |
+    "storageReadyAtMs" | "liveProofReadyAtMs" | "clickDispatchedAtMs" | "clickCompletedAtMs", number>>;
+  let firstLayerProof = input.firstLayerProof;
+  if (prepared && (firstLayerProof || !input.browser || input.browser.contexts().length !== 0 ||
+      (input.interactionAuthorization.kind !== "owned_canary" && input.interactionAuthorization.kind !== "loopback"))) {
+    throw new Error("reject_blank_setup_not_authorized");
+  }
   const actionRecipes = validatedActionRecipes(input);
   const recipeSetId = actionRecipes.length === 1
     ? actionRecipes[0]!.recipeId
@@ -428,9 +453,11 @@ export async function runPostRefusalObserver(
   const baseSignal = resultBudgetDeadlineAtMs === undefined ? input.signal
     : input.signal ? AbortSignal.any([input.signal, budgetController.signal]) : budgetController.signal;
   const effectiveSignal = AbortSignal.any([sourceFrameBinding.signal, ...(baseSignal ? [baseSignal] : [])]);
+  const preparationSignal = prepared && AbortSignal.any([effectiveSignal, prepared.signal]);
   const captureRefusalConfirmationBaseline = (...args: Parameters<typeof readCaptureRefusalConfirmationBaseline>) => operation(() => readCaptureRefusalConfirmationBaseline(...args));
   const operation = <T>(read:()=>Promise<T>, disposeLate?:(value:T)=>void|Promise<unknown>) =>
-    requireWithinActionBoundary(read,resultBudgetDeadlineAtMs ?? Infinity,effectiveSignal,disposeLate).catch(error => {
+    requireWithinActionBoundary(read, resultBudgetDeadlineAtMs ?? Infinity,
+      !firstLayerProof && preparationSignal ? preparationSignal : effectiveSignal, disposeLate).catch(error => {
       if (error instanceof ActionOperationStopped) budgetController.abort(error);
       throw error;
     });
@@ -501,7 +528,7 @@ export async function runPostRefusalObserver(
   let actionDiscovery: ConsentActionDiscovery | undefined;
   let cancellationObservedAtMs: number | undefined;
   let actionDispatched = false;
-  const recheckExactReject = !!input.firstLayerProof || (input.interactionAuthorization.kind === "loopback" &&
+  const recheckExactReject = !!(firstLayerProof || prepared) || (input.interactionAuthorization.kind === "loopback" &&
     localExactRejectControlEnabled());
   const boundControlDispatch = recheckExactReject ||
     (input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1");
@@ -711,6 +738,11 @@ export async function runPostRefusalObserver(
       },
       limitations,
     });
+    if (firstLayerProof && packet.interactionDiagnostics?.click.outcome === "completed" &&
+        packet.timing.observationExitReason === "window_elapsed" &&
+        packet.timing.observationMs >= observationWindowMs && !effectiveSignal.aborted) {
+      input.onExactRejectPacketSealed?.(packet);
+    }
     if (input.outDir) {
       await mkdir(input.outDir, { recursive: true });
       await writeFile(
@@ -740,11 +772,18 @@ export async function runPostRefusalObserver(
       })), value => value.close());
       ownsBrowser = true;
     }
+    const blankSetupStartedAtMs = prepared ? Date.now() : 0;
     context = await operation(() => browser!.newContext({ ...browserContextConfiguration, ignoreHTTPSErrors: false }), value => value.close());
     await operation(() => installWebBotAuthRoute(context!));
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       await operation(() => installPublicNetworkGuardRoute(context!));
     }
+    let prematureRequest = false;
+    const holdBlank = async (route: Route) => {
+      prematureRequest = true;
+      await route.abort();
+    };
+    if (prepared) await operation(() => context!.route("**/*", holdBlank));
     page = await operation(() => context!.newPage(), value => value.close());
     const setupPage = page;
     await operation(async () => {
@@ -923,7 +962,29 @@ export async function runPostRefusalObserver(
       void capture.finally(() => pendingResponseHeaderCaptures.delete(capture));
     });
 
+    if (prepared) {
+      const blankReadyAtMs = Date.now();
+      const proof = await operation(() => prepared.waitForProof());
+      const blank = () => !prematureRequest && page!.url() === "about:blank" &&
+        page!.frames().length === 1 && context!.pages().length === 1;
+      if (!blank() || !rejectFirstLayerProofMatches(
+        proof, authorizationScanId, input.url, prepared.parentDispatchSha256, Date.now(),
+      )) {
+        throw new Error("reject_blank_setup_or_proof_unverified");
+      }
+      await operation(() => context!.unroute("**/*", holdBlank));
+      const proofCheckedAtMs = Date.now();
+      if (!blank() || proof.expiresAtMs <= proofCheckedAtMs) {
+        throw new Error("reject_blank_setup_or_proof_unverified");
+      }
+      firstLayerProof = proof;
+      if (preClickTiming) preClickTiming.proofAcceptedAtMs = proofCheckedAtMs;
+      console.info(JSON.stringify({event:"reject_blank_setup_timing.v1",scanId:authorizationScanId,
+        blankSetupStartedAtMs,blankReadyAtMs,proofCheckedAtMs}));
+    }
+
     const navigationStartedAtMs = Date.now();
+    if (preClickTiming) preClickTiming.navigationStartedAtMs = navigationStartedAtMs;
     try {
       const navigationTimeoutMs = remainingResultBudgetMs(15_000);
       if (navigationTimeoutMs <= 0 || effectiveSignal?.aborted) throw effectiveSignal?.reason ?? new Error("Navigation budget exhausted.");
@@ -972,6 +1033,7 @@ export async function runPostRefusalObserver(
           const {
             browser: _ignoredBrowser,
             outDir: _ignoredOutDir,
+            onExactRejectPacketSealed: _ignoredEarlyArchive,
             ...retryInput
           } = input;
           const headedPacket = await runPostRefusalObserver({
@@ -1045,7 +1107,7 @@ export async function runPostRefusalObserver(
 
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const passiveResolutionStartedAtMs = navigationStartedAtMs;
-      const expectedLanding = expectedMoodMediaLanding(input.url, input.firstLayerProof?.exactSelector, input.firstLayerProof?.binding.documentSha256);
+      const expectedLanding = expectedMoodMediaLanding(input.url, firstLayerProof?.exactSelector, firstLayerProof?.binding.documentSha256);
       const settled = await waitForPassiveRedirectSettle(
         page,
         input.interactionAuthorization.resolutionTimeoutMs,
@@ -1130,6 +1192,7 @@ export async function runPostRefusalObserver(
     }
 
     const resolverStartedAtMs = Date.now();
+    if (preClickTiming) preClickTiming.resolverStartedAtMs = resolverStartedAtMs;
     let resolverSnapshotAttempt = 0;
     let previousResolverSnapshotSignature: string | undefined;
     const recordResolverSnapshot: ResolverDiagnosticReporter = (snapshot) => {
@@ -1146,17 +1209,22 @@ export async function runPostRefusalObserver(
       : 0;
     const initialActionSearchTimeoutMs = actionSearchTimeoutMs - adaptiveExtensionMs;
     const initialSearchDeadline = resolverStartedAtMs + initialActionSearchTimeoutMs;
-    const passiveProof = input.firstLayerProof;
+    const passiveProof = firstLayerProof;
     const exactCookieInformation = passiveProof?.exactSelector === "#declineButton" && authorizedExactTargetUrl &&
       passiveProof.binding.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
       rejectFirstLayerProofMatches(passiveProof, input.parentScanId ?? input.scanId, input.url,
         passiveProof.binding.parentDispatchSha256, resolverStartedAtMs)
       ? actionRecipes.find(recipe => recipe.cmpId === "Cookie Information" && isRegisteredLoadingConsentRecipe(recipe, "reject"))
       : undefined;
-    const probeExactCookieInformation = (sliceMs: number, signal: AbortSignal) => exactCookieInformation && passiveProof
-      ? probeCookieInformationReject(page!, exactCookieInformation,
-          Math.min(Date.now() + sliceMs, initialSearchDeadline, passiveProof.expiresAtMs, resultBudgetDeadlineAtMs ?? Infinity), signal)
-      : undefined;
+    let readyExactCookieInformationControl: Locator | undefined;
+    const probeExactCookieInformation = async (sliceMs: number, signal: AbortSignal, waitForVisible = false) => {
+      if (!exactCookieInformation || !passiveProof) return undefined;
+      const deadline = Math.min(Date.now() + sliceMs, initialSearchDeadline, passiveProof.expiresAtMs,
+        resultBudgetDeadlineAtMs ?? Infinity);
+      const verified = await probeCookieInformationReject(page!, exactCookieInformation, deadline, signal, waitForVisible);
+      if (verified) readyExactCookieInformationControl = verified.control;
+      return verified;
+    };
     const readiness = initialActionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
       await waitForConsentDocumentOrNamedControl<DeterministicRecipeResolution>({page,deadlineAtMs:initialSearchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
         probe:async (sliceMs,probeSignal)=>{
@@ -1172,7 +1240,7 @@ export async function runPostRefusalObserver(
     if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot(emptyResolverSnapshot("named_recipe", documentReady ? "binding_budget_exhausted" : "document_loading"));
     const searchRemaining = () => initialActionSearchTimeoutMs === 0 ? 0 : Math.max(1, initialSearchDeadline - Date.now());
     const exactResolution = !readiness.resolution && documentReady && !searchEnded
-      ? await probeExactCookieInformation(250, effectiveSignal) : undefined;
+      ? await probeExactCookieInformation(250, effectiveSignal, true) : undefined;
     let resolution: DeterministicRecipeResolution = readiness.resolution ?? exactResolution ?? ((!documentReady || searchEnded)
       ? { status: effectiveSignal?.aborted ? "aborted" : "not_found" }
       : input.allowCanonicalRejectDiscovery
@@ -1221,7 +1289,9 @@ export async function runPostRefusalObserver(
             actionDiscovery,
           );
     }
-    timing.resolverMs = Math.max(0, Date.now() - resolverStartedAtMs);
+    const resolverFinishedAtMs = Date.now();
+    timing.resolverMs = Math.max(0, resolverFinishedAtMs - resolverStartedAtMs);
+    if (preClickTiming) preClickTiming.resolverFinishedAtMs = resolverFinishedAtMs;
     if (resolution.status !== "found" && resolution.status !== "aborted" &&
       actionSearchTimeoutMs > 0 && timing.resolverMs >= actionSearchTimeoutMs) {
       limitations.push(resolution.status === "ambiguous"
@@ -1295,6 +1365,7 @@ export async function runPostRefusalObserver(
 
     let preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.preAction = d; }, retainMeasurementCandidates);
     let preActionCapturedAtEpochMs = Date.now();
+    if (preClickTiming) preClickTiming.initialStorageAtMs = preActionCapturedAtEpochMs;
     let preActionCapturedAtMs = elapsed(parentScanStartedAtMs, preActionCapturedAtEpochMs);
     measurementBaselineAtMs = preActionCapturedAtMs;
     if (cancellation()) {
@@ -1333,7 +1404,12 @@ export async function runPostRefusalObserver(
     // discovered by final proof. Do not restart it after the search expires.
     const actionReadinessDeadline = Date.now() + (input.allowCanonicalRejectDiscovery ? 3_000 : 2_500);
     try {
-      await trialRejectControl(page, control, selectedRecipe);
+      // The bounded exact probe already tested the same scoped control's
+      // actionability. The dispatch still rebinds the actual element, checks
+      // fresh exact proof and uses a normal, unforced Playwright click.
+      if (control !== readyExactCookieInformationControl) {
+        await trialRejectControl(page, control, selectedRecipe);
+      }
     } catch (error) {
       actionabilityError = error;
     }
@@ -1429,6 +1505,7 @@ export async function runPostRefusalObserver(
       const scope = exactSelectorScope(page, selectedRecipe.controlFrameUrl);
       if (scope.status === "found") sourceFrameBinding.bind(page, scope.scope);
     }
+    if (preClickTiming) preClickTiming.actionabilityFinishedAtMs = Date.now();
     let confirmationBaseline = await captureRefusalConfirmationBaseline(
       context,
       page,
@@ -1438,6 +1515,7 @@ export async function runPostRefusalObserver(
       boundControlDispatch,
       confirmationDiagnostic.reason,
     ).catch(() => undefined);
+    if (preClickTiming) preClickTiming.confirmationBaselineAtMs = Date.now();
     if (confirmationBaseline && "oneTrustBaseline" in confirmationBaseline) {
       for (const reason of confirmationBaseline.oneTrustBaseline?.diagnosticReasons ?? []) confirmationDiagnostic.reason(reason);
       const reason = oneTrustBaselineLimitation(confirmationBaseline.oneTrustBaseline);
@@ -1479,9 +1557,10 @@ export async function runPostRefusalObserver(
         limitations.push("pre_action_storage_baseline_refresh_unavailable");
       }
     }
+    if (preClickTiming) preClickTiming.storageReadyAtMs = Date.now();
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
-      expectedNativeSelector: input.firstLayerProof?.exactSelector,
+      expectedNativeSelector: firstLayerProof?.exactSelector,
       deadlineAtMs: resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
@@ -1606,7 +1685,7 @@ export async function runPostRefusalObserver(
           );
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
-            expectedNativeSelector: input.firstLayerProof?.exactSelector,
+            expectedNativeSelector: firstLayerProof?.exactSelector,
             deadlineAtMs: resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
@@ -1646,6 +1725,7 @@ export async function runPostRefusalObserver(
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
     }
+    if (preClickTiming) preClickTiming.liveProofReadyAtMs = Date.now();
     actionControlProof = proofResolution.proof;
     boundControlElement = proofResolution.boundElement;
     sourceFrameBinding.setElement(boundControlElement, resultBudgetDeadlineAtMs);
@@ -1690,7 +1770,7 @@ export async function runPostRefusalObserver(
             ? {controlFrame: actionControlProof?.frameIdentitySha256 ? sourceFrameBinding.boundFrame : undefined} : undefined);
           actionDispatched = true;
           graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
-          if (input.firstLayerProof?.exactSelector === COOKIE_SCRIPT_REJECT_ROLE_SELECTOR &&
+          if (firstLayerProof?.exactSelector === COOKIE_SCRIPT_REJECT_ROLE_SELECTOR &&
               actionControlProof?.cmpId === "CookieScript" && actionControlProof.authorizedTargetSha256 && !selectedRecipe?.controlFrameUrl && authorizedExactTargetUrl) {
             cookieScriptReload = observeCookieScriptReload(page!, context!, authorizedExactTargetUrl,
               actionControlProof.authorizedTargetSha256, parentScanStartedAtMs, actionDispatchedAtMs,
@@ -1711,6 +1791,19 @@ export async function runPostRefusalObserver(
       );
     } catch (error) {
       clickError = error;
+    }
+    if (passiveProof && actionDispatched && !clickError) {
+      if (preClickTiming) {
+        preClickTiming.clickDispatchedAtMs = actionDispatchedAtEpochMs;
+        preClickTiming.clickCompletedAtMs = Date.now();
+        console.info(JSON.stringify({
+          event: "reject_pre_click_timing.v1", scanId: authorizationScanId, ...preClickTiming,
+        }));
+      }
+      try {
+        input.onExactRejectClickCompleted?.({ control: proofResolution.proof,
+          dispatchedAtMs: actionDispatchedAtEpochMs, completedAtMs: Date.now() });
+      } catch { limitations.push("lifecycle_listener_failed"); }
     }
     if (actionDispatched) {
       try { input.onActionDispatchCommitted?.({type: "action_dispatched", atMs: actionDispatchedAtMs}); }
@@ -2159,7 +2252,7 @@ export async function runPostRefusalObserver(
       observations,
     });
   } catch (error) {
-    if (!(error instanceof ActionOperationStopped)) throw error;
+    if (!(error instanceof ActionOperationStopped) || (prepared && !firstLayerProof)) throw error;
     budgetController.abort(error);
     cancellation();
     limitations.push("observer_browser_operation_boundary_exhausted");
@@ -2941,15 +3034,23 @@ function normalizeControlLabel(value: string) {
 }
 
 /** A current passive proof identifies one native control in this document.
- * Probe it inside the existing search while unrelated scripts still load. */
+ * Reuse the existing focused search slice for a delayed native button before
+ * starting the broader resolver. Missing evidence falls through as before. */
 async function probeCookieInformationReject(
   page: Page,
   recipe: PostRefusalActionRecipe,
   deadlineAtMs: number,
   signal: AbortSignal,
-): Promise<DeterministicRecipeResolution | undefined> {
+  waitForVisible: boolean,
+): Promise<Extract<DeterministicRecipeResolution, { status: "found" }> | undefined> {
   const selector = "#coiOverlay #coi-banner-wrapper #declineButton";
   const control = page.locator(selector).and(page.locator(recipe.controlSelector));
+  if (waitForVisible) {
+    const visible = await readWithinActionBoundary(() =>
+      control.waitFor({ state: "visible", timeout: Math.max(1, deadlineAtMs - Date.now()) })
+        .then(() => true, () => false), false, deadlineAtMs, signal);
+    if (!visible) return undefined;
+  }
   const owned = await readWithinActionBoundary(() => page.evaluate(selector => {
     const button = document.querySelector(selector);
     const api = (window as Window & {CookieInformation?: {getConsentGivenFor?: unknown}}).CookieInformation;

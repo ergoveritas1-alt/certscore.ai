@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { PostRefusalEvidencePacket } from "@certscore/contracts";
-import { buildProductionConsentGateShadow } from "./consent-gate-production-shadow.js";
+import type { CanonicalEvidenceBundle, PostRefusalEvidencePacket } from "@certscore/contracts";
+import { buildProductionConsentGateShadow, evaluatePreparationGateRejectFirst } from "./consent-gate-production-shadow.js";
 
 const scanId = "00000000-0000-4000-8000-000000000001";
 const hash = "a".repeat(64);
@@ -48,4 +48,43 @@ test("production shadow measures a timely verified receipt without treating erro
   assert.equal(result.baseline.reject?.boundControl,false);
   assert.deepEqual(result.baseline.reject?.dispatch,{outcome:"would_allow"});
   assert.equal(result.baseline.reject?.estimatedWorkerReturnSlackMs,500);
+});
+
+const noEvidence = {
+  channels:{accept:true,reject:true}, targetUrl:"https://fixture.invalid/",scanId,
+  sourceSha256:hash,parentDispatchSha256:hash,nowMs:Date.now(),deadlineAtMs:Date.now()+6000,
+  bundle:{scanId,url:"https://fixture.invalid/",domSnapshots:[],consentUiObservations:[]} as unknown as CanonicalEvidenceBundle,
+};
+
+test("Accept waits for the isolated Reject release acknowledgement", async () => {
+  const events: string[] = [];
+  let acknowledge!: () => void;
+  const release = new Promise<void>(resolve => { acknowledge = resolve; });
+  const result = evaluatePreparationGateRejectFirst(noEvidence, async partial => {
+    assert.equal(partial.reject?.outcome, "blocked");
+    assert.equal(partial.accept, undefined);
+    events.push("reject release started");
+    await release;
+    events.push("reject release acknowledged");
+  }).then(combined => {
+    events.push("both finalized");
+    return combined;
+  });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(events, ["reject release started"]);
+  acknowledge();
+  const combined = await result;
+  assert.deepEqual(events, ["reject release started", "reject release acknowledged", "both finalized"]);
+  assert.equal(combined.accept?.outcome, "blocked");
+  assert.equal(combined.reject?.outcome, "blocked");
+});
+
+test("an abort between independent gate phases cannot authorize an Accept action", async () => {
+  const abort=new AbortController();
+  const result=evaluatePreparationGateRejectFirst(noEvidence, partial => {
+    assert.equal(partial.reject?.outcome,"blocked");
+    assert.equal(partial.accept,undefined);
+    abort.abort(new Error("cancelled"));
+  },abort.signal);
+  await assert.rejects(result,{message:"cancelled"});
 });

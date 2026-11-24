@@ -187,6 +187,46 @@ const OWNED_POST_REFUSAL_CANARY_TARGETS = [
     pathname: "/sample_09_03_26_01.html",
     recipeCase: "tcf",
   },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar-recovery-20261123-visible-text.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar-recovery-20261123-native-aria.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar-recovery-20261123-delayed-banner.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar-recovery-20261123-reject-first.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar-recovery-20261123-nested-caption.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar-recovery-20261123-quiet-reject.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar-recovery-20261123-deferred-aria.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar-recovery-20261123-quiet-aria.html",
+    recipeCase: "tcf",
+  },
 ] as const;
 
 export function getOwnedPostRefusalCanaryRecipeCase(targetUrl: string): "tcf" | undefined {

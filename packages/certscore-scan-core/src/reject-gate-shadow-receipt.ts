@@ -1,3 +1,4 @@
+import { STALE_CONSENT_GEOMETRY_BASIS } from "./consent-geometry-inventory-coverage.js";
 import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
@@ -108,18 +109,29 @@ export function evaluateRejectGate(input: {
       inspection.captureCoverage.inventoryTruncated || !inspection.captureCoverage.mainFrameAvailable ||
       !inspection.captureCoverage.documentAndFramesStable) return block("passive_capture_incomplete");
 
+  const geometryCapturedAt = Date.parse(artifact.capturedAt);
+  const scanStartedAt = Date.parse(bundle.startedAt);
+  const geometryCompletesObservation = (row: CanonicalEvidenceBundle["consentUiObservations"][number]) =>
+    row.captureDiagnostics?.completedChannels.includes("geometry") ||
+    // A separately retained, complete and current artifact can corroborate
+    // finished DOM and AX reads when the aggregate omitted the geometry flag.
+    (row.captureDiagnostics?.completedChannels.includes("accessibility_tree") &&
+      row.inventoryOutcome === "complete_with_controls" && !row.basis.includes(STALE_CONSENT_GEOMETRY_BASIS) &&
+      Number.isSafeInteger(row.observedAtMs) && row.observedAtMs >= 0 &&
+      geometryCapturedAt >= scanStartedAt + row.observedAtMs && geometryCapturedAt <= nowMs);
   const observations = bundle.consentUiObservations.filter(row => row.layerInspected === "first_layer" &&
     row.documentUrl === document.url && row.documentIdentity?.source === "cdp_loader_id" &&
     row.documentIdentity.token === identity.token && row.captureStatus === "observed" &&
     row.captureDiagnostics?.completedChannels.includes("dom_inventory") &&
-    row.captureDiagnostics.completedChannels.includes("geometry") && !row.captureDiagnostics.failedChannels.length &&
+    geometryCompletesObservation(row) && !row.captureDiagnostics.failedChannels.length &&
     !row.captureDiagnostics.timedOutChannels.length && !row.inventoryDiagnostics?.blockingInaccessibleFrameCount);
   if (!observations.length) return block("passive_capture_incomplete");
-  const controls = observations.flatMap(row => row.controls.filter(c => c.visible && c.actionType === "reject_all"));
+  const controlsByObservation = observations.map(row => row.controls.filter(c => c.visible && c.actionType === "reject_all"));
+  const controls = controlsByObservation.flat();
   const firstLayer = artifact.candidates.filter(c => c.layer === "first_layer");
   const candidates = firstLayer.filter(c => c.actionType === "reject_all" && c.decisionStatus === "confirmed_visible");
   if (!controls.length && !candidates.length) return block("no_first_layer_reject");
-  if (controls.length > 1 || candidates.length > 1) return block("control_ambiguous");
+  if (controlsByObservation.some(row => row.length > 1) || candidates.length > 1) return block("control_ambiguous");
   if (firstLayer.some(c => c.decisionStatus === "ambiguous" &&
       c.classifierReasonCodes?.includes("visible_accessible_intent_conflict") &&
       [c.label,c.ariaLabel,c.title,c.value].some(label => label && directReject(label)))) return block("label_conflict_unresolved");
@@ -144,9 +156,15 @@ export function evaluateRejectGate(input: {
       !passiveButtonSelectorMatches(control, candidate.selectorHint, "reject", document.url, identity.token) ||
       (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label) && control.label !== cookieInformationLabel) ||
       !candidate.label || ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
-        label === undefined || (typeof label === "string" && (!label || directReject(label)))) ||
-      (control.domBinding && !cookieScriptRole)) {
+        label === undefined || (typeof label === "string" && (!label || directReject(label))))) {
     return block("control_binding_unverified");
+  }
+  if (controls.length > 1 && !controls.every(other => other.tagName === control.tagName &&
+      other.label === control.label && other.selectorHint === control.selectorHint &&
+      other.domBinding?.backendNodeId === control.domBinding?.backendNodeId &&
+      isConsentControlInteractionEligible(other) &&
+      passiveButtonSelectorMatches(other, candidate.selectorHint, "reject", document.url, identity.token))) {
+    return block("control_ambiguous");
   }
   const expiresAtMs = Math.min(input.deadlineAtMs ?? Infinity, nowMs + proofLifetimeMs);
   if (expiresAtMs <= nowMs) return block("proof_expired");

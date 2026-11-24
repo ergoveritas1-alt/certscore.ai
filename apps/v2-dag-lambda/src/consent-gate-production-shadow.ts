@@ -1,7 +1,9 @@
+import type { VerifiedConsentClickCheckpoint } from "./reject-click-checkpoint.js";
 import { deriveAcceptFirstLayerProof, type AcceptFirstLayerGeometrySource, type AcceptGatePassiveDecision } from "@certscore/scan-core/accept-first-layer-gate";
 import { buildAcceptGateShadowReceipt, type AcceptGateWorkerRecheck } from "@certscore/scan-core/accept-gate-shadow-receipt";
 import { buildRejectGateShadowReceipt, evaluateRejectGate, type RejectGateDecision, type RejectGateWorkerRecheck } from "@certscore/scan-core/reject-gate-shadow-receipt";
 import type { CanonicalEvidenceBundle, PostAcceptEvidencePacket, PostRefusalEvidencePacket } from "@certscore/contracts";
+import type { ConsentActionStage } from "./consent-action-stage.js";
 
 export type ConsentGateShadowChannels = { accept: boolean; reject: boolean };
 type Passive = { accept?: AcceptGatePassiveDecision; reject?: RejectGateDecision; axOnly?: ConsentGateShadowChannels };
@@ -43,6 +45,35 @@ export function evaluateConsentGateShadow(input: {
   };
   passive.axOnly = {accept:axOnly("accept"),reject:axOnly("reject")};
   return passive;
+}
+
+/** The isolated prepared worker can start its proof release before Accept
+ * evaluates the same verified evidence. The normal gate evaluator is shared. */
+export async function evaluatePreparationGateRejectFirst(
+  input: Parameters<typeof evaluateConsentGateShadow>[0],
+  onReject: (partial: Passive) => void | Promise<void>,
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted();
+  const rejectStartedAt = Date.now();
+  const reject = evaluateConsentGateShadow({
+    ...input, nowMs: rejectStartedAt, channels: { accept:false, reject:input.channels.reject },
+  });
+  const rejectFinishedAt = Date.now();
+  // A pending SDK send still needs this event loop for signing and transport.
+  // Wait for the bounded acknowledgement, then run the other synchronous gate.
+  await onReject(reject);
+  signal?.throwIfAborted();
+  const acceptStartedAt = Date.now();
+  const accept = evaluateConsentGateShadow({
+    ...input, nowMs: acceptStartedAt, channels: { accept:input.channels.accept, reject:false },
+  });
+  console.info(JSON.stringify({event:"reject_gate_split_timing.v1",scanId:input.scanId,
+    rejectEvaluationMs:rejectFinishedAt-rejectStartedAt, rejectReleaseWaitMs:acceptStartedAt-rejectFinishedAt,
+    acceptEvaluationMs:Date.now()-acceptStartedAt}));
+  return { ...reject, ...accept, axOnly:{
+    accept:accept.axOnly?.accept ?? false,reject:reject.axOnly?.reject ?? false,
+  }};
 }
 
 function summarizeAction(action: "accept" | "reject", scanId: string, receipt: ReturnType<typeof buildAcceptGateShadowReceipt> |
@@ -119,4 +150,9 @@ export function buildProductionConsentGateShadow(input: {
   };
 }
 
-export type ProductionConsentGateShadowFields = Omit<ReturnType<typeof buildProductionConsentGateShadow>, "baseline">;
+export type ProductionConsentGateShadowFields = Omit<ReturnType<typeof buildProductionConsentGateShadow>, "baseline"> & {
+  acceptClickCheckpoint?: VerifiedConsentClickCheckpoint;
+  rejectClickCheckpoint?: VerifiedConsentClickCheckpoint;
+  consentActionStages?: { version: "certscore.consent-action-stages.v1"; scanId: string;
+    accept?: ConsentActionStage; reject?: ConsentActionStage };
+};

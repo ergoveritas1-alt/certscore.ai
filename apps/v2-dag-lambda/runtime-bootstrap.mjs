@@ -1,3 +1,5 @@
+import { request } from "node:http";
+
 const runtimeApi = process.env.AWS_LAMBDA_RUNTIME_API;
 const handlerSpec = process.argv[2] ?? process.env._HANDLER ?? "src/handler.handler";
 
@@ -32,6 +34,38 @@ async function postRuntimeResult(invocationId, suffix, payload) {
   });
 }
 
+async function postStreamingRuntimeResult(invocationId, event) {
+  let stream;
+  const uploaded = new Promise((resolve, reject) => {
+    stream = request(`http://${runtimeApi}/2018-06-01/runtime/invocation/${invocationId}/response`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-ndjson",
+        "lambda-runtime-function-response-mode": "streaming",
+        "transfer-encoding": "chunked",
+        connection: "close",
+      },
+    }, response => {
+      response.resume();
+      response.on("end", () => response.statusCode === 202 ? resolve() : reject(new Error("Runtime rejected the worker stream.")));
+      response.on("error", reject);
+    });
+    stream.on("error", reject);
+  });
+  void uploaded.catch(() => undefined);
+  const write = frame => stream.write(JSON.stringify(frame) + "\n");
+  try {
+    const result = await handler(event, {
+      awsRequestId: invocationId,
+      onConsentEvidenceReady: receipt => write({ kind: "ready", receipt }),
+    });
+    write({ kind: "result", result });
+  } finally {
+    stream.end();
+    await uploaded;
+  }
+}
+
 function serializeError(error) {
   return {
     errorMessage: error instanceof Error ? error.message : String(error),
@@ -51,6 +85,12 @@ while (true) {
 
   try {
     const event = await nextResponse.json();
+    if (event?.consentEvidenceStreaming === true && event.orchestrationMode === "worker" && event.workerLane === "consent_proof") {
+      await postStreamingRuntimeResult(invocationId,event).catch(error => {
+        console.error("Consent worker stream failed.", serializeError(error));
+      });
+      continue;
+    }
     const result = await handler(event, {
       awsRequestId: invocationId
     });

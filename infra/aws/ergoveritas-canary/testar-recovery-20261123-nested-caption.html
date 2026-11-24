@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'">
+  <title>Consent recovery fixture | Nested caption</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; color: #182337; background: #f5f8fb; padding: 32px; }
+    main, #coiOverlay { max-width: 48rem; margin: 0 auto; }
+    #coi-banner-wrapper { background: white; border: 1px solid #52617b; border-radius: 8px; padding: 24px; }
+    button { font: inherit; background: white; color: #163b61; padding: 10px 16px; margin: 4px; border: 1px solid #294e76; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Consent recovery fixture</h1>
+    <p>This ErgoVeritas test page uses synthetic cookie preferences. Optional cookie choices affect only this fixture.</p>
+    <p>Fixture scenario. Nested caption.</p>
+  </main>
+  <aside id="cookie-information-help" hidden>Cookie information</aside>
+  <template id="consent-template">
+    <div id="coiOverlay" role="banner">
+      <div id="coi-banner-wrapper" class="coi-banner__wrapper" role="dialog" aria-modal="true" aria-label="Cookie preferences">
+        <p>We use optional cookies to measure website performance. You can accept or decline all optional cookies.</p>
+        <button type="button" id="choice" class="coi-banner__accept" data-choice="accept"><span>Accept all</span></button>
+        <button type="button" id="declineButton" class="coi-banner__decline" data-choice="reject"><span>Decline all</span></button>
+      </div>
+    </div>
+  </template>
+  <script>
+    const optionalCategory = "cookie_cat_statistic";
+    window.cicl = ["cookie_cat_necessary", optionalCategory];
+    window.cicc = { cookie_cat_necessary: true };
+    window.CookieInformation = { getConsentGivenFor: key => window.cicc[key] };
+    function showBanner() {
+      document.body.append(document.getElementById("consent-template").content.cloneNode(true));
+    }
+    showBanner();
+    document.addEventListener("click", event => {
+      const button = event.target.closest("#coi-banner-wrapper button[data-choice]");
+      if (!event.isTrusted || !button) return;
+      const accepted = button.dataset.choice === "accept";
+      window.cicc[optionalCategory] = accepted;
+      document.documentElement.dataset.fixtureChoice = button.dataset.choice;
+      document.getElementById("coiOverlay").remove();
+      dispatchEvent(new Event("CookieInformationConsentGiven"));
+    });
+  </script>
+</body>
+</html>

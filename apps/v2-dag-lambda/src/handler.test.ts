@@ -1,3 +1,4 @@
+import { buildConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES } from "./reject-click-checkpoint.js";
 import { redHatCanaryFixture } from "./test-fixtures/redhat-canary";
 import redHatPacketFixture from '../../../packages/certscore-contracts/src/test-fixtures/redhat-terminal-choice.json';
 import {CONDITIONAL_OPT_OUT_CAPTURE_PROFILE} from "@certscore/contracts";
@@ -809,6 +810,22 @@ test("an already-terminal action worker is retained when its sequential join run
 
   assert.equal(completed, true);
   assert.equal(controller.signal.aborted, false);
+});
+
+test("a packet already started at the cutoff may reject on abort without crashing the runtime", async () => {
+  const abortController = new AbortController();
+  const workerPromise = new Promise<void>((_resolve, reject) => {
+    abortController.signal.addEventListener("abort", () => reject(abortController.signal.reason), { once: true });
+  });
+  const completed = await awaitPostRefusalWorkerWithinTailBudget({
+    abortController,
+    maxTailWaitMs: 100,
+    passiveLaneBarrierCompletedAtMs: Date.now() - 100,
+    workerPromise,
+  });
+  assert.equal(completed, false);
+  assert.equal(abortController.signal.aborted, true);
+  await new Promise<void>(resolve => setImmediate(resolve));
 });
 
 test("lane timing summary makes all four completion times and the reject barrier delta queryable", () => {
@@ -2324,6 +2341,7 @@ async function runCoordinatorFixture(input: {
   scanId: string;
   enforcementGeometry?: "ready" | "wrong_selector" | "missing";
   gateDeadlineMs?: number;
+  clickCheckpoint?: boolean;
   consentBundle: CanonicalEvidenceBundle;
   action: "none" | "hang" | "late" | "completed" | "validation_failed" | "completed_during_finalization" | "completed_after_finalization";
   dispatchDelayMs: number;
@@ -2482,6 +2500,25 @@ async function runCoordinatorFixture(input: {
         assert.equal(parseLocalV2DagLambdaDispatchPayload(workerPayload)[`${actionLane}FirstLayerProof`]?.exactSelector,`#${actionLane}`);
       }
 
+      if (input.clickCheckpoint && lane === `${actionLane}_observation`) {
+        const worker = parseLocalV2DagLambdaDispatchPayload(workerPayload);
+        const binding = actionLane === "accept"
+          ? { action: "accept" as const, proof: worker.acceptFirstLayerProof! }
+          : { action: "reject" as const, proof: worker.rejectFirstLayerProof! };
+        const documentSha256 = binding.action === "accept"
+          ? binding.proof.documentSha256 : binding.proof.binding.documentSha256;
+        const time = Date.now();
+        const body = buildConsentClickCheckpoint(binding, {
+          action: actionLane, actionSemantics: "direct_label", accessibleLabel: actionLane === "accept" ? "Accept all" : "Reject all",
+          labelSource: "visible_text", selectorHint: `#${actionLane}`,
+          authorizedTargetSha256: documentSha256, frameIdentitySha256: documentSha256,
+        } as Parameters<typeof buildConsentClickCheckpoint>[1], {
+          recheckedAtMs: time, dispatchedAtMs: time, completedAtMs: time,
+        });
+        assert.ok(body);
+        const uri = `s3://test-bucket/v2-dag-lambda/local/${input.scanId}/lanes/${actionLane}_observation/${CONSENT_CLICK_CHECKPOINT_FILES[actionLane]}`;
+        pointers.set(uri, { uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.length });
+      }
       if(input.presenceOnly)assert.equal(workerPayload.privacyCaptureProfile,PRESENCE_ONLY_CAPTURE_PROFILE);
       if(input.bothActions && lane === "reject_observation") {actionCalls.push(lane);throw new Error("offline fixture: neutral Reject terminal failure");}
       if(input.bothActions && lane === "policy_evidence")await new Promise(resolve=>setTimeout(resolve,700));
@@ -2637,6 +2674,11 @@ async function runCoordinatorFixture(input: {
       const uri = `s3://${String(command.input.Bucket)}/${key}`;
       const entry = pointers.get(uri);
       if (!entry) throw new Error(`missing fixture object ${uri}`);
+      if (Object.values(CONSENT_CLICK_CHECKPOINT_FILES).some(file => key.endsWith(file))) {
+        assert.equal(command.input.Range, "bytes=0-511");
+        return { Body: entry.body, ContentLength: entry.sizeBytes,
+          ContentRange: `bytes 0-${entry.sizeBytes - 1}/${entry.sizeBytes}`, Metadata: { sha256: entry.sha256 } };
+      }
       if (input.enforcementGeometry && key.endsWith("/ConsentControlGeometryEvidence.json")) {
         await new Promise(resolve => setTimeout(resolve,30));
         assert.equal(workerPayloads.some(row => row.workerLane === `${actionLane}_observation`),false);
@@ -5148,6 +5190,128 @@ test("coordinator mirrors worker auxiliary diagnostics into final artifact root"
   );
 });
 
+test("verified consent geometry reaches the gate before an unrelated screenshot finishes", { timeout: 2000 }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-consent-geometry-ready-"));
+  const scanId = "scan-geometry-ready";
+  const targetUrl = "https://fixture.test/";
+  const dir = `v2/${scanId}/lanes/consent_proof`;
+  const uri = (name: string) => `s3://certscore-test/${dir}/${name}`;
+  const hash = (body: Buffer) => createHash("sha256").update(body).digest("hex");
+  const geometry = Buffer.from('{"fixture":"geometry"}');
+  const image = Buffer.from("image fixture");
+  const name = "ConsentControlGeometryEvidence.json";
+  const auxiliary = (fileName: string, body: Buffer) => ({
+    fileName, uri: uri(`auxiliary/${fileName}`), sha256: hash(body), sizeBytes: body.length,
+  });
+  const manifest = Buffer.from(JSON.stringify({
+    contractVersion: "certscore.v2.lambda-dag-artifact-manifest.v1",
+    scanId, targetUrl, pointers: { scanArtifactUri: uri("CanonicalEvidenceBundle.json") },
+    auxiliaryArtifacts: [auxiliary(name, geometry), auxiliary("screenshot-pre-consent.png", image)],
+  }));
+  let releaseImage!: () => void;
+  const imageReady = new Promise<void>(resolve => { releaseImage = resolve; });
+  let sawGateGeometry!: (sha256: string) => void;
+  const ready = new Promise<string>(resolve => { sawGateGeometry = resolve; });
+  let complete = false;
+  const result = {
+    scanId, status: "completed" as const, workerLane: "consent_proof" as const,
+    artifactPointers: { manifestUri: uri("LocalV2DagLambdaManifest.json"), scanArtifactUri: uri("CanonicalEvidenceBundle.json") },
+    artifactMetadata: { manifestUri: { sha256: hash(manifest), sizeBytes: manifest.length } },
+  };
+  const mirror = mirrorWorkerArtifactsIntoFinalArtifactRoot({
+    artifactRoot: tmp, workerResults: [result],
+    shadowGeometry: { result, targetUrl, onVerified: source => sawGateGeometry(source.sha256) },
+    s3GetClient: { async send(command: GetObjectCommand) {
+      const key = String(command.input.Key);
+      if (key.endsWith("screenshot-pre-consent.png")) {
+        await imageReady;
+        return { Body: image, $metadata: {} };
+      }
+      return { Body: key.endsWith(name) ? geometry : manifest, $metadata: {} };
+    } },
+  }).then(value => { complete = true; return value; });
+  try {
+    assert.equal(await ready, hash(geometry));
+    assert.equal(complete, false);
+    assert.deepEqual(await readFile(path.join(tmp, name)), geometry);
+  } finally { releaseImage(); }
+  assert.equal((await mirror)?.sha256, hash(geometry));
+  assert.deepEqual(await readFile(path.join(tmp, "screenshot-pre-consent.png")), image);
+});
+
+test("Reject geometry can be fetched alongside the manifest and is verified before the gate receives it", async t => {
+  for (const variant of ["verified", "bad-manifest", "wrong-path"] as const) {
+    await t.test(variant, async () => {
+      const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-early-geometry-"));
+      const scanId = "exact-reject";
+      const targetUrl = "https://fixture.test/";
+      const dir = `v2/${scanId}/lanes/consent_proof`;
+      const root = `s3://certscore-test/${dir}`;
+      const hash = (body: Buffer) => createHash("sha256").update(body).digest("hex");
+      const geometry = Buffer.from('{"fixture":"geometry"}');
+      const fileName = "ConsentControlGeometryEvidence.json";
+      const descriptor = { fileName, uri: `${root}/auxiliary/${fileName}`, sha256: hash(geometry), sizeBytes: geometry.length };
+      const scanArtifactUri = `${root}/CanonicalEvidenceBundle.json`;
+      const manifest = Buffer.from(JSON.stringify({
+        contractVersion: "certscore.v2.lambda-dag-artifact-manifest.v1", scanId, targetUrl,
+        pointers: { scanArtifactUri }, auxiliaryArtifacts: [descriptor],
+      }));
+      const result = {
+        scanId, status: "completed" as const, workerLane: "consent_proof" as const,
+        consentGeometry: variant === "wrong-path" ? { ...descriptor, uri: `${root}/other/${fileName}` } : descriptor,
+        artifactPointers: { manifestUri: `${root}/LocalV2DagLambdaManifest.json`, scanArtifactUri },
+        artifactMetadata: {
+          manifestUri: { sha256: variant === "bad-manifest" ? "0".repeat(64) : hash(manifest), sizeBytes: manifest.length },
+        },
+      };
+      let releaseManifest!: () => void;
+      const manifestReady = new Promise<void>(resolve => { releaseManifest = resolve; });
+      const requests: string[] = [];
+      const notified: string[] = [];
+      const mirror = mirrorWorkerArtifactsIntoFinalArtifactRoot({
+        artifactRoot: tmp, workerResults: [result],
+        shadowGeometry: { result, targetUrl, expectedConsentRoot: root, onVerified: source => notified.push(source.sha256) },
+        s3GetClient: { async send(command: GetObjectCommand) {
+          if (command.input.Key?.endsWith(fileName)) {
+            assert.equal(command.input.Key, `${dir}/auxiliary/${fileName}`);
+            requests.push(command.input.Range ? "ranged geometry" : "geometry");
+            return { Body: geometry, ContentLength: geometry.length,
+              ContentRange: `bytes 0-${geometry.length - 1}/${geometry.length}`, $metadata: {} };
+          }
+          requests.push("manifest");
+          await manifestReady;
+          return { Body: manifest, $metadata: {} };
+        }},
+      });
+      try {
+        assert.deepEqual(requests, variant === "wrong-path" ? ["manifest"] : ["ranged geometry", "manifest"]);
+        assert.deepEqual(notified, []);
+      } finally {
+        releaseManifest();
+      }
+      const retained = await mirror;
+      assert.deepEqual(notified, variant === "bad-manifest" ? [] : [hash(geometry)]);
+      assert.equal(retained?.sha256, variant === "bad-manifest" ? undefined : hash(geometry));
+      assert.equal(requests.length, 2);
+      assert.deepEqual(await readFile(path.join(tmp, fileName)), geometry);
+    });
+  }
+});
+
+test("a packet that settles after the join deadline remains late when the timer is delayed", async t => {
+  const clock = t.mock.method(Date, "now", () => 1000);
+  let deliver!: () => void;
+  const workerPromise = new Promise<void>(resolve => { deliver = resolve; });
+  const abortController = new AbortController();
+  const joined = awaitPostRefusalWorkerWithinTailBudget({
+    abortController, passiveLaneBarrierCompletedAtMs: 1000, maxTailWaitMs: 6000, workerPromise,
+  });
+  clock.mock.mockImplementation(() => 7323);
+  deliver();
+  assert.equal(await joined, false);
+  assert.equal(abortController.signal.aborted, true);
+});
+
 test("handler emits a bounded failed result when the artifact chain fails", async () => {
   const sentBodies: string[] = [];
   const result = await handler(validPayload(), {
@@ -6290,6 +6454,11 @@ test("production consent enforcement waits for verified same-scan controls and f
           assert.equal(dispatched.length,mode==="ready" ? 1 : 0,`${action} ${mode}`);
           const manifest = JSON.parse(await readFile(path.join(output.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
           const receipt = manifest[`${action}GateShadowReceipt`];
+          assert.deepEqual(manifest.consentActionStages, {
+            version: "certscore.consent-action-stages.v1",
+            scanId,
+            [action]: mode === "ready" ? "worker_failed" : "gate_declined",
+          });
           assert.equal(receipt.enforcementActive,true);
           assert.equal(receipt.dispatch.outcome,mode==="ready" ? "would_allow" : "not_attempted");
           if (mode === "ready") {
@@ -6314,3 +6483,51 @@ test("production consent enforcement waits for verified same-scan controls and f
     }
   }
 });
+
+for (const action of ["accept","reject"] as const) {
+  test(`coordinator retains one exact ${action} click receipt while its observation times out`, { timeout: 11000 }, async () => {
+    const flag = action === "accept" ? POST_ACCEPT_WORKER_FEATURE_FLAG : POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG;
+    const tailMs = action === "accept" ? 6000 : 8000;
+    const timeKey = action === "accept" ? "maxAcceptTailWaitMs" : "maxRejectTailWaitMs";
+    const config = {
+      [flag]: "1",
+      [`CERTSCORE_${action.toUpperCase()}_GATE_PRODUCTION_ENFORCE`]: "1",
+      [`CERTSCORE_${action.toUpperCase()}_CLICK_CHECKPOINT_ENABLED`]: "1",
+      CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET: "test-bucket",
+      CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX: "v2-dag-lambda/local",
+    };
+    const previous = new Map(Object.keys(config).map(key => [key, process.env[key]]));
+    Object.assign(process.env, config);
+    try {
+      const scanId = `00000000-0000-4000-8000-00000000001${action === "accept" ? 0 : 1}`;
+      const bundle = coordinatorConsentBundle(scanId, {inspectionCompleted:true,
+        acceptControlObserved: action === "accept", rejectControlObserved: action === "reject"});
+      const documentIdentity = {source:"cdp_loader_id", token:"fixture-loader"} as const;
+      bundle.domSnapshots = [{ ...runtimeSnapshotFixture(), documentIdentity }];
+      const observation = bundle.consentUiObservations[0]!;
+      Object.assign(observation, { layerInspected:"first_layer", captureStatus:"observed", documentUrl:bundle.url,
+        documentIdentity, captureDiagnostics:{completedChannels:["dom_inventory","geometry"],failedChannels:[],timedOutChannels:[]} });
+      Object.assign(observation.controls[0]!, {tagName:"button", selectorHint:`#${action}`});
+      const reads: string[] = [];
+      const output = await runCoordinatorFixture({scanId, consentBundle:bundle, actionLane:action,
+        action:"hang", enforcementGeometry:"ready", clickCheckpoint:true, dispatchDelayMs:0, onRead:key=>reads.push(key)});
+      try {
+        const manifest = JSON.parse(await readFile(path.join(output.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
+        assert.equal(manifest.consentActionStages[action],"worker_deadline_exceeded");
+        assert.equal(manifest.laneTimingSummary[timeKey],tailMs);
+        assert.equal(manifest[action + "GateShadowReceipt"].finalRecheck.outcome,"unavailable");
+        const checkpoint = manifest[action + "ClickCheckpoint"];
+        assert.equal(checkpoint.scanId,scanId);
+        assert.ok(checkpoint.completedAtMs <= checkpoint.verifiedAtMs);
+        const deadline = Date.parse(manifest.laneTimingSummary.passiveLaneBarrierCompletedAt) + tailMs;
+        assert.ok(checkpoint.verifiedAtMs < deadline);
+        assert.equal(reads.filter(key=>key.endsWith(CONSENT_CLICK_CHECKPOINT_FILES[action])).length,1);
+        assert.equal(output.result.artifactPointers[action === "accept" ? "postAcceptPacketUri" : "postRefusalPacketUri"],undefined);
+      } finally { await rm(output.artifactRoot,{recursive:true,force:true}); }
+    } finally {
+      for (const [key,value] of previous) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
+  });
+}
