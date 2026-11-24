@@ -1,3 +1,4 @@
+import { geometryConsentButtonLinkMatches } from "./exact-native-consent-button-selector.js";
 import { consentGateDocument } from "./consent-gate-document.js";
 import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
@@ -155,8 +156,7 @@ function exactGeometryAccept(
     geometry.cmp?.detections?.some(cmp => cmp.canonicalName === "CookieScript") === true;
   if ((requireExactSelector && (inspection.structuralCoverage !== "complete" ||
       (!cookieScriptRole && (candidate.exactNativeAcceptSelectorVerified !== true ||
-        !(candidate.tagName === "button" || candidate.tagName === "a" && candidate.role === "button" &&
-          candidate.linkDestination === "same_document"))))) ||
+        !(candidate.tagName === "button" || geometryConsentButtonLinkMatches(candidate, geometry.cmp, "accept")))))) ||
     candidate.enabled !== true || candidate.intersectsViewport !== true || candidate.occlusion?.center !== true ||
     candidate.consentContextConfirmed !== true || candidate.frameContext?.frameKind !== "main_frame" ||
     candidate.frameContext.frameUrl !== document.url || !candidate.label || !candidate.selectorHint || !candidate.tagName ||

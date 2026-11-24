@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v33";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v34";
 
 /** OneTrust's banner wrapper can repeat the labels of descendant controls. */
 export function isOneTrustConsentBannerWrapper(element: {
@@ -551,6 +551,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "ohne akzeptieren fortfahren"),
     equivalent("reject", "ohne cookies fortfahren"),
     equivalent("reject", "nur notwendige cookies", "necessary_only"),
+    { phrase: "nur notwendige cookies zulassen", intent: "reject", strength: "equivalent",
+      requiresConsentContext: true, variant: "necessary_only", exactLabelOnly: true },
     equivalent("reject", "nur erforderliche cookies", "necessary_only"),
     equivalent("reject", "nur essenzielle cookies", "necessary_only"),
     equivalent("reject", "nur essentielle cookies", "necessary_only"),

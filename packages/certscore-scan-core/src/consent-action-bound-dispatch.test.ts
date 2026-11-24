@@ -6,6 +6,7 @@ import {chromium, type Page} from "playwright";
 import {runPostAcceptObserver} from "./post-accept-observer";
 import {runPostRefusalObserver} from "./post-refusal-observer";
 import type {RejectFirstLayerProof} from "./reject-gate-shadow-receipt";
+import {hubSpotHrefLessConsentSelector} from "./exact-native-consent-button-selector";
 
 for (const action of ["accept", "reject"] as const) {
   for (const dispatchMode of ["enabled", "unset"] as const) test(`${action}: ${dispatchMode} cancellation at the final lifecycle boundary sends no input command`, async () => {
@@ -101,16 +102,20 @@ test("local exact Reject rechecks the original element and label before committi
   try {
     for (const mode of ["stable", "replacement", "relabel", "duplicate",
       "proof_stable", "proof_replacement", "proof_selector_mismatch", "proof_selector_ambiguous",
-      "proof_anchor_stable", "proof_anchor_retargeted"] as const) await t.test(mode, async subtest => {
+      "proof_anchor_stable", "proof_anchor_retargeted",
+      "proof_hubspot_stable", "proof_hubspot_retargeted", "proof_hubspot_reparented"] as const) await t.test(mode, async subtest => {
       const withProof = mode.startsWith("proof_");
       if (withProof) delete process.env[flag]; else process.env[flag] = "1";
       const change = mode.replace(/^proof_/, "");
-      const isAnchor = change.startsWith("anchor_");
-      const stable = change === "stable" || change === "anchor_stable";
+      const hubSpot = change.startsWith("hubspot_");
+      const isAnchor = hubSpot || change.startsWith("anchor_");
+      const stable = ["stable", "anchor_stable", "hubspot_stable"].includes(change);
+      const banner = hubSpot ? "#hs-eu-cookie-confirmation" : "#banner";
+      const control = hubSpot ? "#hs-eu-decline-button" : "#choice";
       const clicked = "localStorage.setItem('consent','denied');fetch('/clicked');";
       const choiceHtml = isAnchor
-        ? `<a id="choice" role="button" href="#" onclick="${clicked}return false">Reject all</a>`
-        : `<button id="choice" type="button" onclick="${clicked}">Reject all</button>`;
+        ? `<a id="${control.slice(1)}" role="button"${hubSpot ? "" : ' href="#"'} onclick="${clicked}return false">Reject all</a>`
+        : `<button id="${control.slice(1)}" type="button" onclick="${clicked}">Reject all</button>`;
       let clicks = 0;
       let committed = 0;
       const rechecks: string[] = [];
@@ -123,7 +128,7 @@ test("local exact Reject rechecks the original element and label before committi
         await context.route("**/*", route => {
           if (route.request().url() === url + "clicked") { clicks++; return route.fulfill({status:204}); }
           if (route.request().url() !== url) return route.abort();
-          return route.fulfill({contentType:"text/html", body:`<section id="banner" role="dialog" aria-label="Cookie consent">
+          return route.fulfill({contentType:"text/html", body:`<section id="${banner.slice(1)}" role="dialog" aria-label="Cookie consent">
             <p>Choose your optional cookies.</p>${choiceHtml}
             <button id="other" type="button">Preferences</button>
           </section>`});
@@ -135,7 +140,7 @@ test("local exact Reject rechecks the original element and label before committi
       const now = Date.now();
       const hash = (text: string) => createHash("sha256").update(text).digest("hex");
       const exactSelector = change === "selector_mismatch" ? "#other" :
-        change === "selector_ambiguous" ? "#banner button" : "#choice";
+        change === "selector_ambiguous" ? "#banner button" : hubSpot ? hubSpotHrefLessConsentSelector("reject") : control;
       const firstLayerProof: RejectFirstLayerProof = {
         outcome: "qualified", scanId, exactSelector, issuedAtMs: now, expiresAtMs: now + 6_000,
         binding: {
@@ -151,16 +156,17 @@ test("local exact Reject rechecks the original element and label before committi
         actionSearchTimeoutMs: 1500, confirmationTimeoutMs: 300, observationWindowMs: 250,
         interactionAuthorization: {kind:"loopback", authorizationId:"loopback_local_lab"},
         recipe: {artifactVersion:"certscore.post_refusal_action_recipe.v1", recipeId:"reject-exact-fixture-v1",
-          resolverMethod:"local_fixture_recipe", controlSelector:withProof ? ":is(#choice):is(#banner, #banner *)" : "#choice", bannerSelector:"#banner",
+          resolverMethod:"local_fixture_recipe", controlSelector: withProof ? `:is(${control}):is(${banner}, ${banner} *)` : control, bannerSelector: banner,
           confirmation:{kind:"local_storage_equals", key:"consent", expectedValue:"denied"}},
         onLifecycleEvent: () => {
-          mutation = page!.evaluate(mode => {
-            const button = document.querySelector("#choice")!;
+          mutation = page!.evaluate(({mode, control}) => {
+            const button = document.querySelector(control)!;
             if (mode === "replacement") button.replaceWith(button.cloneNode(true));
             if (mode === "relabel") button.textContent = "Reject optional cookies";
             if (mode === "duplicate") button.after(button.cloneNode(true));
-            if (mode === "anchor_retargeted") button.setAttribute("href", "/other");
-          }, change);
+            if (mode === "anchor_retargeted" || mode === "hubspot_retargeted") button.setAttribute("href", "/other");
+            if (mode === "hubspot_reparented") document.body.append(button);
+          }, {mode: change, control});
         },
         onActionDispatchCommitted: () => { committed++; },
         onRejectGateFinalRecheck: outcome => { rechecks.push(outcome); },

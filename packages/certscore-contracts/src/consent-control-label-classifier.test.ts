@@ -13,6 +13,21 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
+test("the full German necessary-only caption matches the exact registered refusal phrase", () => {
+  const label = "Nur notwendige Cookies zulassen";
+  const result = classifyConsentControlLabel({
+    label, usage: "action", classifierProfile: "multilingual_v1", hasConsentContext: true,
+  });
+  assert.equal(result.intent, "reject");
+  assert.equal(result.variant, "necessary_only");
+  assert.equal(result.matchedTerm, label.toLowerCase());
+  const extended = classifyConsentControlLabel({
+    label: label + " und Einstellungen öffnen", usage: "action", classifierProfile: "multilingual_v1",
+    hasConsentContext: true,
+  });
+  assert.notEqual(extended.matchedTerm, label.toLowerCase());
+});
+
 test("audience and location choices cannot borrow consent meaning from a sibling CMP", () => {
   const audience = "Change Your Location. Tell us a little about you to help us personalize the site to your needs. Financial Advisor. Institutional Investor. Individual Investor. Terms and Conditions and Privacy Policies. Accept";
   for (const scopeText of [audience, "Choose your language. English. Accept", "Select your country. Accept",

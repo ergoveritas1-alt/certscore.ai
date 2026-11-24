@@ -1,3 +1,4 @@
+import { hubSpotHrefLessConsentSelector } from "./exact-native-consent-button-selector.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import {
   CONSENT_ACTION_CONTROL_PROOF_VERSION,
@@ -414,14 +415,19 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     const cookieScriptSelector = input.action === "accept" ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : COOKIE_SCRIPT_REJECT_ROLE_SELECTOR;
     const roleButtonIds = input.cmpId === "CookieScript" && input.expectedNativeSelector === cookieScriptSelector
       ? (input.action === "accept" ? COOKIE_SCRIPT_ACCEPT_IDS : COOKIE_SCRIPT_REJECT_IDS) : undefined;
-    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds}) => {
+    const hubSpotAnchor = input.expectedNativeSelector === hubSpotHrefLessConsentSelector(input.action);
+    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor}) => {
       if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
       if (passiveSelector) {
         const document = exact?.ownerDocument;
         const view = document?.defaultView;
         const buttonLink = exact?.localName === "a" && exact.getAttribute("role") === "button" &&
-          exact.getAttribute("href") === "#" && !exact.hasAttribute("target") &&
-          !exact.hasAttribute("download") && !document?.querySelector("base[href], base[target]");
+          !exact.hasAttribute("target") && !exact.hasAttribute("download") &&
+          (hubSpotAnchor ? !exact.hasAttribute("href") &&
+            document?.querySelectorAll("#hs-eu-cookie-confirmation").length === 1 &&
+            document.querySelectorAll("#" + exact.id).length === 1 :
+            exact.getAttribute("href") === "#" && !document?.querySelector("base[href], base[target]"));
+        if (hubSpotAnchor && !buttonLink) return null;
         if (!exact?.isConnected || !(roleButtonIds ? exact.localName === "div" : exact.localName === "button" || buttonLink) ||
             !document || exact.getRootNode() !== document || !view || view !== view.top) return null;
         if (roleButtonIds && document.querySelectorAll(roleButtonIds).length !== 2) return null;
@@ -439,7 +445,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
       return { selectorMatchCount: elements.length, labels };
-    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds}).catch(() => null));
+    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor}).catch(() => null));
     if (input.expectedNativeSelector && !liveSnapshot) {
       return {status: "label_unverifiable", reason: `passive_${input.action}_button_binding_unverified`};
     }

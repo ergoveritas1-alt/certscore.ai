@@ -1,3 +1,4 @@
+import { geometryConsentButtonLinkMatches } from "./exact-native-consent-button-selector.js";
 import { consentGateDocument } from "./consent-gate-document.js";
 import { STALE_CONSENT_GEOMETRY_BASIS } from "./consent-geometry-inventory-coverage.js";
 import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
@@ -160,8 +161,8 @@ export function evaluateRejectGate(input: {
   const exactUppercaseLabel = cookieScriptRole && !candidate.ariaLabel &&
     control.label === candidate.cookieScriptUppercaseSourceLabel && control.label.toUpperCase() === candidate.label;
   const nativeControl = candidate?.exactNativeRejectSelectorVerified === true && candidate.tagName === control?.tagName &&
-    (candidate.tagName === "button" || candidate.tagName === "a" && candidate.role === "button" &&
-      control?.role === "button" && candidate.linkDestination === "same_document");
+    (candidate.tagName === "button" || control?.role === "button" &&
+      geometryConsentButtonLinkMatches(candidate, artifact.cmp, "reject"));
   const cookieInformationLabel = candidate && cookieInformationRenderedLabel(candidate, artifact.cmp);
   if (!control || !candidate || candidate.frameContext?.frameKind !== "main_frame" ||
       candidate.frameContext.frameUrl !== document.url || (!nativeControl && !cookieScriptRole) ||

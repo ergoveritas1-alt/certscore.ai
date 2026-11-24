@@ -1,3 +1,21 @@
+import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
+
+export function hubSpotHrefLessConsentSelector(action: "accept" | "reject"): string {
+  const id = action === "accept" ? "hs-eu-confirmation-button" : "hs-eu-decline-button";
+  return `#hs-eu-cookie-confirmation a#${id}[role="button"]:not([href], [target], [download])`;
+}
+
+export function geometryConsentButtonLinkMatches(
+  candidate: ConsentControlCandidateEvidence,
+  cmp: ConsentControlGeometryArtifact["cmp"],
+  action: "accept" | "reject",
+): boolean {
+  return candidate.tagName === "a" && candidate.role === "button" &&
+    (candidate.linkDestination === "same_document" ||
+      candidate.selectorHint === hubSpotHrefLessConsentSelector(action) &&
+      cmp.detections?.some(detection => detection.canonicalName === "HubSpot Consent Banner") === true);
+}
+
 export function exactAcceptSelectorCaptureEnabled(): boolean {
   return process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW === "1" ||
     process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE === "1";
@@ -17,9 +35,14 @@ export function localExactRejectControlEnabled(): boolean {
 export function exactNativeConsentButtonSelector(element: Element): string | undefined {
   const root = element.ownerDocument;
   const view = root.defaultView;
-  const buttonLink = element.localName === "a" && element.getAttribute("role") === "button" &&
-    element.getAttribute("href") === "#" && !element.hasAttribute("target") &&
-    !element.hasAttribute("download") && !root.querySelector("base[href], base[target]");
+  const anchor = element.localName === "a" && element.getAttribute("role") === "button" &&
+    !element.hasAttribute("target") && !element.hasAttribute("download");
+  // The passive reader serializes this function, so the scoped selector is built here.
+  const hubSpotId = element.id === "hs-eu-confirmation-button" || element.id === "hs-eu-decline-button";
+  const hubSpotAnchor = anchor && hubSpotId && !element.hasAttribute("href") &&
+    element.closest("#hs-eu-cookie-confirmation") !== null;
+  const buttonLink = hubSpotAnchor || anchor && element.getAttribute("href") === "#" &&
+    !root.querySelector("base[href], base[target]");
   if (!view || view !== view.top || (element.localName !== "button" && !buttonLink) ||
       element.getRootNode() !== root) return undefined;
 
@@ -46,6 +69,12 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
     }
     return hints;
   };
+
+  if (hubSpotAnchor) {
+    const selector = `#hs-eu-cookie-confirmation a#${element.id}[role="button"]:not([href], [target], [download])`;
+    return root.querySelectorAll("#hs-eu-cookie-confirmation").length === 1 &&
+      resolvesOnly("#" + element.id, element) && resolvesOnly(selector, element) ? selector : undefined;
+  }
 
   const direct = anchors(element).find(hint => resolvesOnly(hint, element));
   if (direct) return direct;
