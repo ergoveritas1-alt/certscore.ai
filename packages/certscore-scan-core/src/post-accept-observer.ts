@@ -130,6 +130,7 @@ const POST_ACCEPT_SOURCE = "post_accept_observer";
 const MAX_REQUESTS = 96;
 const MAX_STORAGE_ITEMS = 96;
 const ACCEPT_RESULT_FINALIZATION_RESERVE_MS = 250;
+const ACCEPT_EXACT_CLICK_WINDOW_MS = 500;
 export const POST_ACCEPT_EARLY_SIGNAL_SETTLE_MS = 350;
 const NON_ESSENTIAL_PURPOSES = new Set([
   "advertising",
@@ -1405,7 +1406,14 @@ export async function runPostAcceptObserver(
         }
         const recipe = selectedRecipe;
         const initial = actionControlProof;
-        const deadline = Math.min(resultBudgetDeadlineAtMs ?? Infinity, firstLayerProof.expiresAtMs, Date.now() + 250);
+        const proofDeadline = Math.min(resultBudgetDeadlineAtMs ?? Infinity, firstLayerProof.expiresAtMs);
+        const recheckStartedAt = Date.now();
+        const deadline = Math.min(proofDeadline, recheckStartedAt + 250);
+        // Chromium can deliver input near the end of an actionability retry.
+        // Leave room for its acknowledgement before recording the exact-click receipt.
+        const availableClickDeadline = Math.min(proofDeadline, recheckStartedAt + ACCEPT_EXACT_CLICK_WINDOW_MS,
+          (resultBudgetDeadlineAtMs ?? Infinity) - observationWindowMs - ACCEPT_RESULT_FINALIZATION_RESERVE_MS);
+        const clickDeadline = firstLayerProof.exactSelector ? Math.max(deadline, availableClickDeadline) : deadline;
         notifyBeforeDispatch();
         await dispatchWithAcceptFirstLayerProof({
           proof: firstLayerProof,
@@ -1434,8 +1442,7 @@ export async function runPostAcceptObserver(
           },
           clickExact: () => {
             assertDispatch(deadline);
-            // Reuse the remaining exact-element window for native actionability.
-            const timeout = deadline - Date.now();
+            const timeout = clickDeadline - Date.now();
             if (timeout <= 0) throw new Error("accept_first_layer_proof_expired");
             commit();
             return element.click({ timeout });

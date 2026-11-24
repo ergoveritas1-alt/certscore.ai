@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:http";
-import test from "node:test";
-import { chromium } from "playwright";
+import test, { type TestContext } from "node:test";
+import { chromium, type Page } from "playwright";
 import {
   postAcceptEvidencePacketSchema, projectPostAcceptEvidenceForReport, type CanonicalEvidenceBundle,
 } from "@certscore/contracts";
@@ -15,7 +15,13 @@ import { readRapidFirstLayerConsentUiObservation } from "./scanners/pre-consent-
 
 const sha = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 
-test("a retained exact OneTrust Accept selector resolves after a deferred localhost render", async t => {
+test("a retained exact OneTrust Accept selector resolves after a deferred localhost render", t =>
+  verifyDeferredAccept(t, false));
+
+test("a transient native actionability retry returns one exact Accept receipt", t =>
+  verifyDeferredAccept(t, true));
+
+async function verifyDeferredAccept(t: TestContext, interruptClick: boolean) {
   const flag="CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW";
   const previous=process.env[flag];
   process.env[flag]="1";
@@ -58,10 +64,13 @@ test("a retained exact OneTrust Accept selector resolves after a deferred localh
   t.after(() => browser.close());
   const newContext=browser.newContext.bind(browser);
   let contexts=0;
+  let workerPage: Page | undefined;
+  let interruption: Promise<void> | undefined;
   t.mock.method(browser,"newContext",async (options:Parameters<typeof newContext>[0]) => {
     const passive=++contexts===1;
     const context=await newContext({...options,serviceWorkers:"block",
       extraHTTPHeaders:{...options?.extraHTTPHeaders,...(passive?{"x-fixture-passive":"1"}:{})}});
+    if (!passive) context.on("page", page => { workerPage = page; });
     await context.route("**/*",route => new URL(route.request().url()).origin===new URL(url).origin ? route.continue() : route.abort());
     return context;
   });
@@ -102,14 +111,28 @@ test("a retained exact OneTrust Accept selector resolves after a deferred localh
     recipe:buildCanonicalPostAcceptActionRecipes().find(recipe=>recipe.cmpId==="OneTrust")!,
     interactionAuthorization:{kind:"loopback",authorizationId:"loopback_local_lab"},
     actionSearchTimeoutMs:3500,resultBudgetMs:6500,confirmationTimeoutMs:400,observationWindowMs:350,
-    onAcceptGateFinalRecheck:outcome=>rechecks.push(outcome),
+    onAcceptGateFinalRecheck: outcome => {
+      rechecks.push(outcome);
+      if (interruptClick && outcome === "passed") {
+        assert.ok(workerPage);
+        interruption = workerPage.evaluate(() => {
+          const button = document.querySelector<HTMLButtonElement>("#onetrust-accept-btn-handler")!;
+          button.disabled = true;
+          setTimeout(() => { button.disabled = false; }, 125);
+        });
+      }
+    },
     onExactAcceptClickCompleted: receipt => verifiedClicks.push(receipt),
   });
   assert.deepEqual(rechecks,["passed"],JSON.stringify({resolver:packet.resolver,limitations:packet.limitations}));
+  if (interruptClick) {
+    assert.ok(interruption);
+    await interruption;
+  }
   assert.deepEqual(clicks,["POST"]);
   assert.equal(verifiedClicks.length,1);
   assert.ok(packet.interactionDiagnostics?.resolver?.snapshots.every(s => s.source !== "canonical_geometry"));
   const retained=postAcceptEvidencePacketSchema.parse(packet);
   const projection=projectPostAcceptEvidenceForReport({packet:retained,packetSha256:sha(JSON.stringify(retained))});
   assert.equal(projection.execution?.clickCompleted,true);
-});
+}
