@@ -13,11 +13,15 @@ export function localExactRejectControlEnabled(): boolean {
 }
 
 /** Runs as part of the existing passive browser reads. Only return a selector
- * that resolves to this one native button in the main document. */
+ * that resolves to this one native button or non-navigating button-role link in the main document. */
 export function exactNativeConsentButtonSelector(element: Element): string | undefined {
   const root = element.ownerDocument;
   const view = root.defaultView;
-  if (!view || view !== view.top || element.localName !== "button" || element.getRootNode() !== root) return undefined;
+  const buttonLink = element.localName === "a" && element.getAttribute("role") === "button" &&
+    element.getAttribute("href") === "#" && !element.hasAttribute("target") &&
+    !element.hasAttribute("download") && !root.querySelector("base[href], base[target]");
+  if (!view || view !== view.top || (element.localName !== "button" && !buttonLink) ||
+      element.getRootNode() !== root) return undefined;
 
   const resolvesOnly = (selector: string, expected: Element) => {
     if (selector.length > 160) return false;

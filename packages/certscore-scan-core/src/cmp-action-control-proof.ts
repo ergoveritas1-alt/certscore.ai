@@ -419,8 +419,11 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       if (passiveSelector) {
         const document = exact?.ownerDocument;
         const view = document?.defaultView;
-        if (!exact?.isConnected || exact.localName !== (roleButtonIds ? "div" : "button") || !document || exact.getRootNode() !== document ||
-            !view || view !== view.top) return null;
+        const buttonLink = exact?.localName === "a" && exact.getAttribute("role") === "button" &&
+          exact.getAttribute("href") === "#" && !exact.hasAttribute("target") &&
+          !exact.hasAttribute("download") && !document?.querySelector("base[href], base[target]");
+        if (!exact?.isConnected || !(roleButtonIds ? exact.localName === "div" : exact.localName === "button" || buttonLink) ||
+            !document || exact.getRootNode() !== document || !view || view !== view.top) return null;
         if (roleButtonIds && document.querySelectorAll(roleButtonIds).length !== 2) return null;
         const matches = document.querySelectorAll(passiveSelector);
         if (matches.length !== 1 || matches[0] !== exact) return null;

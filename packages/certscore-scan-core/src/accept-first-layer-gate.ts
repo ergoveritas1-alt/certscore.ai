@@ -154,7 +154,9 @@ function exactGeometryAccept(
     candidate.selectorHint === "#cookiescript_accept" && candidate.tagName === "div" && candidate.role === "button" &&
     geometry.cmp?.detections?.some(cmp => cmp.canonicalName === "CookieScript") === true;
   if ((requireExactSelector && (inspection.structuralCoverage !== "complete" ||
-      (!cookieScriptRole && (candidate.tagName !== "button" || candidate.exactNativeAcceptSelectorVerified !== true)))) ||
+      (!cookieScriptRole && (candidate.exactNativeAcceptSelectorVerified !== true ||
+        !(candidate.tagName === "button" || candidate.tagName === "a" && candidate.role === "button" &&
+          candidate.linkDestination === "same_document"))))) ||
     candidate.enabled !== true || candidate.intersectsViewport !== true || candidate.occlusion?.center !== true ||
     candidate.consentContextConfirmed !== true || candidate.frameContext?.frameKind !== "main_frame" ||
     candidate.frameContext.frameUrl !== document.url || !candidate.label || !candidate.selectorHint || !candidate.tagName ||
@@ -287,7 +289,7 @@ export function deriveAcceptFirstLayerProof(input: {
         (control.layer === undefined || control.layer === "first_layer") &&
         (control.consentContextEvidence === undefined || control.consentContextEvidence === "local_surface") &&
         (control.label === nativeAccept.label || control.label === nativeAccept.sourceLabel) &&
-        (!nativeAccept.cookieScriptRole || control.role === "button") &&
+        (!(nativeAccept.cookieScriptRole || nativeAccept.tagName === "a") || control.role === "button") &&
         control.tagName === nativeAccept.tagName &&
         passiveButtonSelectorMatches(control, nativeAccept.inventorySelector, "accept", committedDocument.url, documentToken);
       if ((!direct || input.requireExactSelector) && !handoff) {

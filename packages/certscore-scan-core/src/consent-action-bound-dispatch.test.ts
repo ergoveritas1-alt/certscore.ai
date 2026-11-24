@@ -100,10 +100,17 @@ test("local exact Reject rechecks the original element and label before committi
     "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"]});
   try {
     for (const mode of ["stable", "replacement", "relabel", "duplicate",
-      "proof_stable", "proof_replacement", "proof_selector_mismatch", "proof_selector_ambiguous"] as const) await t.test(mode, async subtest => {
+      "proof_stable", "proof_replacement", "proof_selector_mismatch", "proof_selector_ambiguous",
+      "proof_anchor_stable", "proof_anchor_retargeted"] as const) await t.test(mode, async subtest => {
       const withProof = mode.startsWith("proof_");
       if (withProof) delete process.env[flag]; else process.env[flag] = "1";
       const change = mode.replace(/^proof_/, "");
+      const isAnchor = change.startsWith("anchor_");
+      const stable = change === "stable" || change === "anchor_stable";
+      const clicked = "localStorage.setItem('consent','denied');fetch('/clicked');";
+      const choiceHtml = isAnchor
+        ? `<a id="choice" role="button" href="#" onclick="${clicked}return false">Reject all</a>`
+        : `<button id="choice" type="button" onclick="${clicked}">Reject all</button>`;
       let clicks = 0;
       let committed = 0;
       const rechecks: string[] = [];
@@ -117,7 +124,7 @@ test("local exact Reject rechecks the original element and label before committi
           if (route.request().url() === url + "clicked") { clicks++; return route.fulfill({status:204}); }
           if (route.request().url() !== url) return route.abort();
           return route.fulfill({contentType:"text/html", body:`<section id="banner" role="dialog" aria-label="Cookie consent">
-            <p>Choose your optional cookies.</p><button id="choice" type="button" onclick="localStorage.setItem('consent','denied');fetch('/clicked')">Reject all</button>
+            <p>Choose your optional cookies.</p>${choiceHtml}
             <button id="other" type="button">Preferences</button>
           </section>`});
         });
@@ -152,6 +159,7 @@ test("local exact Reject rechecks the original element and label before committi
             if (mode === "replacement") button.replaceWith(button.cloneNode(true));
             if (mode === "relabel") button.textContent = "Reject optional cookies";
             if (mode === "duplicate") button.after(button.cloneNode(true));
+            if (mode === "anchor_retargeted") button.setAttribute("href", "/other");
           }, change);
         },
         onActionDispatchCommitted: () => { committed++; },
@@ -161,10 +169,10 @@ test("local exact Reject rechecks the original element and label before committi
       if (unbound) assert.equal(mutation, undefined);
       else assert.ok(mutation, "reached the final lifecycle boundary");
       await mutation;
-      assert.equal(clicks, change === "stable" ? 1 : 0);
-      assert.equal(committed, change === "stable" ? 1 : 0);
-      assert.deepEqual(rechecks,unbound ? [] : [change === "stable" ? "passed" : "failed"]);
-      if (change !== "stable") {
+      assert.equal(clicks, stable ? 1 : 0);
+      assert.equal(committed, stable ? 1 : 0);
+      assert.deepEqual(rechecks,unbound ? [] : [stable ? "passed" : "failed"]);
+      if (!stable) {
         assert.ok(packet.limitations.includes(unbound ? "passive_reject_button_binding_unverified" : "reviewed_reject_dispatch_guard_failed"));
         assert.equal(packet.refusalRegistration.actionDispatchedAtMs, undefined);
       }

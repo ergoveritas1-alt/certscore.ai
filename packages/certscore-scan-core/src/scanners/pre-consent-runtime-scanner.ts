@@ -9213,7 +9213,8 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     const { cmpScoped: _cmpScoped, scopeText: _scopeText, scopeKind: _scopeKind, contextText: _contextText,
       exactNativeButtonSelector: exactSelector, ...retainedControl } = control;
     const retainExactSelector = actionType === "accept_all" && exactAcceptSelectorCaptureEnabled() ||
-      actionType === "reject_all" && !classification.variant && exactRejectSelectorCaptureEnabled();
+      actionType === "reject_all" && (!classification.variant || classification.variant === "necessary_only" &&
+        !classification.reasonCodes.includes("observation_only_label")) && exactRejectSelectorCaptureEnabled();
     return [{
       ...retainedControl,
       ...(retainExactSelector && exactSelector ? { selectorHint: exactSelector } : {}),

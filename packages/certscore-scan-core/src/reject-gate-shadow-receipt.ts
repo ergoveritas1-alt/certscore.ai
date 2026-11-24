@@ -3,7 +3,7 @@ import { STALE_CONSENT_GEOMETRY_BASIS } from "./consent-geometry-inventory-cover
 import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
-import { classifyConsentControlLabel, consentSessionAccessLimited, isConsentControlInteractionEligible, verifyConsentControlInspection,
+import { classifyConsentControlLabel, consentSessionAccessLimited, hasConsentControlSemanticVeto, isConsentControlInteractionEligible, normalizeConsentControlText, verifyConsentControlInspection,
   type CanonicalEvidenceBundle, type ConsentActionControlProof } from "@certscore/contracts";
 import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 import type { AcceptFirstLayerGeometrySource } from "./accept-first-layer-gate.js";
@@ -23,7 +23,9 @@ function targetDigest(value: string) {
 
 function directReject(label: string) {
   const result = classifyConsentControlLabel({label, usage:"action", classifierProfile:"multilingual_v1", hasConsentContext:true});
-  return result.intent === "reject" && result.confidence >= 0.8 && !result.variant;
+  return result.intent === "reject" && result.confidence >= 0.8 && !hasConsentControlSemanticVeto(result) &&
+    result.contextSatisfied && (!result.variant || result.variant === "necessary_only" &&
+      normalizeConsentControlText(result.matchedTerm) === normalizeConsentControlText(label));
 }
 
 type RejectGateBlockReason = "source_unavailable" | "source_binding_invalid" | "no_first_layer_reject" |
@@ -134,7 +136,13 @@ export function evaluateRejectGate(input: {
       (candidate.actionType === "reject_all" || candidate.decisionStatus === "ambiguous"));
     return block(completeEmpty && !possibleReject ? "no_first_layer_reject" : "passive_capture_incomplete");
   }
-  const controlsByObservation = observations.map(row => row.controls.filter(c => c.visible && c.actionType === "reject_all"));
+  const explanatoryClose = artifact.candidates.find(candidate => candidate.layer === "first_layer" &&
+    candidate.frameContext.frameKind === "main_frame" && candidate.frameContext.frameUrl === document.url &&
+    candidate.classifierReasonCodes.includes("borlabs_explanatory_close") &&
+    inspection.candidates.some(row => row.candidateId === candidate.candidateId && row.role === "dismiss"));
+  const controlsByObservation = observations.map(row => row.controls.filter(c => c.visible && c.actionType === "reject_all" &&
+    !(explanatoryClose && c.label === explanatoryClose.label && c.selectorHint === explanatoryClose.selectorHint &&
+      c.tagName === explanatoryClose.tagName)));
   const controls = controlsByObservation.flat();
   const firstLayer = artifact.candidates.filter(c => c.layer === "first_layer");
   const candidates = firstLayer.filter(c => c.actionType === "reject_all" && c.decisionStatus === "confirmed_visible");
@@ -151,11 +159,12 @@ export function evaluateRejectGate(input: {
   // DOM inventory can read source text while geometry and the worker read rendered text.
   const exactUppercaseLabel = cookieScriptRole && !candidate.ariaLabel &&
     control.label === candidate.cookieScriptUppercaseSourceLabel && control.label.toUpperCase() === candidate.label;
-  const nativeButton = candidate?.exactNativeRejectSelectorVerified === true &&
-    candidate.tagName === "button" && control?.tagName === "button";
+  const nativeControl = candidate?.exactNativeRejectSelectorVerified === true && candidate.tagName === control?.tagName &&
+    (candidate.tagName === "button" || candidate.tagName === "a" && candidate.role === "button" &&
+      control?.role === "button" && candidate.linkDestination === "same_document");
   const cookieInformationLabel = candidate && cookieInformationRenderedLabel(candidate, artifact.cmp);
   if (!control || !candidate || candidate.frameContext?.frameKind !== "main_frame" ||
-      candidate.frameContext.frameUrl !== document.url || (!nativeButton && !cookieScriptRole) ||
+      candidate.frameContext.frameUrl !== document.url || (!nativeControl && !cookieScriptRole) ||
       !validExactSelector(candidate.selectorHint) || candidate.enabled !== true || candidate.intersectsViewport !== true || candidate.occlusion?.center !== true ||
       candidate.consentContextConfirmed !== true ||
       !isConsentControlInteractionEligible(candidate) || !isConsentControlInteractionEligible(control) ||

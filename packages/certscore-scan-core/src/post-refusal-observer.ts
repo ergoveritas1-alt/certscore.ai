@@ -2999,6 +2999,7 @@ async function dispatchRejectControl(
     const deadlineAtMs = Math.min(readOptions?.deadlineAtMs ?? Infinity, Date.now() + 250);
     const current = await buildConsentActionControlProof({
       action: "reject", control: element, exactElement: element, requireUniqueSelector: true,
+      expectedNativeSelector: exactSelector,
       page, recipeId: recipe.recipeId, selectorHint: exactSelector ?? recipe.controlSelector, cmpId: recipe.cmpId,
       controlFrameUrl: recipe.controlFrameUrl, authorizedTargetSha256: proof.authorizedTargetSha256,
       observedAtMs: proof.observedAtMs, signal, deadlineAtMs,

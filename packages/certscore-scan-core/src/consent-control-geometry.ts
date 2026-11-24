@@ -502,7 +502,7 @@ export async function captureConsentControlGeometry(
     ...container,
   }));
   const candidates = raw.candidates.map((candidate, index) =>
-    buildCandidateEvidence(candidate, index, expectedPageUrl, options.screenshotArtifactRef, containers, exactAcceptSelectorCapture, exactRejectSelectorCapture)
+    buildCandidateEvidence(candidate, index, expectedPageUrl, options.screenshotArtifactRef, containers, exactAcceptSelectorCapture, exactRejectSelectorCapture, cmp.name)
   );
   // Keep both physical nodes. The repeated aria-labelledby ID in this panel cannot distinguish rows.
   for (const [i,candidate] of candidates.entries()) {
@@ -1031,8 +1031,18 @@ function buildCandidateEvidence(
   containers: ConsentControlContainerEvidence[],
   exactAcceptSelectorCapture: boolean,
   exactRejectSelectorCapture: boolean,
+  cmpName?: string,
 ): ConsentControlCandidateEvidence {
-  const baseClassification = classifyCandidate(candidate);
+  const labelClassification = classifyCandidate(candidate);
+  // The German accessibility close caption quotes the separate Reject button.
+  // Keep this distinction limited to the recognized dialog and exact caption.
+  const borlabsExplanatoryClose = cmpName === "Borlabs Cookie" && candidate.layer === "first_layer" &&
+    candidate.tagName === "button" && /brlbs-(?:dialog-positioner|cmpnt-dialog)/u.test(candidate.containerSelectorHint ?? "") &&
+    candidate.ariaLabel === "Dialog schließen" &&
+    candidate.label === "Mit diesem Button wird der Dialog geschlossen. Seine Funktionalität ist identisch mit der des Buttons Ablehnen.";
+  const baseClassification: ConsentControlLabelClassification = borlabsExplanatoryClose
+    ? {...labelClassification, intent: "unknown", semanticRole: "dismiss", reasonCodes: ["matched_dismiss", "borlabs_explanatory_close"]}
+    : labelClassification;
   const classification: ConsentControlLabelClassification = candidate.layer === "first_layer" &&
     candidate.enabled && candidate.intersectsViewport && candidate.occlusion.center &&
     CONSENT_CONTEXT_PATTERN.test(candidate.contextText) && isInitialSelectionSubmit(candidate.label, baseClassification.reasonCodes, candidate.initialSelection) &&
@@ -1057,7 +1067,8 @@ function buildCandidateEvidence(
       entry.rejectLabelBoundNecessaryOnly?.expectedNormalizedLabels.includes(normalizeLabel(candidate.label)))
     ? candidate.namedRejectRouting : undefined;
   const retainExactSelector = actionType === "accept_all" && exactAcceptSelectorCapture ||
-    actionType === "reject_all" && !classification.variant && !namedRejectRouting && exactRejectSelectorCapture;
+    actionType === "reject_all" && (!classification.variant || classification.variant === "necessary_only" &&
+      !classification.reasonCodes.includes("observation_only_label")) && !namedRejectRouting && exactRejectSelectorCapture;
   const settingsSentence = (actionType === "do_not_sell_share" || actionType === "manage_preferences" &&
     namesNoticeBoundPrivacyRightsButton(candidate.label, candidate.ariaLabel)) && decisionStatus === "confirmed_visible" &&
     candidate.layer === "first_layer" && candidate.frameUrl === pageUrl && candidate.captureFrameSlot === 0
@@ -1081,7 +1092,7 @@ function buildCandidateEvidence(
       bannerSelector: "#onetrust-banner-sdk" as const, noticeSelector: "#onetrust-policy-text" as const,
       sentence: settingsSentence}} : {}),
     ...(namedRejectRouting ? { namedRejectRouting } : {}),
-    selectorHint: retainExactSelector && candidate.exactNativeButtonSelector
+    selectorHint: (retainExactSelector || borlabsExplanatoryClose) && candidate.exactNativeButtonSelector
       ? candidate.exactNativeButtonSelector : candidate.selectorHint,
     ...(actionType === "accept_all" && retainExactSelector && candidate.exactNativeButtonSelector
       ? { exactNativeAcceptSelectorVerified: true as const } : {}),
