@@ -9875,7 +9875,10 @@ function hasMultipleCanonicalConsentIntents(label: string): boolean {
   // "Save consent" legitimately contains a shorter canonical token with a
   // different intent. The exact phrase is the actionable control; composite
   // suppression is reserved for parent containers that concatenate controls.
-  if (CANONICAL_CONSENT_INVENTORY_TERMS.some((term) => term.phrase === normalizedLabel)) {
+  // A trailing direction glyph is presentation. Preserve the original caption
+  // for selector binding and the worker’s exact-label recheck.
+  const phraseLabel = normalizedLabel.replace(/\s*→$/u, "").trimEnd();
+  if (CANONICAL_CONSENT_INVENTORY_TERMS.some((term) => term.phrase === phraseLabel)) {
     return false;
   }
   const fullLabelClassification = classifyConsentControlLabel({

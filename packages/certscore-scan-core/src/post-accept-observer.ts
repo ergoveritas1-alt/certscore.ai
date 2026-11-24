@@ -1434,7 +1434,8 @@ export async function runPostAcceptObserver(
           },
           clickExact: () => {
             assertDispatch(deadline);
-            const timeout = Math.min(100, deadline - Date.now());
+            // Reuse the remaining exact-element window for native actionability.
+            const timeout = deadline - Date.now();
             if (timeout <= 0) throw new Error("accept_first_layer_proof_expired");
             commit();
             return element.click({ timeout });

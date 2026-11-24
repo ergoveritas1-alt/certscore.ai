@@ -90,8 +90,22 @@ export function evaluateFinalConsentGeometryEligibility(input: RefreshInput): El
   if (c.inventoryTruncated || !c.mainFrameAvailable || c.frameCount < 1 ||
       c.capturedFrameCount > c.frameCount || c.documentReadyState === "loading")
     return {blocker: "geometry_coverage_incomplete"};
+  // A later settled DOM read can still name the native button seen while the
+  // document was interactive. Only schedule a fresh read within the existing
+  // allowance. The old geometry cannot authorize a dispatch.
+  const settledExactControl = c.frameCount > 1 && c.capturedFrameCount === c.frameCount &&
+    o.documentReadyState === "complete" && o.captureStatus === "observed" &&
+    o.basis.includes("settled_control_inventory_completed") && g.candidates.some(candidate =>
+      candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible" &&
+      candidate.frameContext.frameKind === "main_frame" && candidate.frameContext.frameUrl === o.documentUrl &&
+      candidate.consentContextConfirmed && candidate.tagName === "button" && candidate.selectorHint &&
+      ((candidate.actionType === "accept_all" && candidate.exactNativeAcceptSelectorVerified === true) ||
+       (candidate.actionType === "reject_all" && candidate.exactNativeRejectSelectorVerified === true)) &&
+      o.controls.some(control => control.visible && control.tagName === "button" &&
+        control.actionType === candidate.actionType && control.selectorHint === candidate.selectorHint &&
+        control.label === (candidate.ariaLabel ?? candidate.label)));
   const readinessOnlyPartial = o.inventoryOutcome === "partial" && inspection.structuralCoverage === "limited" &&
-    c.documentReadyState === "interactive" && c.documentAndFramesStable && c.frameCount === 1 && c.capturedFrameCount === 1;
+    c.documentReadyState === "interactive" && c.documentAndFramesStable && ((c.frameCount === 1 && c.capturedFrameCount === 1) || settledExactControl);
   const semanticOnlyPartial = o.inventoryOutcome === "partial" && o.documentReadyState === "complete" &&
     inspection.structuralCoverage === "complete" && o.basis.includes("inventory:bounded_semantic_partial_channels") &&
     hasUnresolvedConsentDecision(g);
