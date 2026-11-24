@@ -4,6 +4,7 @@ import type { CaliforniaPrivacyReview } from "@certscore/contracts";
 
 // Presentation fixtures only: no observation, concern, finding, score or scan is persisted.
 const summaries: Record<string, string> = {
+  "california-transport": "The example form asks for personal information and sends it to an HTTP destination.",
   "reviewed-notice-omissions": "A substantive review of the illustrative complete governing notice identified multiple missing privacy disclosures. The finding remains scoped to the reviewed documents.",
   "california-agent-registration": "The illustrative retained California request instructions require an authorized agent to register with the Secretary of State. Review the condition and the available authorization routes for individuals.",
   "california-gpc-choice":"The illustrative canonical finding retains verified GPC receipt with an applicable opt-out remaining off. Review how the recorded choice reaches relevant services.",
@@ -49,7 +50,7 @@ const summaries: Record<string, string> = {
 export const REGULATORY_PREVIEW_FINDINGS: SitePriorityFinding[] = REGULATORY_REVIEW_TOPICS.map((topic, index) => ({
   id: topic.findingIds[0]!, rank: index + 1,
   title: topic.id === "post-refusal" ? "HubSpot and LinkedIn activity after Reject" : topic.title,
-  summary: summaries[topic.id]!, status: ["post-refusal", "preconsent-storage", "preconsent-tracking", "privacy-notice", "transport", "refusal-control"].includes(topic.id) ? "Potential gap" : "Partial concern",
+  summary: summaries[topic.id]!, status: ["post-refusal", "preconsent-storage", "preconsent-tracking", "privacy-notice", "transport", "california-transport", "refusal-control"].includes(topic.id) ? "Potential gap" : "Partial concern",
   evidence: ["Illustrative presentation input. This example is not a retained scan result."],
   evidenceJson: { fixture: true, topicId: topic.id, findingId: topic.findingIds[0] },
   correctionSteps: ["Review the assessed evidence and correct the underlying issue where confirmed."],
