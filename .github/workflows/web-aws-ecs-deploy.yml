@@ -221,9 +221,6 @@ jobs:
       - name: Test reviewed assessment highlights
         run: pnpm test:assessment-highlights
 
-      - name: Test canonical scan no-go reports
-        run: pnpm test:scan-no-go
-
       - name: Test canonical accessibility scoring
         run: |
           pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
@@ -337,8 +334,11 @@ jobs:
       - name: Build form fixture dependencies
         run: node scripts/release-node.mjs scripts/bootstrap-release.ts
 
-      - name: Install Chromium for form lifecycle release check
+      - name: Install Chromium for browser release checks
         run: pnpm --filter @certscore/scan-core exec playwright install --with-deps chromium
+
+      - name: Test canonical scan no-go reports
+        run: pnpm test:scan-no-go
 
       - name: Verify post-Accept forms and images reach the report
         run: pnpm test:post-accept-forms
