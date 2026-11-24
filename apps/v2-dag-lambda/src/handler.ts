@@ -3793,6 +3793,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         : readPostRefusalPacketFromArtifactResult(result, {
           awsRegion: payload.awsRegion, s3GetClient: evidenceReader, signal: postRefusalAbortController.signal,
         });
+      // The phase samples memory asynchronously before joining. Observe an early
+      // failure immediately and let the join report the original rejection.
+      void verification.catch(() => undefined);
       const packetCompleted = await timeLambdaPhase(
         phaseTimings,
         "post_refusal_packet_join",

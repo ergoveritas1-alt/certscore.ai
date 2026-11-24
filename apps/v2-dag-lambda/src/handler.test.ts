@@ -5312,7 +5312,10 @@ test("Reject geometry can be fetched alongside the manifest and is verified befo
         }},
       });
       try {
-        assert.deepEqual(requests, variant === "wrong-path" ? ["manifest"] : ["ranged geometry", "manifest"]);
+        // Both reads must start while the manifest is still held. Their order
+        // can vary when the mirror consults its in-flight geometry read.
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.deepEqual([...requests].sort(), variant === "wrong-path" ? ["manifest"] : ["manifest", "ranged geometry"]);
         assert.deepEqual(notified, []);
       } finally {
         releaseManifest();
