@@ -9,6 +9,7 @@ type BlankConsentPage = { context: BrowserContext; page: Page };
 
 export type PreparedConsentActionPage = BlankConsentPage & {
   browser: Browser;
+  borrowedBrowser?: boolean;
   needsPublicNetworkGuard: boolean;
   rejectDiscovery?: ConsentActionDiscovery;
   rejectStorageSession?: Promise<CDPSession>;
@@ -18,6 +19,7 @@ export async function prepareConsentActionPage(
   browser: Browser,
   needsPublicNetworkGuard: boolean,
   action?: "accept" | "reject",
+  borrowedBrowser = false,
 ): Promise<PreparedConsentActionPage> {
   if (browser.contexts().length !== 0) throw new Error("Exact action browser already has a context.");
   const context = await browser.newContext({ ...chromiumContextOptions(), ignoreHTTPSErrors: false });
@@ -38,7 +40,7 @@ export async function prepareConsentActionPage(
         installPostRefusalStorageWriteProbe(page),
       ]);
     }
-    return { browser, context, page, needsPublicNetworkGuard, rejectDiscovery, rejectStorageSession };
+    return { browser, context, page, borrowedBrowser, needsPublicNetworkGuard, rejectDiscovery, rejectStorageSession };
   } catch (error) {
     await context.close().catch(() => undefined);
     throw error;

@@ -516,7 +516,7 @@ export async function runPostRefusalObserver(
   let nextRequestNumber = 0;
   let activeRequestIdsAtRegistration: string[] = [];
   let browser = input.preparedActionPage?.browser ?? input.browser;
-  let ownsBrowser = Boolean(input.preparedActionPage);
+  let ownsBrowser = Boolean(input.preparedActionPage && !input.preparedActionPage.borrowedBrowser);
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let budgetContextClose: Promise<void> | undefined;

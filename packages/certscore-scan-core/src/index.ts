@@ -291,6 +291,8 @@ export interface RunScanInput {
   consentFlowForceAllowedScenarioPlanning?: boolean;
   postConsentFlowsEnabled?: boolean;
   browserReuseMode?: "per_module" | "single";
+  /** Trusted consent-lane browser. The caller closes it after a clean context handoff. */
+  borrowedConsentBrowser?: Browser;
   /**
    * Isolates independently mergeable evidence work for Lambda fan-out. The
    * default preserves the existing single-process scan behavior.
@@ -494,9 +496,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const artifactWriter = await createArtifactWriter(outDir);
   await phaseRecorder.record("artifact_writer", "completed", { outDir });
   const useSingleBrowser = input.browserReuseMode === "single" && (preConsentEnabled || policySurfaceEnabled);
-  let sharedBrowser: Browser | undefined;
+  const borrowedConsentBrowser = input.borrowedConsentBrowser;
+  if (borrowedConsentBrowser && (evidenceLane !== "consent_proof" || !preConsentEnabled ||
+      !borrowedConsentBrowser.isConnected() || borrowedConsentBrowser.contexts().length !== 0)) {
+    throw new Error("Passive consent requires a connected browser with no open context.");
+  }
+  let sharedBrowser = borrowedConsentBrowser;
   const policySurfaceAbortController = new AbortController();
-  if (useSingleBrowser) {
+  if (useSingleBrowser && !sharedBrowser) {
     await phaseRecorder.record("shared_browser", "started", {
       mode: "single_chromium_process",
     });
@@ -1546,7 +1553,11 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     policySurfaceAbortController.abort(
       new Error("Policy-surface work canceled because the scan core is closing."),
     );
-    if (sharedBrowser) {
+    if (borrowedConsentBrowser) {
+      // The entire passive visit must be retired before emitting a proof when
+      // its Chromium process is retained for a separately isolated action.
+      await Promise.all(borrowedConsentBrowser.contexts().map(context => context.close()));
+    } else if (sharedBrowser) {
       await phaseRecorder.record("shared_browser_close", "started");
       await sharedBrowser.close().catch(() => undefined);
       await phaseRecorder.record("shared_browser_close", "completed");

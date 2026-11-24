@@ -596,7 +596,16 @@ type RejectPacketReady = {
   packet: { uri: string; sha256: string; sizeBytes: number };
 };
 
+type InlineConsentBrowser = {
+  browser: Promise<Browser>;
+  workspaceRoot?: string;
+  awsRequestId?: string;
+  rejectNetworkCheck?: ReturnType<typeof beginExactRejectNetworkCheck>;
+};
+
 type HandlerOptions = {
+  inlineConsentBrowser?: InlineConsentBrowser;
+  callerSignal?: AbortSignal;
   localGpcAdaptiveParticipant?: RunScanInput["localGpcAdaptiveParticipant"];
   artifactChainTimeoutMs?: number;
   awsRequestId?: string;
@@ -1385,6 +1394,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     artifactSignal?: AbortSignal;
     allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
+    borrowedConsentBrowser?: Promise<Browser>;
     externalBaselinePlanning?: "enrich" | "reuse_only";
     forceAllowedScenarioPlanning?: boolean;
     onScanCoreComplete?: () => void;
@@ -1432,6 +1442,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     localPolicyNanoAssistProvider: options.localPolicyNanoAssistProvider,
     allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
     artifactRoot,
+    borrowedConsentBrowser: options.borrowedConsentBrowser,
     phaseLabelPrefix: options.phaseLabelPrefix,
     phaseTimings,
     preConsentScreenshotMode: options.preConsentScreenshotMode ?? scanTuning.preConsentScreenshotMode,
@@ -1493,6 +1504,7 @@ async function runLocalV2DagLambdaScanBundle(
     localPolicyNanoAssistProvider?: RunScanInput["localPolicyNanoAssistProvider"];
     allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
+    borrowedConsentBrowser?: Promise<Browser>;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
     onRuntimePreviewComplete?: RunScanInput["onPreConsentRuntimePreview"];
@@ -1525,8 +1537,11 @@ async function runLocalV2DagLambdaScanBundle(
     try {
       const { runScan } = await import("@certscore/scan-core");
       if (localGpcAdaptiveEnabled(payload) && !options.localGpcAdaptiveParticipant) throw new Error("Adaptive local comparison requires the paired simulator.");
+      const borrowedConsentBrowser = await options.borrowedConsentBrowser;
+      options.signal?.throwIfAborted();
       const bundle = await runScan({
         scanId: payload.scanId,
+        borrowedConsentBrowser,
         localPolicyNanoAssistProvider: options.localPolicyNanoAssistProvider,
         resourceInventoryCrawl: payload.resourceInventoryCrawl,
         resourceInventoryDiscovery: payload.resourceInventoryDiscovery,
@@ -2468,6 +2483,34 @@ function consentClickCheckpointSink(
   };
 }
 
+/** The same exact worker's URL check may begin when its proof is released.
+ * A changed proof or an old result must perform the ordinary check again. */
+export function beginExactRejectNetworkCheck(
+  targetUrl: string,
+  proof: RejectFirstLayerProof,
+  signal?: AbortSignal,
+  validate = assertPublicNetworkUrl,
+) {
+  const identify = (candidate: RejectFirstLayerProof) => JSON.stringify([
+    candidate.scanId, candidate.issuedAtMs, candidate.expiresAtMs, candidate.exactSelector,
+    candidate.binding.parentDispatchSha256, candidate.binding.sourceSha256,
+    candidate.binding.geometrySha256, candidate.binding.selectorSha256, candidate.binding.labelSha256,
+  ]);
+  const identity = identify(proof);
+  const check = validate(targetUrl, { signal }).then(url => ({ url, completedAtMs: Date.now() }));
+  void check.catch(() => undefined);
+  let used = false;
+  return async (url: string, candidate: RejectFirstLayerProof, workerSignal?: AbortSignal) => {
+    if (used || url !== targetUrl || identify(candidate) !== identity) return undefined;
+    used = true;
+    workerSignal?.throwIfAborted();
+    const { url: validatedUrl, completedAtMs } = await check;
+    workerSignal?.throwIfAborted();
+    const ageMs = Date.now() - completedAtMs;
+    return ageMs >= 0 && ageMs <= 250 ? validatedUrl : undefined;
+  };
+}
+
 export async function startBlankExactActionBrowser(timeoutMs: number) {
   const { chromium } = await import("playwright");
   const options = chromiumLaunchOptions({ headless: true });
@@ -2937,6 +2980,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     artifactSignal?: AbortSignal;
     deadlineAtMs?: number;
     artifactRoot: string;
+    inlineConsentBrowser?: InlineConsentBrowser;
     lambdaClient?: LambdaInvokeClient;
     s3Client?: S3PutClient;
     s3GetClient?: S3GetClient;
@@ -3082,7 +3126,18 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   });
   let resolveRejectProof!: (value?: ReturnType<typeof evaluateConsentGateShadow>["reject"]) => void;
   const rejectProofReady = new Promise<ReturnType<typeof evaluateConsentGateShadow>["reject"]>(resolve => {
-    resolveRejectProof = resolve;
+    let released = false;
+    resolveRejectProof = decision => {
+      if (released) return;
+      released = true;
+      const inline = options.inlineConsentBrowser;
+      if (inline && !inline.rejectNetworkCheck && decision?.outcome === "qualified" && !options.signal?.aborted) {
+        inline.rejectNetworkCheck = beginExactRejectNetworkCheck(payload.targetUrl, {
+          ...decision, scanId: payload.scanId,
+        }, options.signal);
+      }
+      resolve(decision);
+    };
   });
   let resolveConsentProof!: (value?: ReturnType<typeof evaluateConsentGateShadow>) => void;
   const consentProofReady = new Promise<ReturnType<typeof evaluateConsentGateShadow> | undefined>(resolve => {
@@ -3162,6 +3217,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             parentScanId: payload.scanId,
             signal: postRefusalWorkerSignal,
             ...(proof ? {rejectFirstLayerProof:proof} : {}),
+            inlineConsentBrowser: options.inlineConsentBrowser,
             ...(proof && useCloudConsentHandoff ? {
               onRejectPacketReady: (notice: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => {
                 earlyRejectPacket = startRejectPacketVerification(notice, expected, {
@@ -3386,6 +3442,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   };
   const workerResults = await timeLambdaPhase(phaseTimings, "worker_invocations", () =>
     invokeLocalV2DagLambdaWorkers({
+      inlineConsentBrowser: options.inlineConsentBrowser,
       lambdaClient: options.lambdaClient,
       ...(useCloudConsentHandoff ? { onConsentEvidenceReady:receiveConsentEvidence } : {}),
       onWorkerResult: (result) => {
@@ -4268,6 +4325,7 @@ export async function retainFailedTerminalLaneEvidence(results: LocalV2DagLambda
 
 export async function invokeLocalV2DagLambdaWorkers(input: {
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
+  inlineConsentBrowser?: InlineConsentBrowser;
   lambdaClient?: LambdaInvokeClient;
   parentPayload: LocalV2DagLambdaDispatchPayload;
   parentScanId: string;
@@ -4283,6 +4341,7 @@ export async function invokeLocalV2DagLambdaWorkers(input: {
     try {
       const result = await invokeLocalV2DagLambdaWorker({
         coordinatorPlanSummary: input.coordinatorPlanSummary,
+        inlineConsentBrowser: workerLane === "consent_proof" ? input.inlineConsentBrowser : undefined,
         lambdaClient,
         parentPayload: input.parentPayload,
         parentScanId: input.parentScanId,
@@ -4314,6 +4373,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   rejectFirstLayerProof?: RejectFirstLayerProof;
   rejectPreparationId?: string;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
+  inlineConsentBrowser?: InlineConsentBrowser;
   lambdaClient?: LambdaInvokeClient;
   parentPayload: LocalV2DagLambdaDispatchPayload;
   parentScanId: string;
@@ -4380,7 +4440,22 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const onConsentReady = isCloudConsentHandoffPayload(workerPayload) ? input.onConsentEvidenceReady : undefined;
   const onRejectReady = workerLane === "reject_observation" && workerPayload.targetEnvironment === "production" &&
     input.rejectFirstLayerProof && !input.rejectPreparationId ? input.onRejectPacketReady : undefined;
-  if (onConsentReady || onRejectReady) {
+  if (input.inlineConsentBrowser && (onConsentReady || onRejectReady)) {
+    const inline = input.inlineConsentBrowser;
+    // Retain the same worker parser, network validation, scan deadlines, and
+    // original evidence checks. Only the physical invocation is shared.
+    const result = await handler(workerDispatch, {
+      inlineConsentBrowser: inline,
+      callerSignal: input.signal,
+      awsRequestId: inline.awsRequestId,
+      workspaceRoot: inline.workspaceRoot,
+      ...(onConsentReady ? { onConsentEvidenceReady: (notice: LocalConsentEvidenceReady) =>
+        onConsentReady(notice, workerPayload) } : {}),
+      ...(onRejectReady ? { onRejectPacketReady: (notice: RejectPacketReady) =>
+        onRejectReady(notice, workerPayload) } : {}),
+    });
+    responsePayload = Buffer.from(JSON.stringify(result));
+  } else if (onConsentReady || onRejectReady) {
     const streamClient = new LambdaClient({ region:workerPayload.awsRegion,maxAttempts:1 });
     try {
       const streamed = await streamClient.send(new InvokeWithResponseStreamCommand({
@@ -7173,6 +7248,7 @@ async function replayCompletedSqsDispatch(input: {
 
 export async function handler(event: unknown, options: HandlerOptions = {}) {
   let earlyActionPage: Promise<PreparedConsentActionPage> | undefined;
+  let ownedConsentBrowser: InlineConsentBrowser | undefined;
   let payload: LocalV2DagLambdaDispatchPayload | null = null;
   let handlerOutcome: "completed" | "failed" | "unknown" = "unknown";
   const now = options.now ?? (() => new Date());
@@ -7206,6 +7282,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   );
 
   try {
+    options.callerSignal?.throwIfAborted();
     payload = parseLocalV2DagLambdaDispatchPayload(dispatchEvent.payload);
     if (payload.targetEnvironment === "production" && !publicNetworkGuardEnabled(process.env)) {
       throw new Error("Production scanner network guard must remain enabled.");
@@ -7230,21 +7307,28 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         // navigate, after the normal target checks and exact proof validation.
         const authorization = accept ? payload.postAcceptObservation?.interactionAuthorization
           : payload.postRefusalObservation?.interactionAuthorization;
-        earlyActionPage = startBlankExactActionBrowser(Math.max(1, proof.expiresAtMs - Date.now()))
-          .then(async browser => {
-            try {
-              return await prepareConsentActionPage(
-                browser, authorization?.kind === "scan_target_resolution", accept ? "accept" : "reject",
-              );
-            } catch (error) {
-              await browser.close().catch(() => undefined);
-              throw error;
-            }
-          });
+        const borrowed = reject ? options.inlineConsentBrowser : undefined;
+        const browser = borrowed?.browser ?? startBlankExactActionBrowser(Math.max(1, proof.expiresAtMs - Date.now()));
+        earlyActionPage = browser.then(async browser => {
+          try {
+            options.callerSignal?.throwIfAborted();
+            return await prepareConsentActionPage(
+              browser, authorization?.kind === "scan_target_resolution", accept ? "accept" : "reject", Boolean(borrowed),
+            );
+          } catch (error) {
+            if (!borrowed) await browser.close().catch(() => undefined);
+            throw error;
+          }
+        });
         void earlyActionPage.catch(() => undefined);
       }
     }
-    const validatedTarget = await assertPublicNetworkUrl(payload.targetUrl);
+    const plannedRejectValidation = payload.rejectFirstLayerProof
+      ? await options.inlineConsentBrowser?.rejectNetworkCheck?.(
+        payload.targetUrl, payload.rejectFirstLayerProof, options.callerSignal,
+      ) : undefined;
+    const validatedTarget = plannedRejectValidation ??
+      await assertPublicNetworkUrl(payload.targetUrl, { signal: options.callerSignal });
     if (validatedTarget.hostname.toLowerCase() !== payload.hostname.toLowerCase()) {
       throw new Error("Lambda scan target hostname does not match its validated target URL.");
     }
@@ -7270,6 +7354,16 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         handlerOutcome = "completed";
         return replayed;
       }
+    }
+    if (!options.runArtifactChain && !options.lambdaClient &&
+        payload.orchestrationMode === "sharded" && payload.targetEnvironment === "production" &&
+        isAwsLambdaRuntime() && isPostRefusalRejectWorkerEnabled(payload) &&
+        productionConsentGateEnforced(payload, "reject") && !rejectPreparationCanaryEnabled(payload)) {
+      // The passive lane would launch Chromium anyway. Start that same process
+      // here so Reject can use a clean context without a second cold launch.
+      const browser = startBlankExactActionBrowser(LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS);
+      void browser.catch(() => undefined);
+      ownedConsentBrowser = { browser, workspaceRoot: options.workspaceRoot, awsRequestId: options.awsRequestId };
     }
     const workspaceRoot = options.workspaceRoot ?? process.cwd();
     const baseArtifactRoot = buildLocalV2DagLambdaArtifactRoot({
@@ -7308,6 +7402,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             deadlineAtMs: runOptions.deadlineAtMs,
             artifactRoot: runOptions.artifactRoot,
             artifactSignal: runOptions.artifactSignal,
+            inlineConsentBrowser: ownedConsentBrowser,
             lambdaClient: options.lambdaClient,
             s3Client: options.s3Client,
             s3GetClient: options.s3GetClient,
@@ -7317,6 +7412,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         : runLocalV2DagLambdaArtifactChain(dispatchPayload, {
             localGpcAdaptiveParticipant: localGpcAdaptiveEnabled(dispatchPayload) ? options.localGpcAdaptiveParticipant : undefined,
             ...runOptions,
+            borrowedConsentBrowser: dispatchPayload.workerLane === "consent_proof" ? options.inlineConsentBrowser?.browser : undefined,
             onConsentEvidenceReady: options.onConsentEvidenceReady && isCloudConsentHandoffPayload(dispatchPayload)
               ? options.onConsentEvidenceReady : undefined,
             s3Client: options.s3Client,
@@ -7410,7 +7506,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       runArtifactChain(payload, {
         allowRuntimeEvidenceFinalizationAfterAbort:
           payload.workerLane === "runtime_evidence" || payload.workerLane === "gpc_observation",
-        artifactSignal: artifactAbortController.signal,
+        artifactSignal: options.callerSignal
+          ? AbortSignal.any([artifactAbortController.signal, options.callerSignal]) : artifactAbortController.signal,
         deadlineAtMs: observerDeadlineAtMs,
         artifactRoot,
         onScanCoreComplete: () => {
@@ -7504,7 +7601,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           handlerStartedAtMs + scannerWorkTimeoutMs -
           LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS -
           LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS,
-        signal: scannerAbortController.signal,
+        signal: options.callerSignal
+          ? AbortSignal.any([scannerAbortController.signal, options.callerSignal]) : scannerAbortController.signal,
       }),
       artifactChainTimeoutMs,
       () => {
@@ -7735,7 +7833,12 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     return result;
   } finally {
     if (earlyActionPage) {
-      const cleanup = earlyActionPage.then(({browser}) => browser.isConnected() ? browser.close() : undefined);
+      const cleanup = earlyActionPage.then(({ browser, borrowedBrowser, context }) =>
+        borrowedBrowser ? context.close() : browser.isConnected() ? browser.close() : undefined);
+      await withHandlerSafetyTimeout(cleanup, 250).catch(() => undefined);
+    }
+    if (ownedConsentBrowser) {
+      const cleanup = ownedConsentBrowser.browser.then(browser => browser.close());
       await withHandlerSafetyTimeout(cleanup, 250).catch(() => undefined);
     }
     const durationMs = Math.max(0, Date.now() - handlerStartedAtMs);
