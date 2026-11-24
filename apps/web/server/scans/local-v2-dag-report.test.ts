@@ -10198,9 +10198,12 @@ test("the controlled cPanel fixture produces a No-Go report with both posture sc
     assert.equal(detail.scan.pagesScanned, 0);
     const pulse = buildPulseProjection({ scanRecord: detail, detail: "summary", format: "json", freshnessMode: "latest",
       pulseRequestId: "local-placeholder", requestedUrl: bundle.url, resolutionMode: "existing_scan", waitSeconds: 0 });
-    assert.equal(pulse.summary.score, null);
-    assert.equal(pulse.noGo?.reasonCode, "parked_or_placeholder");
-    assert.equal("postureScores" in pulse.summary, false);
+    const { summary, noGo } = pulse;
+    assert.ok(summary && typeof summary === "object" && "score" in summary);
+    assert.equal(summary.score, null);
+    assert.ok(noGo && typeof noGo === "object" && "reasonCode" in noGo);
+    assert.equal(noGo.reasonCode, "parked_or_placeholder");
+    assert.equal("postureScores" in summary, false);
   } finally {
     await fixture.close();
     await rm(directory, { recursive: true, force: true });
