@@ -1349,7 +1349,7 @@ test("deriveGdprEprivacyCoverageChecklist rates pre-consent 3rd party cookie sto
   const row = byId(items, "pre_consent_cookies_storage");
   assert.equal(row.status, "Gap observed");
   assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "high");
-  assert.match(row.explanation, /Google - Advertising \(0.950s\)/);
+  assert.match(row.explanation, /Google - Advertising \(0\.95 s\)/);
   assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
 });
 
@@ -1373,7 +1373,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps medium 3rd party cookie storage 
   assert.equal(row.status, "Review signal");
   assert.equal(row.assessmentStatus, "review_signal");
   assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "medium");
-  assert.match(row.explanation, /Quantcast - Analytics \(1.40s\)/);
+  assert.match(row.explanation, /Quantcast - Analytics \(1\.4 s\)/);
   assert.match(row.criticalEvidence.statusBasis, /Medium priority.*Analytics/);
 });
 
@@ -1429,7 +1429,7 @@ test("deriveGdprEprivacyCoverageChecklist does not let unknown review cookies ou
   const row = byId(items, "pre_consent_cookies_storage");
   assert.equal(row.status, "Review signal");
   assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "medium");
-  assert.match(row.explanation, /Klaviyo - Analytics \(1.42s\)/);
+  assert.match(row.explanation, /Klaviyo - Analytics \(1\.422 s\)/);
   assert.doesNotMatch(row.explanation, /unknown_cookie|Unknown/);
 });
 
@@ -1500,7 +1500,7 @@ test("deriveGdprEprivacyCoverageChecklist lets medium cookie inventory override 
   assert.equal(row.status, "Review signal");
   assert.equal(row.assessmentStatus, "review_signal");
   assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "medium");
-  assert.match(row.explanation, /Quantcast - Analytics \(1.19s\)/);
+  assert.match(row.explanation, /Quantcast - Analytics \(1\.187 s\)/);
 });
 
 test("deriveGdprEprivacyCoverageChecklist projects classified high-priority tracker inventory as score-neutral unconfirmed coverage", () => {
@@ -1537,7 +1537,7 @@ test("deriveGdprEprivacyCoverageChecklist projects classified high-priority trac
     (row.criticalEvidence.retainedEvidence.preconsentThirdPartyTrackerGroups as Array<{ vendor: string }>).map((group) => group.vendor),
     ["Google Ads / DoubleClick", "Optimizely"]
   );
-  assert.match(row.explanation, /Google Ads \/ DoubleClick - Advertising \(0.386s\)/);
+  assert.match(row.explanation, /Google Ads \/ DoubleClick - Advertising \(0\.386 s\)/);
   assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
   assert.equal(row.criticalEvidence.retainedEvidence.scoreEffect, "none");
 });
@@ -1563,7 +1563,7 @@ test("deriveGdprEprivacyCoverageChecklist projects classified medium tracker inv
   assert.equal(row.assessmentStatus, "coverage_limitation");
   assert.equal(getEvidenceLabel(row), "Not testable");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "medium");
-  assert.match(row.explanation, /Optimizely - A\/B Testing \(2.10s\)/);
+  assert.match(row.explanation, /Optimizely - A\/B Testing \(2\.1 s\)/);
   assert.match(row.criticalEvidence.statusBasis, /Medium priority.*A\/B Testing/);
   assert.equal(row.criticalEvidence.retainedEvidence.scoreEffect, "none");
 });
@@ -3619,7 +3619,7 @@ test("deriveGdprEprivacyCoverageChecklist normalizes pre-consent tracking vendor
 
   const highlights = byId(items, "pre_consent_third_party_tracking").criticalEvidence.retainedEvidence.evidenceHighlights;
   assert.ok(Array.isArray(highlights));
-  assert.match(String(highlights[0]), /Google Analytics at 0.120s/);
+  assert.match(String(highlights[0]), /Google Analytics at 0\.12 s/);
   assert.match(String(highlights[1]), /"vendor":"Google Analytics".*"category":"analytics".*"firstSeenMs":120/);
   assert.match(String(highlights[2]), /"vendor":"Microsoft Clarity".*"category":"session_replay".*"firstSeenMs":906/);
   assert.doesNotMatch(JSON.stringify(highlights), /Google Tag Manager/);
