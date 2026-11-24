@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,6 +22,7 @@ import {
   buildScanNoGoAssessment,
   classifyScanNoGoTextForCalibration,
   hasCompleteRetainedConsentProofPacket,
+  runScan,
   shouldAttemptIncompleteConsentVisualFallback,
   shouldAttemptScreenshotOnlyFallback,
 } from "./index.js";
@@ -37,6 +40,73 @@ test("an HTTP 200 request-rejection shell is no-go without classifying quotation
     "Hello world. Public project documentation.",
     "公开资料与服务说明",
   ]) assert.notEqual(buildScanNoGoAssessment(scanEvidence({text, finalMainDocumentStatus:200, screenshots:[], firstPartySuccesses:8}))?.scanNoGoAssessment.decision, "no_go", text);
+});
+
+test("cPanel no-go requires the terminal main document and same-document template requests", () => {
+  const requested = "https://example.test/";
+  const url = new URL("/cgi-sys/defaultwebpage.cgi", requested).href;
+  const evidence = { ...scanEvidence({ screenshots: [], finalMainDocumentStatus: 200 }), normalizedUrl: requested };
+  Object.assign(evidence.domSnapshots[0]!, { url, capturedAtMs: 500, consentStateAtTime: "pre_consent" });
+  const proof = { isMainFrame: true, sourceScanner: "pre_consent_runtime", consentStateAtTime: "pre_consent",
+    directVsInferred: "direct", timestampMs: 100 } as const;
+  Object.assign(evidence.networkEvents[0]!, proof, { requestUrl: url });
+  Object.assign(evidence.networkResponseEvents[0]!, { responseUrl: url, timestampMs: 110, directVsInferred: "direct" });
+  for (const [index, asset] of ["powered_by_cpanel.svg", "server_misconfigured.png"].entries()) {
+    evidence.networkEvents.push({ ...proof, requestId: `asset-${index}`, documentUrl: url, resourceType: "image",
+      timestampMs: 120, requestUrl: new URL(`/img-sys/${asset}`, requested).href } as NetworkEvent);
+  }
+  const result = buildScanNoGoAssessment(evidence);
+  assert.equal(result?.scanNoGoAssessment.decision, "no_go");
+  assert.equal(result?.primaryReasonCode, "parked_or_placeholder");
+  assert.ok(result?.scanNoGoAssessment.corroboratorCodes.includes("cpanel_default_hosting_page_observed"));
+
+  for (const change of [
+    (sample: typeof evidence) => { sample.domSnapshots[0]!.url = requested; },
+    (sample: typeof evidence) => { sample.networkEvents.pop(); },
+    (sample: typeof evidence) => { sample.networkEvents[0]!.isMainFrame = false; },
+    (sample: typeof evidence) => { sample.networkEvents[1]!.documentUrl = requested; },
+    (sample: typeof evidence) => { sample.networkEvents[1]!.timestampMs = 501; },
+    (sample: typeof evidence) => { sample.networkEvents[1]!.requestUrl = "https://other.test/img-sys/powered_by_cpanel.svg"; },
+    (sample: typeof evidence) => { sample.networkEvents.push({ ...sample.networkEvents[0]!, requestUrl: requested, timestampMs: 450 }); },
+  ]) {
+    const variant = structuredClone(evidence);
+    change(variant);
+    assert.notEqual(buildScanNoGoAssessment(variant)?.primaryReasonCode, "parked_or_placeholder");
+  }
+});
+
+test("localhost cPanel fallback stops both scan lanes before retaining score-bearing coverage", async () => {
+  const server = createServer((request, response) => {
+    if (request.url === "/") {
+      response.writeHead(302, { location: "/cgi-sys/defaultwebpage.cgi" }).end();
+    } else if (request.url === "/cgi-sys/defaultwebpage.cgi") {
+      response.writeHead(200, { "content-type": "text/html" }).end(
+        '<!doctype html><title>Hosting</title><img src="/img-sys/powered_by_cpanel.svg"><img src="/img-sys/server_misconfigured.png">',
+      );
+    } else if (request.url?.startsWith("/img-sys/")) {
+      response.writeHead(200, { "content-type": "image/svg+xml" }).end('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+    } else {
+      response.writeHead(404).end();
+    }
+  });
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-cpanel-fixture-"));
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    for (const evidenceLane of ["runtime_evidence", "consent_proof"] as const) {
+      const bundle = await runScan({ url: `http://127.0.0.1:${address.port}/`, profile: "tiny",
+        outDir: path.join(directory, evidenceLane), evidenceLane, preConsentScreenshotMode: "never" });
+      assert.equal(bundle.scanNoGoAssessment?.decision, "no_go", evidenceLane);
+      assert.equal(bundle.scanNoGoAssessment.reasonCodes[0], "parked_or_placeholder", evidenceLane);
+      assert.ok(bundle.scanNoGoAssessment.corroboratorCodes.includes("cpanel_default_hosting_page_observed"), evidenceLane);
+      assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none", evidenceLane);
+    }
+  } finally {
+    server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("all retained main-document 5xx responses are terminal, including Cloudflare origin timeouts", () => {

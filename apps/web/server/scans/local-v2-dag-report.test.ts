@@ -13,7 +13,7 @@ import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-epriva
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildIframeInventoryRows, classifyInventoryEvidence } from "../../lib/scans/runtime-inventory-projection";
-import { buildCanonicalGdprEprivacyShadowProjection } from "../../lib/pulse/projection";
+import { buildCanonicalGdprEprivacyShadowProjection, buildPulseProjection } from "../../lib/pulse/projection";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import type { ScanDetailResponse } from "./get-scan-by-id";
@@ -10163,6 +10163,35 @@ test("new scanner no-go decisions survive report reads without applying new rule
   assert.equal(projected?.primaryReasonCode,"authentication_required");
   assert.deepEqual(projected?.scanNoGoAssessment,fresh!.scanNoGoAssessment);
   assert.equal(JSON.stringify(bundle),retained);
+});
+
+test("a retained hosting placeholder no-go suppresses the scores in the scan report", async () => {
+  const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
+  const { gpcRuntimeFixture } = require("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const bundle = gpcRuntimeFixture({ enabled: false, url: "https://fixture.test/" }) as CanonicalEvidenceBundle;
+  bundle.scanNoGoAssessment = {
+    status: "available", version: "scan-no-go-assessment-v1", decision: "no_go", scanNoGoConfidence: 0.98,
+    reasonCodes: ["parked_or_placeholder", "scan_no_go_corroborated"],
+    corroboratorCodes: ["cpanel_default_hosting_page_observed"], contradictorCodes: [],
+    supportingSignals: {}, evidenceRefs: ["CanonicalEvidenceBundle.json#networkEvents"],
+  };
+  bundle.visualAccessReview = {
+    artifact_ref: null, confidence: 0.98, go_no_go: "NO_GO", key_visual_evidence: ["Default hosting page"],
+    page_state: "parked_or_placeholder", reason_code: "parked_or_placeholder",
+    short_explanation: "The scanned site opened the default hosting page.", status: "available", version: "visual-access-review-v1",
+  };
+  const record = makeScanRecord();
+  record.scan = { ...record.scan, id: bundle.scanId, domainHostname: "fixture.test", createdAt: bundle.startedAt };
+  const detail = buildMaterializedLocalV2Detail(record, bundle);
+  assert.equal(detail.snapshot?.stop_reason_code, "homepage_parked_or_placeholder");
+  assert.equal(detail.snapshot?.certscore_overall, null);
+  assert.equal(detail.snapshot?.privacy_score, null);
+  assert.equal(detail.scan.pagesScanned, 0);
+  const pulse = buildPulseProjection({ scanRecord: detail, detail: "summary", format: "json", freshnessMode: "latest",
+    pulseRequestId: "local-placeholder", requestedUrl: bundle.url, resolutionMode: "existing_scan", waitSeconds: 0 });
+  assert.equal(pulse.summary.score, null);
+  assert.equal(pulse.noGo?.reasonCode, "parked_or_placeholder");
+  assert.equal("postureScores" in pulse.summary, false);
 });
 
 test("the Accept stop diagnostic requires the joined packet to belong to the verified parent", async () => {

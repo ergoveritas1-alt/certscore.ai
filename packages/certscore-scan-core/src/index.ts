@@ -2855,7 +2855,10 @@ export function buildScanNoGoAssessment(input: {
         visualPageState: "blank_or_unusable",
       }
     : null;
-  const settledPageState = pageState ?? visualBlankPageState;
+  const hostingPlaceholder = !terminalDocumentConflict && successfulSettledMainDocument
+    ? classifyHostingPlaceholder(terminalRuntimeSnapshot, input.normalizedUrl, input.networkEvents, input.networkResponseEvents)
+    : null;
+  const settledPageState = hostingPlaceholder ?? pageState ?? visualBlankPageState;
   const nearlyEmptyPage = assessmentDomText.length <= 40 && substantiveDomWordCount <= 6;
   const sparseSecondLookRetained = representativeScreenshots.some((artifact) =>
     artifact.artifactId === "screenshot_pre_consent_no_go_confirmation"
@@ -2988,6 +2991,8 @@ export function buildScanNoGoAssessment(input: {
     "scan_runtime_artifacts.scan_no_go_assessment",
     "scan_runtime_artifacts.visual_access_review",
     screenshot ? "scan_runtime_artifacts.visual_evidence_artifacts" : null,
+    ...(hostingPlaceholder ? ["CanonicalEvidenceBundle.json#domSnapshots", "CanonicalEvidenceBundle.json#networkEvents",
+      "CanonicalEvidenceBundle.json#networkResponseEvents"] : []),
   ].filter((value): value is string => Boolean(value));
   const shortExplanation = decision === "no_go"
     ? `Corroborated initial-load evidence showed a terminal no-go page instead of the normal public site: "${retainedEvidenceText}"`
@@ -3014,7 +3019,8 @@ export function buildScanNoGoAssessment(input: {
       blockingFrameSnapshot ? "viewport_blocking_frame_challenge_observed" : null,
       securityChallengeRequestObserved ? "network_security_challenge_request_observed" : null,
       networkChallengeEvidence?.corroboratorCode ?? null,
-      settledPageState ? "terminal_page_text_or_status_observed" : null,
+      hostingPlaceholder ? "cpanel_default_hosting_page_observed"
+        : settledPageState ? "terminal_page_text_or_status_observed" : null,
       visuallyBlankSuccessfulPage ? "visual_blank_screenshot_observed" : null,
       sparseSuccessfulPage || temporallyConfirmedSparsePage ? "settled_page_nearly_empty" : null,
       partialRuntimeWithoutPageEvidence ? "partial_runtime_without_page_evidence" : null,
@@ -3196,6 +3202,47 @@ type ClassifiedNoGoPageState = {
   reasonCode: ScanNoGoReasonCode;
   visualPageState: VisualAccessReview["page_state"];
 };
+
+/** The cPanel fallback can render with HTTP 200 and only a visual shell.
+ * Match its terminal document and requests for both kinds of template assets. */
+function classifyHostingPlaceholder(
+  snapshot: DomSnapshotArtifact | undefined,
+  requestedUrl: string | undefined,
+  requests: NetworkEvent[],
+  responses: NetworkResponseEvent[],
+): ClassifiedNoGoPageState | null {
+  if (!snapshot || snapshot.consentStateAtTime !== "pre_consent" || !URL.canParse(snapshot.url)) return null;
+  const document = new URL(snapshot.url);
+  if (document.pathname !== "/cgi-sys/defaultwebpage.cgi" || document.username || document.password ||
+      !matchesScanTargetHost(snapshot.url, requestedUrl) ||
+      (snapshot.runtimeDocumentCapture && snapshot.runtimeDocumentCapture.response?.route !== "committed")) return null;
+  const inStartingDocument = (request: NetworkEvent) => request.isMainFrame === true &&
+    request.sourceScanner === "pre_consent_runtime" && request.consentStateAtTime === "pre_consent" &&
+    request.directVsInferred === "direct" && request.timestampMs <= snapshot.capturedAtMs;
+  const mainRequest = requests.filter(request => request.resourceType === "document" && inStartingDocument(request)).at(-1);
+  if (!mainRequest || mainRequest.requestUrl !== snapshot.url ||
+      !responses.some(response => response.requestId === mainRequest.requestId && response.responseUrl === snapshot.url &&
+        response.status === 200 && response.directVsInferred === "direct" &&
+        response.timestampMs >= mainRequest.timestampMs && response.timestampMs <= snapshot.capturedAtMs)) return null;
+
+  const assetPaths = new Set<string>();
+  for (const request of requests) {
+    if (request.resourceType !== "image" || request.documentUrl !== snapshot.url ||
+        request.timestampMs < mainRequest.timestampMs || !inStartingDocument(request) || !URL.canParse(request.requestUrl)) continue;
+    const asset = new URL(request.requestUrl);
+    if (asset.origin === document.origin && !asset.username && !asset.password) assetPaths.add(asset.pathname);
+  }
+  if (!assetPaths.has("/img-sys/powered_by_cpanel.svg") ||
+      !["/img-sys/IP_changed.png", "/img-sys/server_misconfigured.png", "/img-sys/server_moved.png"]
+        .some(asset => assetPaths.has(asset))) return null;
+  return {
+    confidence: 0.98,
+    evidenceText: "The scanned site opened the cPanel default hosting page and requested its template graphics.",
+    hardTerminal: true,
+    reasonCode: "parked_or_placeholder",
+    visualPageState: "parked_or_placeholder",
+  };
+}
 
 // Match page-level instructions, not an article/help page mentioning a CAPTCHA
 // or refresh. The challenge shell is complete; the holding-page prefix must
