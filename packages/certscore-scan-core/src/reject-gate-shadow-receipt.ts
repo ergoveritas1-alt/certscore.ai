@@ -1,3 +1,4 @@
+import { consentGateDocument } from "./consent-gate-document.js";
 import { STALE_CONSENT_GEOMETRY_BASIS } from "./consent-geometry-inventory-coverage.js";
 import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
@@ -85,7 +86,7 @@ export function evaluateRejectGate(input: {
   const {bundle,geometry,nowMs} = input;
   const block = (reason: RejectGateBlockReason): RejectGateDecision => ({outcome:"blocked",reason,evaluatedAtMs:nowMs});
   const target = targetDigest(input.targetUrl);
-  const document = bundle.domSnapshots.at(-1);
+  const document = consentGateDocument(bundle.domSnapshots);
   const documentSha256 = document && targetDigest(document.url);
   const identity = document?.documentIdentity;
   if (!target || bundle.scanId !== input.scanId || targetDigest(bundle.url) !== target || !documentSha256 ||
@@ -119,13 +120,20 @@ export function evaluateRejectGate(input: {
       row.inventoryOutcome === "complete_with_controls" && !row.basis.includes(STALE_CONSENT_GEOMETRY_BASIS) &&
       Number.isSafeInteger(row.observedAtMs) && row.observedAtMs >= 0 &&
       geometryCapturedAt >= scanStartedAt + row.observedAtMs && geometryCapturedAt <= nowMs);
-  const observations = bundle.consentUiObservations.filter(row => row.layerInspected === "first_layer" &&
+  const coveredObservations = bundle.consentUiObservations.filter(row => row.layerInspected === "first_layer" &&
     row.documentUrl === document.url && row.documentIdentity?.source === "cdp_loader_id" &&
-    row.documentIdentity.token === identity.token && row.captureStatus === "observed" &&
+    row.documentIdentity.token === identity.token &&
     row.captureDiagnostics?.completedChannels.includes("dom_inventory") &&
     geometryCompletesObservation(row) && !row.captureDiagnostics.failedChannels.length &&
     !row.captureDiagnostics.timedOutChannels.length && !row.inventoryDiagnostics?.blockingInaccessibleFrameCount);
-  if (!observations.length) return block("passive_capture_incomplete");
+  const observations = coveredObservations.filter(row => row.captureStatus === "observed");
+  if (!observations.length) {
+    const completeEmpty = coveredObservations.some(row => row.captureStatus === "no_evidence" &&
+      row.inventoryOutcome === "complete_empty" && row.controls.length === 0);
+    const possibleReject = artifact.candidates.some(candidate => candidate.layer === "first_layer" &&
+      (candidate.actionType === "reject_all" || candidate.decisionStatus === "ambiguous"));
+    return block(completeEmpty && !possibleReject ? "no_first_layer_reject" : "passive_capture_incomplete");
+  }
   const controlsByObservation = observations.map(row => row.controls.filter(c => c.visible && c.actionType === "reject_all"));
   const controls = controlsByObservation.flat();
   const firstLayer = artifact.candidates.filter(c => c.layer === "first_layer");

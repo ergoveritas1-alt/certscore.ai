@@ -1,0 +1,115 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { once } from "node:events";
+import { createServer } from "node:http";
+import test from "node:test";
+import { chromium } from "playwright";
+import {
+  postAcceptEvidencePacketSchema, projectPostAcceptEvidenceForReport, type CanonicalEvidenceBundle,
+} from "@certscore/contracts";
+import { deriveAcceptFirstLayerProof } from "./accept-first-layer-gate.js";
+import { capturePassiveConsentControlGeometry } from "./consent-control-geometry.js";
+import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
+import { runPostAcceptObserver } from "./post-accept-observer.js";
+import { readRapidFirstLayerConsentUiObservation } from "./scanners/pre-consent-runtime-scanner.js";
+
+const sha = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
+
+test("a retained exact OneTrust Accept selector resolves after a deferred localhost render", async t => {
+  const flag="CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW";
+  const previous=process.env[flag];
+  process.env[flag]="1";
+  t.after(() => { if (previous === undefined) delete process.env[flag]; else process.env[flag]=previous; });
+  const clicks: string[] = [];
+  const server = createServer((request,response) => {
+    if (request.url === "/clicked") {
+      clicks.push(request.method!);
+      response.writeHead(204).end();
+      return;
+    }
+    if (request.url !== "/") {
+      response.writeHead(404).end();
+      return;
+    }
+    response.setHeader("content-type","text/html");
+    response.end(`<main><h1>Fixture</h1></main><script>
+      window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C0001',Status:'always active'},{CustomGroupId:'C0002',Status:'inactive'}]})};
+      window.__tcfapi=()=>{};
+      document.cookie='OptanonConsent=groups=C0001:1,C0002:0&receipt=before;path=/';
+      setTimeout(()=>{
+        const banner=document.createElement('div');
+        banner.innerHTML='<section role="dialog" id="onetrust-banner-sdk"><p>We use cookies. Choose optional cookies.</p><div id="onetrust-button-group"><div><button id="onetrust-accept-btn-handler">Accept All Cookies</button></div></div></section>';
+        document.body.append(banner);
+        banner.querySelector('button').onclick=()=>{
+          fetch('/clicked',{method:'POST'});
+          document.cookie='OptanonConsent=groups=C0001:1,C0002:1&receipt=after;path=/';
+          banner.hidden=true;
+        };
+      }, ${request.headers["x-fixture-passive"] === "1" ? 0 : 400});
+    </script>`);
+  });
+  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  server.listen(0,"127.0.0.1");
+  await once(server,"listening");
+  const address=server.address();
+  assert.ok(address && typeof address !== "string");
+  const url=`http://127.0.0.1:${address.port}/`;
+  const browser=await chromium.launch({args:["--disable-background-networking","--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"]});
+  t.after(() => browser.close());
+  const newContext=browser.newContext.bind(browser);
+  let contexts=0;
+  t.mock.method(browser,"newContext",async (options:Parameters<typeof newContext>[0]) => {
+    const passive=++contexts===1;
+    const context=await newContext({...options,serviceWorkers:"block",
+      extraHTTPHeaders:{...options?.extraHTTPHeaders,...(passive?{"x-fixture-passive":"1"}:{})}});
+    await context.route("**/*",route => new URL(route.request().url()).origin===new URL(url).origin ? route.continue() : route.abort());
+    return context;
+  });
+  const passive=await browser.newContext();
+  const page=await passive.newPage();
+  await page.goto(url);
+  await page.locator("#onetrust-accept-btn-handler").waitFor();
+  const committedUrl=page.url();
+  const cdp=await passive.newCDPSession(page);
+  const documentIdentity={source:"cdp_loader_id" as const,token:(await cdp.send("Page.getFrameTree")).frameTree.frame.loaderId};
+  const inventory=await readRapidFirstLayerConsentUiObservation(page,Date.now(),1500);
+  const geometry=await capturePassiveConsentControlGeometry(page,{documentIdentity,timeoutMs:1500});
+  await passive.close();
+  const scanId="retained-onetrust-accept";
+  const snapshot={url:committedUrl,consentStateAtTime:"pre_consent"};
+  const bundle={
+    scanId,url,domSnapshots:[{...snapshot,documentIdentity,artifactId:"dom_text_pre_consent"},
+      {...snapshot,artifactId:"dom_text_pre_consent_recovery"}],
+    consentSurfaceInspection:{inspectedPreInteraction:true,actionableControlObserved:true},
+    consentUiObservations:[{...inventory,documentIdentity,documentUrl:committedUrl,captureDiagnostics:{
+      ...inventory.captureDiagnostics,completedChannels:[...inventory.captureDiagnostics!.completedChannels,"geometry"],
+    }}],
+  } as CanonicalEvidenceBundle;
+  const bytes=Buffer.from(JSON.stringify(geometry));
+  const nowMs=Date.now();
+  let blockReason:string|undefined;
+  const proof=deriveAcceptFirstLayerProof({bundle,scanId,targetUrl:url,sourceSha256:sha(JSON.stringify(bundle)),
+    parentDispatchSha256:sha(scanId),nowMs,deadlineAtMs:nowMs+6000,requireExactSelector:true,
+    geometry:{bytes,sizeBytes:bytes.length,sha256:sha(bytes)},onDecision:decision=>{
+      if(decision.outcome==="blocked") blockReason=decision.reason;
+    }});
+  assert.ok(proof, JSON.stringify({blockReason, candidates:geometry.candidates, inspection:geometry.controlInspection, inventory:inventory.controls}));
+  assert.equal(proof.exactSelector,"#onetrust-accept-btn-handler");
+  const rechecks:string[]=[];
+  const verifiedClicks: Array<{completedAtMs:number}> = [];
+  const packet=await runPostAcceptObserver({
+    browser,url,scanId,parentScanId:scanId,allowCanonicalAcceptDiscovery:true,firstLayerProof:proof,
+    recipe:buildCanonicalPostAcceptActionRecipes().find(recipe=>recipe.cmpId==="OneTrust")!,
+    interactionAuthorization:{kind:"loopback",authorizationId:"loopback_local_lab"},
+    actionSearchTimeoutMs:3500,resultBudgetMs:6500,confirmationTimeoutMs:400,observationWindowMs:350,
+    onAcceptGateFinalRecheck:outcome=>rechecks.push(outcome),
+    onExactAcceptClickCompleted: receipt => verifiedClicks.push(receipt),
+  });
+  assert.deepEqual(rechecks,["passed"],JSON.stringify({resolver:packet.resolver,limitations:packet.limitations}));
+  assert.deepEqual(clicks,["POST"]);
+  assert.equal(verifiedClicks.length,1);
+  assert.ok(packet.interactionDiagnostics?.resolver?.snapshots.every(s => s.source !== "canonical_geometry"));
+  const retained=postAcceptEvidencePacketSchema.parse(packet);
+  const projection=projectPostAcceptEvidenceForReport({packet:retained,packetSha256:sha(JSON.stringify(retained))});
+  assert.equal(projection.execution?.clickCompleted,true);
+});

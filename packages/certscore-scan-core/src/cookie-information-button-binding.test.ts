@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import test from "node:test";
 import { chromium, type Locator, type Page } from "playwright";
-import { classifyConsentControlLabel, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { classifyConsentControlLabel, postRefusalEvidencePacketSchema, projectPostRefusalEvidenceForReport, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveAcceptFirstLayerProof } from "./accept-first-layer-gate.js";
 import { capturePassiveConsentControlGeometry } from "./consent-control-geometry.js";
 import { readDocumentedConsentApi } from "./documented-consent-api.js";
@@ -161,7 +161,27 @@ for (const [action, nativeAx, delayed] of [
       if (!replacement) {
         const qualifies = (input: typeof proofInput) => accept ? deriveAcceptFirstLayerProof(input) :
           readRejectFirstLayerProof({...evaluateRejectGate(input),scanId});
+        const captured = bundle.domSnapshots[0]!;
+        const { documentIdentity: _identity, ...auxiliary } = captured;
+        const recovered = { ...auxiliary, artifactId: "dom_text_pre_consent_recovery" };
+        const withAuxiliaryRead = { ...bundle, domSnapshots: [captured, recovered] };
+        assert.equal(qualifies({ ...proofInput, bundle: { ...bundle, domSnapshots: [captured, auxiliary] } }), undefined);
+        assert.ok(qualifies({ ...proofInput, bundle: withAuxiliaryRead }));
+        assert.equal(qualifies({ ...proofInput, bundle: { ...bundle, domSnapshots: [
+          captured, { ...recovered, url: url + "new-document" },
+        ] } }), undefined);
+        assert.equal(qualifies({ ...proofInput, bundle: { ...bundle, domSnapshots: [
+          captured, { ...recovered, documentIdentity: { ...documentIdentity, token: documentIdentity.token + "-changed" } },
+        ] } }), undefined);
         const row = bundle.consentUiObservations[0]!;
+        if (!accept) {
+          // The original inspection covers a visible choice. An apparent empty
+          // inventory must not override that positive geometry.
+          const apparentEmpty = { ...row, captureStatus: "no_evidence", inventoryOutcome: "complete_empty", controls: [] } as typeof row;
+          const contradictory = evaluateRejectGate({ ...proofInput, bundle: { ...bundle, consentUiObservations: [apparentEmpty] } });
+          assert.equal(contradictory.outcome, "blocked");
+          if (contradictory.outcome === "blocked") assert.equal(contradictory.reason, "passive_capture_incomplete");
+        }
         const repeated = { ...row, observedAtMs: row.observedAtMs + 1 };
         assert.ok(qualifies({...proofInput,bundle:{...bundle,consentUiObservations:[row,repeated]}}));
         assert.equal(qualifies({...proofInput,bundle:{...bundle,consentUiObservations:[
@@ -199,11 +219,15 @@ for (const [action, nativeAx, delayed] of [
           if (replacement && !replaced) replaced = page.locator(selector).evaluate(button => button.replaceWith(button.cloneNode(true)));
         },
       };
+      const { documentIdentity: _selectedDocument, ...recoveredDocument } = bundle.domSnapshots[0]!;
+      const actionProofInput = { ...proofInput, bundle: { ...bundle, domSnapshots: [
+        ...bundle.domSnapshots, { ...recoveredDocument, artifactId: "dom_text_pre_consent_recovery" },
+      ] } };
       const packet = await (async () => {
         if (accept) {
           const recipe = buildCanonicalPostAcceptActionRecipes().find(row => row.cmpId === "Cookie Information");
           let blockReason: string | undefined;
-          const proof = deriveAcceptFirstLayerProof({...proofInput, onDecision: decision => {
+          const proof = deriveAcceptFirstLayerProof({...actionProofInput, onDecision: decision => {
             if (decision.outcome === "blocked") blockReason = decision.reason;
           }});
           assert.ok(recipe && proof, blockReason);
@@ -216,7 +240,7 @@ for (const [action, nativeAx, delayed] of [
           });
         }
         const recipe = buildCanonicalPostRefusalActionRecipes().find(row => row.cmpId === "Cookie Information");
-        const decision = evaluateRejectGate(proofInput);
+        const decision = evaluateRejectGate(actionProofInput);
         const proof = readRejectFirstLayerProof({...decision,scanId});
         assert.ok(recipe && proof, decision.outcome === "blocked" ? decision.reason : undefined);
         assert.equal(proof.binding.labelSource, "aria_label");
@@ -240,6 +264,11 @@ for (const [action, nativeAx, delayed] of [
       if (exactClickReceipts[0]) {
         assert.ok(exactClickReceipts[0].dispatchedAtMs >= nowMs);
         assert.ok(exactClickReceipts[0].completedAtMs >= exactClickReceipts[0].dispatchedAtMs);
+      }
+      if (!("acceptanceRegistration" in packet)) {
+        const retained = postRefusalEvidencePacketSchema.parse(packet);
+        const projection = projectPostRefusalEvidenceForReport({packet:retained, packetSha256:hash(JSON.stringify(retained))});
+        assert.equal(projection.execution?.clickCompleted, !replacement);
       }
       const registration = "acceptanceRegistration" in packet ? packet.acceptanceRegistration : packet.refusalRegistration;
       if (!replacement) {

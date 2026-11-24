@@ -1,3 +1,4 @@
+import { consentGateDocument } from "./consent-gate-document.js";
 import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
@@ -113,11 +114,10 @@ function isSeparateNonAcceptConflict(
 
 export type AcceptFirstLayerGeometrySource = { bytes: Buffer; sha256: string; sizeBytes: number };
 
-function exactGeometryAccept(
+function readAcceptDocumentGeometry(
   source: AcceptFirstLayerGeometrySource,
   bundle: Parameters<typeof deriveAcceptFirstLayerProof>[0]["bundle"],
   document: NonNullable<CanonicalEvidenceBundle["domSnapshots"][number]>,
-  requireExactSelector: boolean,
 ) {
   if (source.bytes.length === 0 || source.bytes.length > MAX_GEOMETRY_BYTES ||
     source.sizeBytes !== source.bytes.length || !hashPattern.test(source.sha256) ||
@@ -134,6 +134,14 @@ function exactGeometryAccept(
     consentSessionAccessLimited(bundle, geometry) || geometry.pageUrl !== document.url ||
     document.documentIdentity?.source !== "cdp_loader_id" || geometry.documentIdentity?.source !== "cdp_loader_id" ||
     geometry.documentIdentity.token !== document.documentIdentity.token) return undefined;
+  return geometry;
+}
+
+function exactGeometryAccept(
+  geometry: ConsentControlGeometryArtifact,
+  document: CanonicalEvidenceBundle["domSnapshots"][number],
+  requireExactSelector: boolean,
+) {
   const inspection = verifyConsentControlInspection(geometry.controlInspection, geometry.candidates);
   if (!inspection || inspection.captureCoverage.inventoryTruncated ||
     !inspection.captureCoverage.mainFrameAvailable || !inspection.captureCoverage.documentAndFramesStable) return undefined;
@@ -223,17 +231,20 @@ export function deriveAcceptFirstLayerProof(input: {
   };
   const requestedTarget = targetHash(targetUrl);
   const inspection = bundle.consentSurfaceInspection;
-  const committedDocument = bundle.domSnapshots.at(-1);
+  const committedDocument = consentGateDocument(bundle.domSnapshots);
   const committedTarget = committedDocument && targetHash(committedDocument.url);
   const documentToken = committedDocument?.documentIdentity?.token;
   if (bundle.scanId !== scanId || !requestedTarget || targetHash(bundle.url) !== requestedTarget ||
     !committedTarget || !documentToken || committedDocument.consentStateAtTime !== "pre_consent") return block("source_binding_invalid");
+  const documentGeometry = input.geometry && readAcceptDocumentGeometry(input.geometry, bundle, committedDocument);
+  if (committedDocument !== bundle.domSnapshots.at(-1) && !documentGeometry) return block("source_binding_invalid");
   if (consentSessionAccessLimited(bundle) || !inspection?.inspectedPreInteraction ||
     bundle.consentUiObservations.length > MAX_OBSERVATIONS) return block("passive_capture_incomplete");
   if (!inspection.actionableControlObserved) {
     return block(inspection.inspectionCompleted ? "no_first_layer_accept" : "passive_capture_incomplete");
   }
-  const nativeAccept = input.geometry && exactGeometryAccept(input.geometry, bundle, committedDocument, input.requireExactSelector === true);
+  const nativeAccept = documentGeometry && exactGeometryAccept(documentGeometry, committedDocument, input.requireExactSelector === true);
+  if (committedDocument !== bundle.domSnapshots.at(-1) && !nativeAccept) return block("control_binding_unverified");
   const matches: Array<{ document: string; label: string; selector?: string; passiveSelector?: string;
     labelSource?: "aria_label"; scopedLabelConflict?: true; backendNodeId?: number }> = [];
   let missing: AcceptGateBlockReason = "no_first_layer_accept";

@@ -904,7 +904,14 @@ export async function runPostAcceptObserver(
       acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
       ? recipes.find(recipe => recipe.cmpId === "Cookie Information" && isRegisteredLoadingConsentRecipe(recipe, "accept"))
       : undefined;
-    const exactActionDeadline = exactCookieScriptRecipe || exactCookieInformation ? firstLayerProof!.expiresAtMs : Infinity;
+    const exactOneTrustRecipe = firstLayerProof?.exactSelector === "#onetrust-accept-btn-handler" &&
+      firstLayerProof.geometrySha256 && authorizedExactTargetUrl &&
+      firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
+      acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
+      ? recipes.find(recipe => recipe.cmpId === "OneTrust" && recipe.controlSelector === firstLayerProof.exactSelector)
+      : undefined;
+    const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe;
+    const exactActionDeadline = exactNativeRecipe || exactCookieInformation ? firstLayerProof!.expiresAtMs : Infinity;
     const searchDeadline = Math.min(resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs), exactActionDeadline);
     let readyCookieInformationControl: Locator | undefined;
     const probeExactCookieInformation = async (sliceMs:number, signal:AbortSignal, waitForVisible=false) => {
@@ -934,7 +941,7 @@ export async function runPostAcceptObserver(
     // Optional loader priming must never serialize ordinary control discovery.
     // Abort its pending read before leaving resolution so it cannot move the
     // pointer later during baseline capture or the authorized click.
-    if (!exactCookieScriptRecipe) void primeDeferredConsentReadiness(page, {deadlineAtMs:searchDeadline,
+    if (!exactNativeRecipe) void primeDeferredConsentReadiness(page, {deadlineAtMs:searchDeadline,
       signal:AbortSignal.any([effectiveSignal,deferredPrimingController.signal])}).catch(() => undefined);
     let previousSnapshot: string | undefined;
     let resolverReportingClosed = false;
@@ -950,11 +957,11 @@ export async function runPostAcceptObserver(
       ? Math.min(resultBudgetDeadlineAtMs ?? Infinity, exactActionDeadline)
       : searchDeadline;
     const readiness = await readWithinAcceptDeadline(async () => {
-      if (exactCookieScriptRecipe) {
+      if (exactNativeRecipe) {
         // The passive proof already identifies an exact main-frame selector.
         // Resolve that control as soon as it is actionable in the authorized
         // document, before a full-document geometry or registry sweep.
-        const resolution = await waitForDeterministicRecipe(page!, [exactCookieScriptRecipe],
+        const resolution = await waitForDeterministicRecipe(page!, [exactNativeRecipe],
           actionSearchTimeoutMs === 0 ? 0 : Math.max(1, searchDeadline - Date.now()),
           effectiveSignal, actionDiscovery, recordResolverSnapshot, undefined, true);
         return {documentReady:false, resolution};
