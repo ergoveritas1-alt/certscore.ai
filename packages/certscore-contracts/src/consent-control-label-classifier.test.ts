@@ -1533,3 +1533,11 @@ test("notice fixture labels stay distinct from explicit consent decisions", () =
   for (const {expected, ...fixture} of fixtures)
     assert.equal(classifyConsentControlLabel({...fixture, hasConsentContext: true, usage: "observation"}).intent, expected, fixture.contextText);
 });
+
+test("the ExitGames preferences-or-refusal button cannot authorize a direct Reject click", () => {
+  const input = {label: "CUSTOMIZE OR DENY ALL", hasConsentContext: true};
+  assert.equal(classifyConsentControlLabel(input).intent, "options");
+  assert.equal(classifyConsentControlLabel({...input, usage: "action"}).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({...input, ariaLabel: "Deny all", usage: "action"}).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({label: "DENY ALL", usage: "action", hasConsentContext: true}).intent, "reject");
+});

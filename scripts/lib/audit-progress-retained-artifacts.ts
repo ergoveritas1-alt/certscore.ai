@@ -35,3 +35,51 @@ export function retainedArtifactContext(payload:any,scanId:string,ref?:OptOutRec
  const policy=inspectPolicyCapture({root:input.root,scanId,site:'retained',region:'retained',status:'completed',bundle,receipts:policyReceipts});
  return {bundle,manifest,bundleSource:{sha256:bundleRef.receipt.sha256,sizeBytes:bundleRef.bytes.length},sourceFacts:{profile:manifest.privacyCaptureProfile,facets:sourceFacets(bundle,manifest,support)},policy,refs:receipts.map((r:any)=>({file:r.file,sha256:r.sha256,role:r.kind})),receipt:ref};
 }
+
+const consentActionStages = new Set([
+ 'not_started', 'gate_declined', 'not_dispatched', 'worker_failed', 'worker_deadline_exceeded',
+ 'packet_deadline_exceeded', 'packet_not_joined', 'exact_recheck_failed', 'packet_joined',
+]);
+const consentPassiveReasons = new Set([
+ 'source_unavailable', 'source_binding_invalid', 'passive_capture_incomplete', 'label_conflict_unresolved',
+ 'control_binding_unverified', 'control_ambiguous', 'proof_expired',
+]);
+const sha256Pattern = /^[0-9a-f]{64}$/;
+
+// Called only after the result event binds the manifest bytes to this report generation.
+export function retainedConsentActionStates(manifest: Record<string, any>, scanId: string): Record<string, string> {
+ const stages = manifest.consentActionStages;
+ const states: Record<string, string> = {};
+ if (manifest.scanId !== scanId || stages?.scanId !== scanId ||
+     stages.version !== 'certscore.consent-action-stages.v1') return states;
+ for (const action of ['accept', 'reject'] as const) {
+  const gate = manifest[action+'GateShadowReceipt'];
+  if (gate?.scanId !== scanId || gate.version !== `certscore.${action}-gate-shadow-receipt.v1` ||
+      gate.enforcementActive !== true || !consentActionStages.has(stages[action])) continue;
+  const prefix = `sealed.detail.${action}.coordinator.`;
+  states[prefix+'stage'] = stages[action];
+  const {outcome, blockReason} = gate.passive ?? {};
+  if (outcome === 'qualified') states[prefix+'passive'] = outcome;
+  if (outcome === 'blocked' && (consentPassiveReasons.has(blockReason) || blockReason === `no_first_layer_${action}`)) {
+   states[prefix+'passive'] = blockReason;
+  }
+  if (['would_allow', 'would_block', 'not_attempted'].includes(gate.dispatch?.outcome)) {
+   states[prefix+'dispatch'] = gate.dispatch.outcome;
+  }
+  if (['passed', 'failed', 'not_run', 'unavailable'].includes(gate.finalRecheck?.outcome)) {
+   states[prefix+'exact_recheck'] = gate.finalRecheck.outcome;
+  }
+  const receipt = manifest[action+'ClickCheckpoint'];
+  if (outcome === 'qualified' && gate.dispatch?.outcome === 'would_allow' &&
+      Number.isSafeInteger(gate.timing?.dispatchObservedAtMs) && Number.isSafeInteger(gate.timing?.proofExpiresAtMs) &&
+      receipt?.scanId === scanId && receipt.version === `certscore.${action}-click-checkpoint.v1` &&
+      sha256Pattern.test(receipt.receiptSha256 ?? '') && sha256Pattern.test(receipt.gateProofSha256 ?? '') &&
+      [receipt.recheckedAtMs, receipt.dispatchedAtMs, receipt.completedAtMs, receipt.verifiedAtMs].every(Number.isSafeInteger) &&
+      receipt.recheckedAtMs >= gate.timing.dispatchObservedAtMs && receipt.recheckedAtMs <= receipt.dispatchedAtMs &&
+      receipt.dispatchedAtMs < gate.timing.proofExpiresAtMs && receipt.dispatchedAtMs <= receipt.completedAtMs &&
+      receipt.completedAtMs <= receipt.verifiedAtMs) {
+   states[prefix+'click_checkpoint'] = 'verified';
+  }
+ }
+ return states;
+}

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync} from 'node:fs';import {tmpdir} from 'node:os';import path from 'node:path';import {createHash} from 'node:crypto';
-import {applyRetainedReports} from './audit-progress-retained-report';
+import {applyRetainedReports,retainedConsentActionMetrics} from './audit-progress-retained-report';
 import fixture from '../../apps/web/lib/scans/test-fixtures/dollar-general-consent-assessment.json';
 import {normalizeProjectionJson} from '../../apps/web/server/scans/scan-report-projection-contract';
 for(const scanStatus of ['completed','completed_limited'])test('verified same-generation '+scanStatus+' report restores persisted states without overwriting public evidence',()=>{
@@ -64,4 +64,48 @@ test('a matching input wins over an unrelated generation regardless of receipt o
 test('nonreportable rows are outside the input coverage denominator',()=>{
  const {row,envelope}=retainedFixture();row.reportable=false;const result=applyRetainedReports([row],[receipt(envelope)]);
  assert.equal(result.inputCoverage.eligible,0);assert.equal(row.retainedReportInput,undefined);assert.equal(result.matched,0);
+});
+
+test("retained audit exposes verified coordinator stages and preserves unavailable evidence", () => {
+ const {row,envelope}=retainedFixture();
+ const unavailable={...structuredClone(row),scanId:'missing-coordinator'};
+ assert.deepEqual(retainedConsentActionMetrics([row,unavailable]),[]);
+ const id='sealed.detail.reject.coordinator.stage';
+ const scanId=row.scanId;
+ const root=mkdtempSync(path.join(tmpdir(),'retained-coordinator-'));
+ const save=(kind:string,value:unknown)=>{
+  const file=path.join(root,kind),bytes=Buffer.from(JSON.stringify(value));
+  writeFileSync(file,bytes);
+  return {kind,file,uri:`s3://retained/${kind}`,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
+ };
+ const entries=[
+  save('scanArtifactUri',{scanId,policySurfaceObservations:[]}),
+  save('manifestUri',{scanId,auxiliaryArtifacts:[],
+   consentActionStages:{version:'certscore.consent-action-stages.v1',scanId,reject:'gate_declined'},
+   rejectGateShadowReceipt:{version:'certscore.reject-gate-shadow-receipt.v1',scanId,enforcementActive:true,
+    passive:{outcome:'blocked',blockReason:'passive_capture_incomplete'}},
+  }),
+ ];
+ const payload=envelope.snapshot.report_projection_payload;
+ payload.events=[{eventType:'v2_lambda_result.received',metadataJson:{
+  artifactMetadata:Object.fromEntries(entries.map(entry=>[entry.kind,{sha256:entry.sha256,sizeBytes:entry.bytes}])),
+  artifactPointers:Object.fromEntries(entries.map(entry=>[entry.kind,entry.uri])),
+ }}];
+ const serialized=JSON.stringify(normalizeProjectionJson(payload));
+ envelope.snapshot.report_projection_payload_sha256=createHash('sha256').update(serialized).digest('hex');
+ envelope.snapshot.report_projection_payload_size_bytes=Buffer.byteLength(serialized);
+ const artifacts=save('retained-inputs.json',{version:'certscore.audit-retained-artifacts.v1',scanId,root,receipts:entries});
+ const report={...receipt(envelope),artifacts};
+ const result=applyRetainedReports([row,unavailable],[report]);
+ assert.equal(result.matched,1);
+ assert.equal(row.states[id],'gate_declined');
+ assert.equal(unavailable.states[id],'unavailable');
+ assert.equal(unavailable.metricSources[id],'retained_coordinator_manifest_unavailable');
+ assert.equal(row.states['click.reject'],undefined);
+ assert.equal(unavailable.states['click.reject'],undefined);
+ assert.deepEqual(retainedConsentActionMetrics([row,unavailable]).map(metric=>metric.id),
+  [id,'sealed.detail.reject.coordinator.passive']);
+ applyRetainedReports([row,unavailable],[]);
+ assert.deepEqual(retainedConsentActionMetrics([row,unavailable]),[]);
+ assert.equal(unavailable.states[id],undefined);
 });

@@ -5,7 +5,8 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v34";
+const CUSTOMIZE_OR_DENY_ALL = "customize or deny all";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v35";
 export const ONETRUST_ITALIAN_ACCEPT_LABEL = "Accetto i cookie";
 
 /** OneTrust's banner wrapper can repeat the labels of descendant controls. */
@@ -455,6 +456,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     contextual("options", "customise", { requiresConsentContext: true }),
     contextual("options", "customize", { requiresConsentContext: true }),
     ...direct("options", "customize choices"),
+    { phrase: CUSTOMIZE_OR_DENY_ALL, intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
     ...direct("options", "customise choices"),
     ...direct("options", "customise my choices"),
     ...direct("options", "more options"),
@@ -1177,7 +1179,7 @@ export function hasConsentControlSemanticVeto(classification: ConsentControlLabe
     "informational_consent_reference", "negated_accept_label", "negated_consent_choice",
     "conflicting_consent_decisions", "visible_accessible_intent_conflict",
     "non_decision_control_role", "notification_permission_control", "unproven_acknowledgment_consent",
-    "audience_or_location_selection_control",
+    "audience_or_location_selection_control", "preferences_or_refusal_navigation",
   ].includes(reason));
 }
 
@@ -1216,6 +1218,9 @@ function classifyConsentControlLabelInternal(
     .filter((value, index, values) => values.findIndex((candidate) =>
       normalizeConsentControlText(candidate) === normalizeConsentControlText(value)
     ) === index);
+  if (input.usage === "action" && fields.some(label => normalizeConsentControlText(label) === CUSTOMIZE_OR_DENY_ALL)) {
+    return unknown(["preferences_or_refusal_navigation"]);
+  }
   if (fields.length > 1) {
     const dutchSaleLabels = fields.filter(label => NORMALIZED_DUTCH_SALE_OPT_OUT_LABELS.has(normalizeConsentControlText(label)));
     if (dutchSaleLabels.length > 0 && dutchSaleLabels.length !== fields.length) {

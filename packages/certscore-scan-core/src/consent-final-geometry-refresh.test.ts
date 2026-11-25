@@ -391,3 +391,63 @@ test("reports the retained and live frame limits without attempting a read", asy
   assert.equal(fromLive.attempted, false);
   assert.equal(live.counts.capture, 0);
 });
+
+test("a settled exact native choice can use one shorter fresh geometry read", async () => {
+  for (const variant of ["bound", "expired", "changed_label", "partial_fresh"] as const) {
+    const f = setup();
+    f.observation.documentReadyState = "complete";
+    f.observation.basis.push("settled_control_inventory_completed");
+    f.observation.controls = [{
+      actionType: "accept_all", label: variant === "changed_label" ? "Agree" : "Accept All",
+      selectorHint: "#accept", tagName: "button", visible: true,
+    }];
+    const geometry = f.input.geometry;
+    const candidate = {
+      candidateId: "candidate_0", actionType: "accept_all", label: "Accept All", selectorHint: "#accept",
+      tagName: "button", layer: "first_layer", decisionStatus: "confirmed_visible", enabled: true,
+      frameContext: {frameKind: "main_frame", frameUrl: geometry.pageUrl}, intersectsViewport: true,
+      consentContextConfirmed: true, exactNativeAcceptSelectorVerified: true,
+      boundingBox: {x: 1, y: 1, width: 50, height: 20},
+    } as const;
+    geometry.candidates = [candidate as typeof geometry.candidates[number]];
+    geometry.controlInspection!.retainedCandidateCount = 1;
+    geometry.controlInspection!.candidates = [{candidateId: candidate.candidateId, role: "decision", unresolvedIntents: []}];
+    f.dependencies.moduleDeadlineAtMs = f.now() + (variant === "expired" ? 649 : 1000);
+    f.dependencies.capture = async ({timeoutMs}) => {
+      assert.equal(timeoutMs, 750);
+      f.counts.capture++;
+      f.setNow(f.now() + 100);
+      const fresh = f.geometry(f.now());
+      if (variant === "partial_fresh") fresh.controlInspection!.structuralCoverage = "limited";
+      return fresh;
+    };
+    const result = await createFinalConsentGeometryRefresh(f.dependencies)(f.input);
+    assert.equal(result.outcome, variant === "bound" ? "retained" :
+      variant === "partial_fresh" ? "invalid_capture" : "budget_unavailable", variant);
+    assert.equal(f.counts.capture, Number(variant === "bound" || variant === "partial_fresh"));
+    assert.equal(f.counts.commit, Number(variant === "bound"));
+  }
+});
+
+test("a replacement document access read must finish loaded inside the same verified capture", async () => {
+  for (const mode of ["loaded", "unknown", "challenge", "changed_frame"] as const) {
+    const fixture = setup();
+    let stagedAccess;
+    const refresh = createFinalConsentGeometryRefresh({
+      ...fixture.dependencies,
+      readFreshAccess: async () => {
+        if (mode === "changed_frame") fixture.state.frameRevision++;
+        return {status: mode === "challenge" ? "rate_limited_or_security_challenge" :
+          mode === "unknown" ? "unknown" : "loaded", reasonCodes: []};
+      },
+      prepare: async (geometry, access) => {
+        stagedAccess = access?.status;
+        return fixture.dependencies.prepare(geometry);
+      },
+    });
+    const result = await refresh(fixture.input);
+    assert.equal(result.outcome, mode === "loaded" ? "retained" : mode === "changed_frame" ? "document_changed" : "invalid_capture");
+    assert.equal(stagedAccess, mode === "loaded" ? "loaded" : undefined);
+    assert.equal(fixture.counts.commit, mode === "loaded" ? 1 : 0);
+  }
+});

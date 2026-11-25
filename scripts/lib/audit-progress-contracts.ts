@@ -83,6 +83,11 @@ export function metricContract(m:any,kind='state') {
     source='Verified retained assessment or generation-matched private bounded extract; no public fallback';
     mapping='Keep the exact consent/privacy-control evidence state and verdict separate. Missing and not testable remain distinct. General page accessibility results cannot substitute for this assessment.';
   }
+  if(sealed&&/^detail[.](accept|reject)[.]coordinator[.]/.test(key)){
+    source='Checksum-verified original scan manifest, joined to the exact report generation';
+    field='consentActionStages and the same-scan gate receipt or click checkpoint';
+    mapping='Retain terminal coordinator stage, passive eligibility, dispatch guard, final recheck and verified click checkpoint independently. Unavailable evidence supplies no action outcome.';
+  }
   if(key.startsWith('execution.')){field='postAccept/RefusalObservation.execution';mapping='Validate choice_path_execution.v1; retain status; missing = unavailable; invalid = unsupported_schema';}
   if(key.startsWith('click.'))field='Validated execution.clickCompleted; sealed original packet fallback is a separately named source';
   if(key.startsWith('registration.')){field='postAccept/RefusalObservation.registrationStatus or legacy status';mapping='confirmed_clean / confirmed_observation -> confirmed; unconfirmed and aborted retained; missing unavailable; never execution consentConfirmed';}

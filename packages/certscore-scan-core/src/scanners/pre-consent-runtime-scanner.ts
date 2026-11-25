@@ -3,7 +3,7 @@ import { browserPolicyLinkSchema, ENSIGHTEN_FOOTER_REVEAL_MAX_MS, ONETRUST_CUSTO
 import { createGpcNavigationRecovery } from "../gpc-navigation-recovery";
 import { consentGeometryCheckpoint } from "../consent-geometry-checkpoint.js";
 import { reconcileConsentGeometryInventoryCoverage } from "../consent-geometry-inventory-coverage.js";
-import {createFinalConsentGeometryRefresh, evaluateFinalConsentGeometryEligibility, prepareFinalConsentGeometryArtifact} from "../consent-final-geometry-refresh.js";
+import {canRefreshIncompleteFrameAccess, createFinalConsentGeometryRefresh, evaluateFinalConsentGeometryEligibility, prepareFinalConsentGeometryArtifact} from "../consent-final-geometry-refresh.js";
 import {buildConsentCaptureDiagnostic, type ConsentRefreshDiagnosticOutcome} from "../consent-capture-diagnostic.js";
 import {retainDomOptOutLabel,retainDomOptOutSearch} from "../dom-opt-out-label.js";
 import {captureConsentFooterOptOutWithOutcome, footerCaptureStopped, AEM_LEGAL_FOOTER_LINK_SELECTOR, FOOTER_OPT_OUT_READ_MAX_MS, FOOTER_OPACITY_REVEAL_READ_MAX_MS} from "../consent-footer-opt-out.js";
@@ -4228,19 +4228,27 @@ export async function preConsentRuntimeScanner(
       retainedConsentUiObservation = consentObservation;
       const existingAccess = classifyConsentGeometryAccess({pageUrl: finalDocumentUrl,
         httpStatus: initialNavigationHttpStatus, bodyText: existingInventory.textExcerpt});
+      const refreshMissingAccess = canRefreshIncompleteFrameAccess(latestRetainedConsentGeometryAccess, latestRetainedConsentGeometry);
+      let refreshedAccess: ConsentGeometryAccessDiagnostic | undefined;
       if (input.captureScope === "consent_proof" && screenshotMode !== "never" &&
-          existingAccess.status === "loaded" && latestRetainedConsentGeometryAccess?.status === "loaded" && !isTerminalVisualErrorShellText(domText || existingInventory.textExcerpt || "")) {
+          existingAccess.status === "loaded" && (latestRetainedConsentGeometryAccess?.status === "loaded" || refreshMissingAccess) && !isTerminalVisualErrorShellText(domText || existingInventory.textExcerpt || "")) {
         const refresh = createFinalConsentGeometryRefresh({scanStartedAtMs: input.scanStartedAtMs,
           moduleDeadlineAtMs, signal: effectiveSignal, readState,
           allowLimitedPositiveRefresh: input.localOverflowConsentGeometryRefresh === true,
           waitForDocumentComplete: timeout => page.waitForLoadState("load", {timeout}),
           capture: options => captureConsentControlGeometry(page, {...options,
             avoidOverlappingFrameReads: true, readFrameRevision: () => consentFrameRevision}),
-          prepare: geometry => prepareFinalConsentGeometryArtifact(
-            input.artifactWriter.artifactPath("ConsentControlGeometryEvidence.json"), geometry,
-            {access: consentAccessForGeometry(latestRetainedConsentGeometryAccess!, geometry), egress: buildConsentGeometryEgressDiagnostic(),
-              domObservedAtMs: existingInventory.observedAtMs,
-              previousGeometryCapturedAt: latestRetainedConsentGeometry!.capturedAt}),
+          readFreshAccess: refreshMissingAccess ? timeoutMs => collectBoundConsentGeometryPageAccess(page, initialNavigationHttpStatus,
+            {frameTextTimeoutMs: Math.min(500, timeoutMs)}) : undefined,
+          prepare: (geometry, freshAccess) => {
+            refreshedAccess = freshAccess;
+            return prepareFinalConsentGeometryArtifact(
+              input.artifactWriter.artifactPath("ConsentControlGeometryEvidence.json"), geometry,
+              {access: consentAccessForGeometry(freshAccess ?? latestRetainedConsentGeometryAccess!, geometry),
+                ...(freshAccess ? {accessSource: "fresh_same_loader_geometry_access" as const} : {}),
+                egress: buildConsentGeometryEgressDiagnostic(), domObservedAtMs: existingInventory.observedAtMs,
+                previousGeometryCapturedAt: latestRetainedConsentGeometry!.capturedAt});
+          },
         });
         const refreshed = await refresh({observation: existingInventory,
           geometry: consentGeometryArtifactRetained ? latestRetainedConsentGeometry : undefined, screenshot});
@@ -4249,9 +4257,10 @@ export async function preConsentRuntimeScanner(
         timingBreakdown.push({label: "final consent geometry refresh", durationMs: refreshed.elapsedMs,
           outcome: refreshed.outcome === "retained" || refreshed.outcome === "no_positive_control"
             ? "completed" : refreshed.outcome === "timed_out" ? "timed_out" : refreshed.attempted ? "failed" : "skipped",
-          detail: `${refreshed.policyVersion}; outcome=${refreshed.outcome}; attempted=${refreshed.attempted}; geometry only, with a bounded load wait for exact CookieScript controls`});
+          detail: `${refreshed.policyVersion}; outcome=${refreshed.outcome}; attempted=${refreshed.attempted}; ${refreshMissingAccess ? "fresh document access and geometry" : "geometry only, with a bounded load wait for exact CookieScript controls"}`});
         if (refreshed.geometry && refreshed.artifactPath) {
           latestRetainedConsentGeometry = refreshed.geometry;
+          if (refreshedAccess) latestRetainedConsentGeometryAccess = refreshedAccess;
           // Limited geometry is retained for canonical positive assessment only.
           // Leave the reconciled DOM inventory and incomplete coverage intact.
           if (!refreshed.limitedPositiveOnly) {

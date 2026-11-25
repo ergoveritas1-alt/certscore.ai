@@ -82,6 +82,7 @@ import {
 import {
   authorizePostRefusalTarget,
   bindPostRefusalBrowserResolvedExactTarget,
+  committedConsentServerRedirect,
   type PostRefusalInteractionAuthorization,
   type ResolvedPostRefusalScanTargetAuthorization,
 } from "./post-refusal-target-authorization.js";
@@ -999,11 +1000,12 @@ export async function runPostRefusalObserver(
     }
 
     const navigationStartedAtMs = Date.now();
+    let navigationResponse: import("playwright").Response | null = null;
     if (preClickTiming) preClickTiming.navigationStartedAtMs = navigationStartedAtMs;
     try {
       const navigationTimeoutMs = remainingResultBudgetMs(15_000);
       if (navigationTimeoutMs <= 0 || effectiveSignal?.aborted) throw effectiveSignal?.reason ?? new Error("Navigation budget exhausted.");
-      await page.goto(observationTargetUrl, { waitUntil: "commit", timeout: navigationTimeoutMs });
+      navigationResponse = await page.goto(observationTargetUrl, { waitUntil: "commit", timeout: navigationTimeoutMs });
       const redirectResolution = interactionDiagnostics.navigation.redirectResolution;
       interactionDiagnostics.navigation = {
         outcome: "completed",
@@ -1124,7 +1126,12 @@ export async function runPostRefusalObserver(
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const passiveResolutionStartedAtMs = navigationStartedAtMs;
       const expectedLanding = expectedMoodMediaLanding(input.url, firstLayerProof?.exactSelector, firstLayerProof?.binding.documentSha256);
-      const settled = await waitForPassiveRedirectSettle(
+      const redirectCount = Math.max(0, mainNavigationRequestCount - 1);
+      const exactServerCommit = committedConsentServerRedirect({
+        page, response: navigationResponse, requestedUrl: input.url, redirectCount, signal: effectiveSignal,
+        documentSha256: firstLayerProof?.exactSelector ? firstLayerProof.binding.documentSha256 : undefined,
+      });
+      const settled = exactServerCommit || await waitForPassiveRedirectSettle(
         page,
         input.interactionAuthorization.resolutionTimeoutMs,
         effectiveSignal,
@@ -1819,7 +1826,9 @@ export async function runPostRefusalObserver(
                 (resultBudgetDeadlineAtMs ?? Infinity) - 250), baseSignal);
           }
         },
-        { ...actionabilityReadOptions(), deadlineAtMs: controlProofDeadlineAtMs, boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
+        { ...actionabilityReadOptions(),
+          deadlineAtMs: passiveProof ? Math.min(passiveProof.expiresAtMs, resultBudgetDeadlineAtMs ?? Infinity) : controlProofDeadlineAtMs,
+          boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
         () => {
           try { input.onLifecycleEvent?.({type: "action_dispatched", atMs: elapsed(parentScanStartedAtMs)}); }
           catch { limitations.push("lifecycle_listener_failed"); }
@@ -3036,7 +3045,7 @@ async function dispatchRejectControl(
     }
     assertDispatchAllowed?.();
     assertConsentActionDispatchAllowed(page, signal, proof.authorizedTargetSha256, deadlineAtMs);
-    const timeout = Math.min(100, deadlineAtMs - Date.now());
+    const timeout = exactSelector ? deadlineAtMs - Date.now() : Math.min(100, deadlineAtMs - Date.now());
     if (timeout <= 0) throw new Error("reject_exact_control_recheck_expired");
     recordRecheck?.("passed");
     onDispatch?.();
@@ -3422,15 +3431,19 @@ async function waitForDeterministicRecipe(
           ? (await normalizedLocatorLabels(control)).includes(expectedLabel)
           : undefined;
         if (retainedLabelMatches === false) continue;
-        const visible = await control.isVisible().catch(() => false);
-        const enabled = await locatorEnabledWithinDeadline(control, deadlineAtMs);
+        const readOptions = { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope: scopeResolution.scope };
+        const retainedReadiness = retainedLabelMatches
+          ? await inspectLocatorConsentReadiness(control, readOptions)
+          : undefined;
+        const visible = retainedReadiness?.actionability.controlVisible ?? await control.isVisible().catch(() => false);
+        const enabled = retainedReadiness?.actionability.controlEnabled ?? await locatorEnabledWithinDeadline(control, deadlineAtMs);
         const labelMatches = retainedLabelMatches ??
           (!expectedLabel || (await normalizedLocatorLabels(control)).includes(expectedLabel));
         if (visible) visibleCount += 1;
         if (enabled) enabledCount += 1;
         if (labelMatches) labelMatchCount += 1;
         if (visible && enabled && labelMatches) {
-          const readiness = await inspectLocatorConsentReadiness(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope: scopeResolution.scope });
+          const readiness = retainedReadiness ?? await inspectLocatorConsentReadiness(control, readOptions);
           if (!readiness.scopeInteractive) { scopeNotInteractive = true; continue; }
           if (locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) {
             viewportHitTargetCount += 1;
@@ -3727,15 +3740,13 @@ async function waitForCanonicalRejectControlRecipe(
       const geometryRegisteredCmpRecipe = selectCanonicalRejectConfirmationRecipe(registeredRecipes, candidateCmpName);
       const geometryCmpDefinition = KNOWN_CMP_REGISTRY.find(definition => definition.canonicalName === candidateCmpName);
       let visibleContainerCount = 0;
-      for (let index = 0; index < Math.min(containerCount, 8); index += 1) {
-        if (await containers!.nth(index).isVisible().catch(() => false)) visibleContainerCount += 1;
+      if (containers && containerCount > 1 && containerCount <= 8) {
+        for (let index = 0; index < containerCount; index += 1) {
+          if (await containers.nth(index).isVisible().catch(() => false)) visibleContainerCount += 1;
+        }
       }
       let candidateTransitionSurfaceSelector = candidate.selectorHint;
-      if (
-        containerSelector &&
-        containerCount <= 8 &&
-        (visibleContainerCount === 1 || containerCount === 1)
-      ) {
+      if (containerSelector && (containerCount === 1 || visibleContainerCount === 1)) {
         candidateTransitionSurfaceSelector = containerSelector;
       } else if (!containerSelector) {
         const scopedAncestor = scopedAncestorSelector(candidate.selectorHint);

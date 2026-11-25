@@ -14,6 +14,7 @@ export const FINAL_CONSENT_GEOMETRY_REFRESH_POLICY = "final_consent_geometry_ref
 export const FINAL_CONSENT_GEOMETRY_REFRESH_MS = 1500;
 export const FINAL_CONSENT_GEOMETRY_READ_MS = 1100;
 const CLEANUP_RESERVE_MS = 250;
+const MIN_EXACT_CONTROL_REFRESH_READ_MS = 400;
 const COOKIE_SCRIPT_LOAD_WAIT_MS = 650;
 type State = DocumentCaptureBinding & {frameRevision: number; frames: readonly unknown[]};
 export type PreparedConsentGeometry = {commitIfCurrent: (current: () => boolean) => string | undefined; dispose: () => void};
@@ -36,13 +37,14 @@ export async function prepareFinalConsentGeometryArtifact(target: string, geomet
   egress: ConsentGeometryEgressDiagnostic;
   domObservedAtMs: number;
   previousGeometryCapturedAt: string;
+  accessSource?: "fresh_same_loader_geometry_access";
 }): Promise<PreparedConsentGeometry> {
   const directory = await mkdtemp(join(tmpdir(), "certscore-consent-refresh-"));
   const temporary = join(directory, "geometry.json");
   const dispose = () => {try {rmSync(directory, {recursive: true, force: true});} catch { /* Private temporary cleanup is best effort. */ }};
   try {await writeFile(temporary, JSON.stringify({...geometry,
     ...(reusedContext ? {access: reusedContext.access, egress: reusedContext.egress,
-      refresh: {policyVersion: FINAL_CONSENT_GEOMETRY_REFRESH_POLICY, accessSource: "previous_same_loader_geometry_access", domSource: "retained_same_loader_dom_inventory",
+      refresh: {policyVersion: FINAL_CONSENT_GEOMETRY_REFRESH_POLICY, accessSource: reusedContext.accessSource ?? "previous_same_loader_geometry_access", domSource: "retained_same_loader_dom_inventory",
         domObservedAtMs: reusedContext.domObservedAtMs, previousGeometryCapturedAt: reusedContext.previousGeometryCapturedAt}} : {}),
     artifactOnly: true, productionFindingIntegration: false}, null, 2) + "\n");}
   catch (error) {dispose(); throw error;}
@@ -64,6 +66,37 @@ function sameState(a: State, b: State) {
 type EligibilityBlocker = NonNullable<ConsentCaptureDiagnostic["eligibilityBlocker"]>;
 type RefreshInput = {observation: ConsentUiObservation; geometry?: ConsentControlGeometryArtifact; scanStartedAtMs: number};
 type Eligibility = {reason: "stale_geometry" | "limited_geometry" | "stale_drupal_overflow_geometry"} | {blocker: EligibilityBlocker};
+
+function hasSettledExactNativeControl(o: ConsentUiObservation, g: ConsentControlGeometryArtifact): boolean {
+  return o.documentReadyState === "complete" && o.captureStatus === "observed" &&
+    o.basis.includes("settled_control_inventory_completed") && g.candidates.some(candidate =>
+      candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible" &&
+      candidate.frameContext.frameKind === "main_frame" && candidate.frameContext.frameUrl === o.documentUrl &&
+      candidate.consentContextConfirmed && candidate.tagName === "button" && candidate.selectorHint &&
+      ((candidate.actionType === "accept_all" && candidate.exactNativeAcceptSelectorVerified === true) ||
+       (candidate.actionType === "reject_all" && candidate.exactNativeRejectSelectorVerified === true)) &&
+      o.controls.some(control => control.visible && control.tagName === "button" &&
+        control.actionType === candidate.actionType && control.selectorHint === candidate.selectorHint &&
+        control.label === (candidate.ariaLabel ?? candidate.label)));
+}
+
+/** An unavailable browser read can schedule one fresh access/geometry pair.
+ * HTTP status and old partial geometry cannot supply access or action proof. */
+export function canRefreshIncompleteFrameAccess(access: ConsentGeometryAccessDiagnostic | undefined,
+  geometry: ConsentControlGeometryArtifact | undefined): boolean {
+  if (!geometry) return false;
+  const coverage = geometry.controlInspection?.captureCoverage;
+  return access?.status === "unknown" && access.reasonCodes.length === 1 &&
+    access.reasonCodes[0] === "main_document_access_read_unavailable" &&
+    access.httpStatus !== undefined && access.httpStatus >= 200 && access.httpStatus < 300 &&
+    !!coverage && coverage.mainFrameAvailable && !coverage.inventoryTruncated &&
+    coverage.frameCount <= CONSENT_GEOMETRY_FRAME_LIMIT && coverage.capturedFrameCount > 0 &&
+    coverage.capturedFrameCount < coverage.frameCount && geometry.candidates.some(c =>
+      c.frameContext.frameKind === "main_frame" && c.frameContext.frameUrl === geometry.pageUrl &&
+      c.layer === "first_layer" && c.decisionStatus === "confirmed_visible" && c.consentContextConfirmed &&
+      c.tagName === "button" && ((c.actionType === "accept_all" && c.exactNativeAcceptSelectorVerified) ||
+        (c.actionType === "reject_all" && c.exactNativeRejectSelectorVerified)));
+}
 
 export function finalConsentGeometryRefreshReason(input: RefreshInput) {
   const eligibility = evaluateFinalConsentGeometryEligibility(input);
@@ -103,16 +136,7 @@ export function evaluateFinalConsentGeometryEligibility(input: RefreshInput): El
   // document was interactive. Only schedule a fresh read within the existing
   // allowance. The old geometry cannot authorize a dispatch.
   const settledExactControl = c.frameCount > 1 && c.capturedFrameCount === c.frameCount &&
-    o.documentReadyState === "complete" && o.captureStatus === "observed" &&
-    o.basis.includes("settled_control_inventory_completed") && g.candidates.some(candidate =>
-      candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible" &&
-      candidate.frameContext.frameKind === "main_frame" && candidate.frameContext.frameUrl === o.documentUrl &&
-      candidate.consentContextConfirmed && candidate.tagName === "button" && candidate.selectorHint &&
-      ((candidate.actionType === "accept_all" && candidate.exactNativeAcceptSelectorVerified === true) ||
-       (candidate.actionType === "reject_all" && candidate.exactNativeRejectSelectorVerified === true)) &&
-      o.controls.some(control => control.visible && control.tagName === "button" &&
-        control.actionType === candidate.actionType && control.selectorHint === candidate.selectorHint &&
-        control.label === (candidate.ariaLabel ?? candidate.label)));
+    hasSettledExactNativeControl(o, g);
   const readinessOnlyPartial = o.inventoryOutcome === "partial" && inspection.structuralCoverage === "limited" &&
     c.documentReadyState === "interactive" && c.documentAndFramesStable && ((c.frameCount === 1 && c.capturedFrameCount === 1) || settledExactControl);
   const semanticOnlyPartial = o.inventoryOutcome === "partial" && o.documentReadyState === "complete" &&
@@ -165,7 +189,8 @@ export function createFinalConsentGeometryRefresh(dependencies: {
   waitForDocumentComplete?: (timeoutMs: number) => Promise<unknown>;
   capture: (options: {timeoutMs: number; screenshotArtifactRef: string; documentIdentity: NonNullable<State["documentIdentity"]>;
     verifyDrupalOverflow?: true}) => Promise<ConsentControlGeometryArtifact>;
-  prepare: (geometry: ConsentControlGeometryArtifact) => Promise<PreparedConsentGeometry>;
+  readFreshAccess?: (timeoutMs: number) => Promise<ConsentGeometryAccessDiagnostic>;
+  prepare: (geometry: ConsentControlGeometryArtifact, freshAccess?: ConsentGeometryAccessDiagnostic) => Promise<PreparedConsentGeometry>;
 }) {
   let considered = false;
   const now = dependencies.now ?? Date.now;
@@ -213,14 +238,18 @@ export function createFinalConsentGeometryRefresh(dependencies: {
     if (limitedPositiveOnly && image.capturedAtMs < o.observedAtMs) return ineligible("screenshot_timestamp_invalid");
     if (state.frames.length > CONSENT_GEOMETRY_FRAME_LIMIT && !limitedPositiveOnly &&
         !(drupalOverflowRefresh && state.frames.length <= DRUPAL_OVERFLOW_FRAME_LIMIT)) return ineligible("live_frame_cap_exceeded");
-    if (dependencies.moduleDeadlineAtMs - started < FINAL_CONSENT_GEOMETRY_REFRESH_MS) return result("budget_unavailable");
+    const remaining = dependencies.moduleDeadlineAtMs - started;
+    const shortExactRefresh = !drupalOverflowRefresh && !limitedPositiveOnly &&
+      remaining >= MIN_EXACT_CONTROL_REFRESH_READ_MS + CLEANUP_RESERVE_MS &&
+      hasSettledExactNativeControl(o, priorGeometry);
+    if (remaining < FINAL_CONSENT_GEOMETRY_REFRESH_MS && !shortExactRefresh) return result("budget_unavailable");
     const deadline = Math.min(dependencies.moduleDeadlineAtMs, started + FINAL_CONSENT_GEOMETRY_REFRESH_MS);
     const commitDeadline = deadline - CLEANUP_RESERVE_MS;
     const current = () => !dependencies.signal?.aborted && now() < commitDeadline && sameState(state, dependencies.readState());
     let prepared: PreparedConsentGeometry | undefined;
     try {
-      const readDeadline = started + FINAL_CONSENT_GEOMETRY_READ_MS;
-      let readBudget = FINAL_CONSENT_GEOMETRY_READ_MS;
+      const readDeadline = Math.min(started + FINAL_CONSENT_GEOMETRY_READ_MS, commitDeadline);
+      let readBudget = readDeadline - started;
       if (dependencies.waitForDocumentComplete && priorCoverage?.documentReadyState === "interactive" &&
           priorCoverage.documentAndFramesStable && priorCoverage.frameCount === priorCoverage.capturedFrameCount &&
           priorGeometry.cmp.detections?.some(cmp => cmp.canonicalName === "CookieScript") &&
@@ -229,8 +258,9 @@ export function createFinalConsentGeometryRefresh(dependencies: {
             candidate.frameContext.frameUrl === state.url &&
             ((candidate.actionType === "accept_all" && candidate.exactCookieScriptAcceptVerified) ||
              (candidate.actionType === "reject_all" && candidate.exactCookieScriptRejectVerified)))) {
-        const waitDeadline = started + COOKIE_SCRIPT_LOAD_WAIT_MS;
-        await beforeDeadline(
+        const waitDeadline = Math.min(started + COOKIE_SCRIPT_LOAD_WAIT_MS,
+          readDeadline - MIN_EXACT_CONTROL_REFRESH_READ_MS);
+        if (waitDeadline > now()) await beforeDeadline(
           dependencies.waitForDocumentComplete(Math.max(1, waitDeadline - now())),
           waitDeadline, now, dependencies.signal,
         ).catch(() => undefined);
@@ -239,11 +269,11 @@ export function createFinalConsentGeometryRefresh(dependencies: {
         readBudget = readDeadline - now();
       }
       if (readBudget <= 0) return result("timed_out", true);
-      const geometry = await beforeDeadline(dependencies.capture({timeoutMs: readBudget,
+      const [geometry, freshAccess] = await beforeDeadline(Promise.all([dependencies.capture({timeoutMs: readBudget,
         screenshotArtifactRef: image.path, documentIdentity: state.documentIdentity!,
-        ...(drupalOverflowRefresh ? {verifyDrupalOverflow:true} : {})}),
+        ...(drupalOverflowRefresh ? {verifyDrupalOverflow:true} : {})}), dependencies.readFreshAccess?.(readBudget)]),
       readDeadline, now, dependencies.signal);
-      if (now() >= started + FINAL_CONSENT_GEOMETRY_READ_MS) return result("timed_out", true);
+      if (now() >= readDeadline) return result("timed_out", true);
       if (!current()) return result(dependencies.signal?.aborted ? "cancelled" : now() >= commitDeadline ? "timed_out" : "document_changed", true);
       const capturedAt = Date.parse(geometry.capturedAt);
       const inspection = verifyConsentControlInspection(geometry.controlInspection, geometry.candidates);
@@ -265,7 +295,9 @@ export function createFinalConsentGeometryRefresh(dependencies: {
             hasVerifiedDrupalOverflowGeometry(geometry, action) && drupalOverflowObservationMatches(o, geometry, action)))) {
         return result("invalid_capture", true);
       }
-      const staging = dependencies.prepare(geometry);
+      if (dependencies.readFreshAccess && (freshAccess?.status !== "loaded" || freshAccess.reasonCodes.length ||
+          inspection.structuralCoverage !== "complete")) return result("invalid_capture", true);
+      const staging = dependencies.prepare(geometry, freshAccess);
       // A stage finishing after the caller exits may only clean up its private file.
       void staging.then(value => {if (!current()) value.dispose();}, () => undefined);
       prepared = await beforeDeadline(staging, commitDeadline, now, dependencies.signal);

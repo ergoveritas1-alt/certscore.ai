@@ -151,7 +151,19 @@ test("scanner final scheduling refreshes stale proof once without entering legac
   }finally {await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });
 
-for (const semanticPartial of [false, true]) test(`scanner substitutes one geometry-only read after two owned child-frame failures; semantic partial=${semanticPartial}`,async t=>{
+for (const mode of ["complete", "semantic_partial", "access_unavailable"]) test(`scanner refresh after two owned child-frame failures: ${mode}`,async t=>{
+  const semanticPartial = mode === "semantic_partial";
+  const replaceAccess = mode === "access_unavailable";
+  const originalFlag = process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE;
+  if (replaceAccess) {
+    process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE = "1";
+    t.after(() => {
+      if (originalFlag === undefined) delete process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE;
+      else process.env.CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE = originalFlag;
+    });
+  }
+  let accessReads = 0;
+  const acceptId = replaceAccess ? ' id="consent-accept"' : "";
   const root=await mkdtemp(join(tmpdir(),"certscore-frame-refresh-scanner-"));
   let epochs=0;const failedFrames=new Set<Frame>();
   let releasePending: (() => void) | undefined;
@@ -165,7 +177,13 @@ for (const semanticPartial of [false, true]) test(`scanner substitutes one geome
         const page=await newPage(),wrapped=new Set<Frame>();
         const wrap=(frame:Frame)=>{if(wrapped.has(frame))return;wrapped.add(frame);const evaluate=frame.evaluate.bind(frame);
           frame.evaluate=(async(...args:Parameters<typeof frame.evaluate>)=>{
-            if(typeof args[0]==="function"&&args[0].name==="collectConsentGeometryInPage"){
+            if (replaceAccess && frame === page.mainFrame() && typeof args[0] === "string" &&
+                args[0].includes("function collectOpenShadowText") && args[0].includes("blockingFrames:")) {
+              accessReads++;
+              if (accessReads === 1) throw Error("Initial main-document access read unavailable");
+            }
+            if(typeof args[0]==="function"&&args[0].name==="collectConsentGeometryInPage" ||
+                replaceAccess && typeof args[0] === "string" && args[0].includes("function collectConsentGeometryInPage")){
               if(frame===page.mainFrame()) {
                 epochs++;
                 if (semanticPartial && epochs === 1) initialReadiness = await page.evaluate(() => document.readyState);
@@ -185,7 +203,7 @@ for (const semanticPartial of [false, true]) test(`scanner substitutes one geome
     response.setHeader("content-type","text/html");response.end(`<!doctype html><meta charset="utf-8">
     <style>body{margin:0}#cookie-banner{position:fixed;bottom:0;left:0;background:white;padding:24px;z-index:10}button{padding:12px}</style>
     <section id="cookie-banner" role="dialog"><p>We use cookies for analytics. Choose your cookie consent.</p>
-    ${semanticPartial ? '<a href="#privacy">Your Privacy Choices</a><button aria-label="dismiss cookie message">OK</button>' : '<button>Accept all cookies</button><button>Cookie settings</button>'}</section>${'<iframe srcdoc="<p>Owned child</p>"></iframe>'.repeat(11)}${semanticPartial ? '<img src="/pending.svg">' : ''}<script>window.OneTrust={}</script>`);});
+    ${semanticPartial ? '<a href="#privacy">Your Privacy Choices</a><button aria-label="dismiss cookie message">OK</button>' : `<button${acceptId}>Accept all cookies</button><button>Cookie settings</button>`}</section>${'<iframe srcdoc="<p>Owned child</p>"></iframe>'.repeat(11)}${semanticPartial ? '<img src="/pending.svg">' : ''}<script>window.OneTrust={}</script>`);});
   await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));const address=server.address();assert.ok(address&&typeof address!=="string");
   try{
     const scanStartedAtMs=Date.now(),url=`http://127.0.0.1:${address.port}/`;
@@ -201,6 +219,11 @@ for (const semanticPartial of [false, true]) test(`scanner substitutes one geome
     const geometry=JSON.parse(await readFile(join(root,"ConsentControlGeometryEvidence.json"),"utf8"));
     assert.equal(geometry.controlInspection.structuralCoverage,"complete");assert.equal(geometry.controlInspection.captureCoverage.capturedFrameCount,12);
     assert.equal(geometry.controlInspection.captureCoverage.frameCount,12);assert.equal(geometry.refresh.policyVersion,"final_consent_geometry_refresh.v3");
+    if (replaceAccess) {
+      assert.equal(accessReads, 2);
+      assert.equal(geometry.refresh.accessSource, "fresh_same_loader_geometry_access");
+      assert.equal(geometry.access.status, "loaded");
+    }
     if (semanticPartial) {
       assert.equal(initialReadiness, "interactive");
       const observation = result.consentUiObservations.at(-1)!;
@@ -215,7 +238,7 @@ for (const semanticPartial of [false, true]) test(`scanner substitutes one geome
       assert.equal(assessment.controls.reject.state, "unknown");
       assert.equal(projectPublicFirstLayerConsentEvidence(assessment,bundle.scanId)?.rejectControlObserved, null);
     }
-    if(process.env.CERTSCORE_FINAL_GEOMETRY_REFRESH_OUT)await writeFile(join(process.env.CERTSCORE_FINAL_GEOMETRY_REFRESH_OUT,semanticPartial ? "scanner-partial-frame-refresh.json" : "scanner-frame-refresh.json"),JSON.stringify({scope:"Owned 12-frame scanner fixture, two injected initial read failures; not original AE frame replay",semanticPartial,initialReadiness,epochs,failedFrames:failedFrames.size,refresh:refresh[0],geometry,timings},null,2)+"\n",{flag:"wx"});
+    if(process.env.CERTSCORE_FINAL_GEOMETRY_REFRESH_OUT)await writeFile(join(process.env.CERTSCORE_FINAL_GEOMETRY_REFRESH_OUT,replaceAccess ? "scanner-fresh-access-frame-refresh.json" : semanticPartial ? "scanner-partial-frame-refresh.json" : "scanner-frame-refresh.json"),JSON.stringify({scope:"Owned 12-frame scanner fixture, two injected initial read failures; not original AE frame replay",semanticPartial,initialReadiness,epochs,failedFrames:failedFrames.size,refresh:refresh[0],geometry,timings},null,2)+"\n",{flag:"wx"});
   }finally{releasePending?.();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });
 

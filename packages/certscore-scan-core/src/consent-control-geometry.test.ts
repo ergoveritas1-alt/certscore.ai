@@ -1961,3 +1961,18 @@ test("Jagex notice and shadow banner wording separate scope from action classifi
     assert.ok(!unrelated.candidates.some(row => row.actionType === "do_not_sell_share"));
   } finally { await page.close(); }
 });
+
+test("a nested native modal button binds only the dialog's visible cookie notice", async () => {
+  const page = await browser!.newPage();
+  try {
+    await page.setContent('<p>We use cookies outside the dialog.</p><dialog><p id="notice">We use cookies for analytics.</p>' +
+      '<div>'.repeat(9) + '<button>Accept all</button>' + '</div>'.repeat(9) + '</dialog>');
+    await page.locator("dialog").evaluate(dialog => (dialog as HTMLDialogElement).showModal());
+    const inspect = async () => (await captureConsentControlGeometry(page)).candidates.find(c => c.label === "Accept all");
+    const shown = await inspect();
+    assert.equal(shown?.consentContextConfirmed, true);
+    assert.equal(shown?.layer, "first_layer");
+    await page.locator("#notice").evaluate(notice => { (notice as HTMLElement).hidden = true; });
+    assert.equal((await inspect())?.consentContextConfirmed, false);
+  } finally { await page.close(); }
+});

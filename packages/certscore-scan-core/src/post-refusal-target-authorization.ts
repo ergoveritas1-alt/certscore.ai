@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Page, Response as BrowserResponse } from "playwright";
 import {
   assertPublicNetworkUrl,
   PublicNetworkGuardError,
@@ -478,6 +479,31 @@ export async function resolvePostRefusalExactTarget(
   } finally {
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+/** A committed server redirect to the destination named by an exact
+ * passive proof needs no client-redirect settle. The caller still binds the
+ * resolved public target and rechecks the live document and control. */
+export function committedConsentServerRedirect(input: {
+  page: Page;
+  response: BrowserResponse | null;
+  requestedUrl: string;
+  documentSha256?: string;
+  redirectCount: number;
+  signal?: AbortSignal;
+}): boolean {
+  const { page, response, requestedUrl, documentSha256, redirectCount, signal } = input;
+  if (signal?.aborted || !documentSha256 || !response?.ok() || redirectCount !== 1 ||
+      response.url() !== page.url() || documentSha256 !== hashExactTarget(response.url())) return false;
+  const terminal = response.request();
+  const original = terminal.redirectedFrom();
+  if (!original || original.redirectedFrom() || !terminal.isNavigationRequest() ||
+      !original.isNavigationRequest() || hashExactTarget(original.url()) !== hashExactTarget(requestedUrl)) return false;
+  try {
+    return terminal.frame() === page.mainFrame() && original.frame() === page.mainFrame();
+  } catch {
+    return false;
   }
 }
 

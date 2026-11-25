@@ -4,9 +4,9 @@ import {applyChoiceSummary,choiceSummaryFromRecord} from './audit-progress-choic
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {extractProgressRow,type ProgressRow} from './audit-progress';
+import {extractProgressRow,type Metric,type ProgressRow} from './audit-progress';
 import {sealedSource} from './audit-progress-contracts';
-import {retainedArtifactContext} from './audit-progress-retained-artifacts';
+import {retainedArtifactContext,retainedConsentActionStates} from './audit-progress-retained-artifacts';
 import type {OptOutReceipt} from './audit-progress-opt-out';
 import {retainedInputCoverage,type RetainedReportInputState} from './audit-progress-input-coverage';
 import {retainedCaliforniaPostReject} from '../../apps/web/lib/scans/california-post-reject-policy';
@@ -17,6 +17,29 @@ const {normalizeProjectionJson}=require('../../apps/web/server/scans/scan-report
 type ReportReceipt=OptOutReceipt&{artifacts?:OptOutReceipt};
 const actions=['accept','reject'] as const;
 export const RETAINED_CLICK_ACTIVITY_KEYS=actions.map(action=>`sealed.detail.${action}.post_click_activity`);
+
+const coordinatorFields = {
+ stage: 'coordinator terminal stage',
+ passive: 'passive eligibility',
+ dispatch: 'dispatch guard outcome',
+ exact_recheck: 'final exact-control recheck',
+ click_checkpoint: 'verified click checkpoint',
+} as const;
+
+export function retainedConsentActionMetrics(rows: ProgressRow[]): Metric[] {
+ return actions.flatMap(action => Object.entries(coordinatorFields).flatMap(([field,label]) => {
+  const id = `sealed.detail.${action}.coordinator.${field}`;
+  // Earlier audit snapshots and report-only archives keep their existing metrics.
+  if(!rows.some(row=>row.reportable&&row.states[id]!==undefined&&row.states[id]!=='unavailable'))return [];
+  return [{
+   id,label:`${action==='accept'?'Accept':'Reject'} ${label}`,
+   group:'Retained · Consent action diagnostics',
+   denominator:'Retained reportable scans. Missing verified coordinator evidence remains unavailable.',
+   success:field==='click_checkpoint'?['verified']:[],
+  }];
+ }));
+}
+
 
 function retainedClickActivity(record:any,action:typeof actions[number]){
  const runtime=record.runtimeArtifacts;
@@ -54,7 +77,9 @@ export function applyRetainedReports(rows:ProgressRow[],receipts:(OptOutReceipt&
  const candidates:{ref:ReportReceipt;row:ProgressRow;payloadHash:string}[]=[],hashes=new Map<string,Set<string>>();
  for(const row of rows){
   delete row.californiaRejectCoverage;
-  for(const key of RETAINED_CLICK_ACTIVITY_KEYS){delete row.states[key];delete row.metricSources?.[key];}
+  for(const key of [...RETAINED_CLICK_ACTIVITY_KEYS,...Object.keys(row.states).filter(key=>/^sealed[.]detail[.](accept|reject)[.]coordinator[.]/.test(key))]){
+   delete row.states[key];delete row.metricSources?.[key];
+  }
   if(row.reportable)row.retainedReportInput='missing_input';else delete row.retainedReportInput;
  }
  // Preflight all candidates before supplementing any row. Keep only small
@@ -103,6 +128,11 @@ export function applyRetainedReports(rows:ProgressRow[],receipts:(OptOutReceipt&
   applyChoiceSummary(row,choiceSummaryFromRecord(record,context??undefined),`persisted_report_choice_summary/${row.projectionVersion}`);
   const raw=extractProgressRow({inventory:{id:row.scanId,hostname:row.site,created_at:row.createdAt,status:e.status,scan_from:row.region,lambda_config:p.report_projection_payload.scan.scanConfigJson?.execution?.v2DagLambda},origin:e,record,report:record,bundle:context?.bundle,sourceFacts:context?.sourceFacts,refs:context?.refs??[],exportState:context?'generation_matched':'persisted_generation_matched'});
   if(context){
+   const consentStates=retainedConsentActionStates(context.manifest,row.scanId);
+   Object.assign(row.states,consentStates);
+   for(const key of Object.keys(consentStates)){
+    (row.metricSources??={})[key]='verified_original_manifest/certscore.consent-action-stages.v1';
+   }
    const policy=context.policy,privacy=policy.documents.filter(d=>d.surfaceType==='privacy_policy');
    raw.states.policy_fetch=policy.policyFetches===null?'unavailable':policy.policyFetches>0?'fetched':policy.inspection?.retrievalCoverage==='complete'?'no_fetch_returned':'unknown';
    raw.states.policy_owner=policy.metadataUsablePolicyCandidates===null?'unavailable':policy.metadataUsablePolicyCandidates>0?'producer_declared_usable':'unknown';
@@ -120,6 +150,15 @@ export function applyRetainedReports(rows:ProgressRow[],receipts:(OptOutReceipt&
   (row as any).originProof='original_credential_verified';
   row.refs.push({file:ref.file,sha256:ref.sha256,role:'checksum_verified_persisted_report_generation'});matchedIds.add(row.scanId);
   if(context||row.retainedReportInput!=='verified_originals')row.retainedReportInput=context?'verified_originals':'verified_report';
+ }
+ const coordinatorMetrics=retainedConsentActionMetrics(rows);
+ for(const row of rows){
+  if(!row.reportable)continue;
+  for(const {id} of coordinatorMetrics){
+   if(row.states[id]!==undefined)continue;
+   row.states[id]='unavailable';
+   (row.metricSources??={})[id]='retained_coordinator_manifest_unavailable';
+  }
  }
  return {matched:matchedIds.size,filled,duplicateReceipts,inputCoverage:retainedInputCoverage(rows)};
 }

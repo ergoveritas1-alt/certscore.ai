@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import {
   authorizePostRefusalTarget,
   bindPostRefusalBrowserResolvedExactTarget,
+  committedConsentServerRedirect,
   ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
   getOwnedPostRefusalCanaryRecipeCase,
   RESOLVED_SCAN_TARGET_AUTHORIZATION_ID,
@@ -359,4 +361,35 @@ test("resolved exact-target authorization v2 fails closed for unsafe or excessiv
     },
   );
   assert.equal(unsafe.status === "failed" ? unsafe.failureReason : undefined, "unsafe_redirect_target");
+});
+
+test("settle can be skipped only for the exact main-frame server redirect", () => {
+  const requestedUrl = "https://entry.test/";
+  const terminalUrl = "https://destination.test/landing";
+  const documentSha256 = createHash("sha256").update(terminalUrl).digest("hex");
+  const frame = {};
+  const original = { url: () => requestedUrl, redirectedFrom: () => null, isNavigationRequest: () => true, frame: () => frame };
+  const terminal = { redirectedFrom: (): typeof original | null => original, isNavigationRequest: () => true, frame: () => frame };
+  const response = { ok: () => true, url: () => terminalUrl, request: () => terminal };
+  const page = { mainFrame: () => frame, url: () => terminalUrl };
+  const input = {
+    page: page as unknown as Parameters<typeof committedConsentServerRedirect>[0]["page"],
+    response: response as unknown as Parameters<typeof committedConsentServerRedirect>[0]["response"],
+    requestedUrl, documentSha256, redirectCount: 1,
+  };
+  assert.equal(committedConsentServerRedirect(input), true);
+  assert.equal(committedConsentServerRedirect({ ...input, documentSha256: undefined }), false);
+  assert.equal(committedConsentServerRedirect({ ...input, requestedUrl: "https://other.test/" }), false);
+  assert.equal(committedConsentServerRedirect({ ...input, redirectCount: 2 }), false);
+  const abort = new AbortController();
+  abort.abort();
+  assert.equal(committedConsentServerRedirect({ ...input, signal: abort.signal }), false);
+
+  response.request = () => ({ ...terminal, redirectedFrom: () => null });
+  assert.equal(committedConsentServerRedirect(input), false, "Client-side redirects retain their settle.");
+  response.request = () => ({ ...terminal, frame: () => ({}) });
+  assert.equal(committedConsentServerRedirect(input), false, "A child frame cannot establish the terminal document.");
+  response.request = () => terminal;
+  page.url = () => "https://destination.test/other";
+  assert.equal(committedConsentServerRedirect(input), false, "A changed committed URL retains the usual validation.");
 });

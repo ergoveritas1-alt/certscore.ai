@@ -18,7 +18,7 @@ import {METRICS,PROGRESS_VERSION,summarizeDays,mergeVerifiedProgress,type Progre
 import {PUBLIC_CMP_CRITERIA,extractExportRow,exportIsTest} from "./lib/audit-progress-export";
 import {renderProgressDashboard} from "./lib/audit-progress-html";
 import {applyRetainedOptOutExtracts,OPT_OUT_INPUT_VERSION,type OptOutReceipt} from './lib/audit-progress-opt-out';
-import {applyRetainedReports,RETAINED_CLICK_ACTIVITY_KEYS} from './lib/audit-progress-retained-report';
+import {applyRetainedReports,retainedConsentActionMetrics,RETAINED_CLICK_ACTIVITY_KEYS} from './lib/audit-progress-retained-report';
 import type {PrivacyFormInput} from './lib/audit-privacy-form-inputs';
 const sha=(v:Uint8Array|string)=>createHash("sha256").update(v).digest("hex");
 function load(file:string){if(statSync(file).size>80_000_000)throw Error("Input exceeds bound");return JSON.parse(readFileSync(file,"utf8"));}
@@ -112,7 +112,7 @@ export async function buildMonth(input:{runsFile:string;originsFile:string;cache
     reportable:selected.filter(r=>r.reportable).length,
     unavailableReportable:selected.filter(r=>r.reportable&&r.states['sealed.control.privacyOptOut']===undefined).length};
   const base=[...METRICS,...PUBLIC_CMP_CRITERIA,...evidenceMetricRegistry(selected),{id:"selection.status",label:"Production ID-only status (no detailed export)",group:"Publication & evidence",denominator:"Retained ID-only rows; completion status does not establish usable report or detailed evidence",success:[]}];
-  const metrics=[...monthMetricRegistry(base,[...recent.metrics,...retainedEvidenceMetricRegistry(selected)]),...choiceMetricRegistry(selected)];
+  const metrics=[...monthMetricRegistry(base,[...recent.metrics,...retainedEvidenceMetricRegistry(selected)]),...choiceMetricRegistry(selected),...retainedConsentActionMetrics(selected)];
   metrics.splice(1,0,...NO_GO_METRICS);
   const quantities=QUANTITIES;
   // Retained post-click activity feeds the engine without a standalone metric.

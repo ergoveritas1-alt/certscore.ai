@@ -80,6 +80,7 @@ import {
 import {
   authorizePostRefusalTarget,
   bindPostRefusalBrowserResolvedExactTarget,
+  committedConsentServerRedirect,
   type ResolvedPostRefusalScanTargetAuthorization,
 } from "./post-refusal-target-authorization.js";
 import {
@@ -786,10 +787,11 @@ export async function runPostAcceptObserver(
 
     stage("navigation");
     const navigationStartedAtMs = Date.now();
+    let navigationResponse: import("playwright").Response | null = null;
     try {
       const navigationTimeoutMs = remainingResultBudgetMs(15_000);
       if (navigationTimeoutMs <= 0) throw effectiveSignal?.reason ?? new Error("Post-Accept navigation budget exhausted.");
-      await page.goto(observationTargetUrl, { waitUntil: "commit", timeout: navigationTimeoutMs });
+      navigationResponse = await page.goto(observationTargetUrl, { waitUntil: "commit", timeout: navigationTimeoutMs });
       diagnostics.navigation = {
         outcome: "completed",
         documentCommitted: true,
@@ -837,7 +839,12 @@ export async function runPostAcceptObserver(
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const resolutionStartedAtMs = Date.now();
       const expectedLanding = expectedMoodMediaLanding(input.url, input.firstLayerProof?.exactSelector, firstLayerProof?.documentSha256);
-      const settled = await waitForPassiveRedirectSettle(
+      const redirectCount = Math.max(0, mainNavigationRequestCount - 1);
+      const exactServerCommit = committedConsentServerRedirect({
+        page, response: navigationResponse, requestedUrl: input.url, redirectCount, signal: effectiveSignal,
+        documentSha256: firstLayerProof?.exactSelector ? firstLayerProof.documentSha256 : undefined,
+      });
+      const settled = exactServerCommit || await waitForPassiveRedirectSettle(
         page,
         remainingResultBudgetMs(input.interactionAuthorization.resolutionTimeoutMs),
         effectiveSignal,
@@ -2100,17 +2107,23 @@ async function waitForDeterministicRecipe(
             ? (await normalizedAcceptLocatorLabels(control)).includes(expectedLabel)
             : undefined;
           if (retainedLabelMatches === false) continue;
-          const [visible, enabled] = await Promise.all([
-            control.isVisible().catch(() => false),
-            locatorEnabledWithinDeadline(control, deadlineAtMs),
-          ]);
+          const readOptions = { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope };
+          const retainedReadiness = retainedLabelMatches
+            ? await inspectLocatorConsentReadiness(control, readOptions)
+            : undefined;
+          const [visible, enabled] = retainedReadiness
+            ? [retainedReadiness.actionability.controlVisible, retainedReadiness.actionability.controlEnabled]
+            : await Promise.all([
+                control.isVisible().catch(() => false),
+                locatorEnabledWithinDeadline(control, deadlineAtMs),
+              ]);
           const expectedLabelPresent = retainedLabelMatches ??
             (expectedLabel === undefined || (await normalizedAcceptLocatorLabels(control)).includes(expectedLabel));
           if (visible) visibleCount += 1;
           if (enabled) enabledCount += 1;
           if (expectedLabelPresent) labelMatchCount += 1;
           if (visible && enabled && expectedLabelPresent) {
-            const readiness = await inspectLocatorConsentReadiness(control, { deadlineAtMs: timeoutMs > 0 ? deadlineAtMs : undefined, signal, scope });
+            const readiness = retainedReadiness ?? await inspectLocatorConsentReadiness(control, readOptions);
             if (!readiness.scopeInteractive) { scopeNotInteractive = true; continue; }
             if (locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) {
               if (outerDeadlineAtMs !== undefined) deadlineAtMs = outerDeadlineAtMs;

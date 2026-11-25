@@ -1671,7 +1671,13 @@ function collectConsentGeometryInPage(input: {
     visibleElementCache.set(element, visible);
     return visible;
   }
-  const allContainerElements = [...new Set([...deepQuerySelectorAll(containerSelector), ...namedConsentRegions])]
+  // Native modal dialogs need no explicit ARIA role. Bind the notice through
+  // the modal itself when nested wrappers exceed the generic ancestor limit.
+  const nativeConsentDialogs = new Set(deepQuerySelectorAll("dialog:modal").filter(dialog =>
+    !dialog.querySelector("form,dialog[open],[role='dialog'],[role='alertdialog']") &&
+    /\b(?:we|(?:this|our) (?:web)?site) use(?:s)? cookies\b/i.test(readableTextFor(dialog)
+      .filter(part => !part.interactive).map(part => part.text).join(" ").slice(0, 1000))));
+  const allContainerElements = [...new Set([...deepQuerySelectorAll(containerSelector), ...namedConsentRegions, ...nativeConsentDialogs])]
     .filter((element) => {
       const tagName = element.tagName.toLowerCase();
       const role = (element.getAttribute("role") || "").toLowerCase();
@@ -1728,7 +1734,7 @@ function collectConsentGeometryInPage(input: {
           ariaLabel: attr(element, "aria-label"),
           id: attr(element, "id"),
           classes: attr(element, "class")?.slice(0, 240),
-          layer: layerFor(element, box),
+          layer: nativeConsentDialogs.has(element) ? "first_layer" : layerFor(element, box),
           textExcerpt: deepText(element).slice(0, maxText),
           htmlExcerpt: sanitizeHtmlExcerpt(element, maxHtml),
           boundingBox: box,
