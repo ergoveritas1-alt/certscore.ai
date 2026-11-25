@@ -1,4 +1,4 @@
-import { buildConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES } from "./reject-click-checkpoint.js";
+import { buildConsentClickCheckpoint, verifyConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES } from "./reject-click-checkpoint.js";
 import { redHatCanaryFixture } from "./test-fixtures/redhat-canary";
 import redHatPacketFixture from '../../../packages/certscore-contracts/src/test-fixtures/redhat-terminal-choice.json';
 import {CONDITIONAL_OPT_OUT_CAPTURE_PROFILE} from "@certscore/contracts";
@@ -2170,7 +2170,7 @@ function validPayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function coordinatorPostAcceptConfig(dispatchDelayMs: number) {
+function coordinatorPostAcceptConfig(dispatchDelayMs: number | undefined) {
   return {
     enabled: true,
     dispatchDelayMs,
@@ -2193,7 +2193,7 @@ function coordinatorPostAcceptConfig(dispatchDelayMs: number) {
   };
 }
 
-function coordinatorPostRefusalConfig(dispatchDelayMs: number) {
+function coordinatorPostRefusalConfig(dispatchDelayMs: number | undefined) {
   return {
     enabled: true,
     dispatchDelayMs,
@@ -2450,12 +2450,15 @@ async function runCoordinatorFixture(input: {
   gateDeadlineMs?: number;
   clickCheckpoint?: boolean;
   clickCheckpointDelayMs?: number;
+  lateClickCheckpoint?: { completedBeforeCutoffMs: number; uploadDelayMs: number };
   actionResponseDelayMs?: number;
   acceptPacketReadDelayMs?: number;
   acceptLateFormProgress?: boolean;
   consentBundle: CanonicalEvidenceBundle;
   action: "none" | "hang" | "late" | "completed" | "validation_failed" | "completed_during_finalization" | "completed_after_finalization";
-  dispatchDelayMs: number;
+  dispatchDelayMs?: number;
+  replayParallelActions?: boolean;
+  replayPassiveTailMs?: number;
   actionLane?: "accept" | "reject";
   gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
   encodedCanonicalArtifacts?: boolean;
@@ -2530,6 +2533,12 @@ async function runCoordinatorFixture(input: {
     pointers.set(uri, metadata);
   }
   const actionLane = input.actionLane ?? "accept";
+  const actionLanes: Array<"accept" | "reject"> = input.replayParallelActions ? ["accept", "reject"] : [actionLane];
+  const inspectedActions = input.replayParallelActions ? actionLanes.filter(action =>
+    input.consentBundle.consentUiObservations.some(row => row.controls.some(control => control.actionType === `${action}_all`))) : actionLanes;
+  const clickReserves: Partial<Record<"accept" | "reject", number>> = {};
+  const workerStartedMs: Partial<Record<"accept" | "reject", number>> = {};
+  const workerVerifiedReceipts = new Set<"accept" | "reject">();
   const enforcementAuthorization = input.enforcementGeometry ? {
     kind:"scan_target" as const, authorizationId:"sharded_scan_exact_target.v1",
     normalizedUrl:input.consentBundle.url, scanId:input.scanId,
@@ -2549,19 +2558,19 @@ async function runCoordinatorFixture(input: {
     const geometry = retain(`${prefix}/auxiliary/${fileName}`,{
       artifactVersion:"consent_control_geometry.v1",sourceScanner:"consent_control_geometry_diagnostic",pageUrl:input.consentBundle.url,
       documentIdentity:{source:"cdp_loader_id",token:"fixture-loader"},
-      candidates:[{
-        candidateId:actionLane, actionType:`${actionLane}_all`, label:actionLane === "accept" ? "Accept all" : "Reject all",
-        classifierReasonCodes:[`matched_${actionLane}`],
-        tagName:"button",selectorHint:input.enforcementGeometry === "ready" ? `#${actionLane}` : "#different",
-        ...(actionLane === "accept" ? {exactNativeAcceptSelectorVerified:true} : {exactNativeRejectSelectorVerified:true}),
+      candidates: inspectedActions.map(action => ({
+        candidateId:action, actionType:`${action}_all`, label:action === "accept" ? "Accept all" : "Reject all",
+        classifierReasonCodes:[`matched_${action}`],
+        tagName:"button",selectorHint:input.enforcementGeometry === "ready" ? `#${action}` : "#different",
+        ...(action === "accept" ? {exactNativeAcceptSelectorVerified:true} : {exactNativeRejectSelectorVerified:true}),
         layer:"first_layer",decisionStatus:"confirmed_visible",enabled:true,intersectsViewport:true,
         occlusion:{center:true},consentContextConfirmed:true,boundingBox:{width:40,height:30},
         frameContext:{frameKind:"main_frame",frameUrl:input.consentBundle.url},
-      }],
-      controlInspection:{version:"control_specific_inspection.v4",retainedCandidateCount:1,structuralCoverage:"complete",
+      })),
+      controlInspection:{version:"control_specific_inspection.v4",retainedCandidateCount:inspectedActions.length,structuralCoverage:"complete",
         captureCoverage:{inventoryTruncated:false,documentReadyState:"complete",mainFrameAvailable:true,
           documentAndFramesStable:true,frameCount:1,capturedFrameCount:1},
-        candidates:[{candidateId:actionLane,role:"decision",unresolvedIntents:[]}],reasonCodes:[]},
+        candidates:inspectedActions.map(candidateId => ({candidateId,role:"decision",unresolvedIntents:[]})),reasonCodes:[]},
     });
     consentManifest = retain(`${prefix}/LocalV2DagLambdaManifest.json`,{
       contractVersion:"certscore.v2.lambda-dag-artifact-manifest.v1",scanId:input.scanId,targetUrl:input.consentBundle.url,
@@ -2586,55 +2595,84 @@ async function runCoordinatorFixture(input: {
     } } : {}),
     ...(input.gpcPair ? { targetUrl: input.gpcPair.baseline.url, hostname: new URL(input.gpcPair.baseline.url).hostname, gpcObservation: { contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true, pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc" } } : {}),
     ...(input.redHatOptOut?{targetUrl:"https://redhat.com/",hostname:"redhat.com",awsRegion:"us-west-1",functionName:"certscore-redhat-fixture:42",saleSharingOptOut:{policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:input.scanId,exactTargetUrl:"https://redhat.com/"}}:{}),
-    ...(actionLane === "accept"
-      ? { postAcceptObservation: {...coordinatorPostAcceptConfig(input.dispatchDelayMs), ...productionConfig} }
-      : { postRefusalObservation: {...coordinatorPostRefusalConfig(input.dispatchDelayMs),...productionConfig} }),
+    ...(actionLanes.includes("accept") ? {postAcceptObservation: {...coordinatorPostAcceptConfig(input.dispatchDelayMs), ...productionConfig}} : {}),
+    ...(actionLanes.includes("reject") ? {postRefusalObservation: {...coordinatorPostRefusalConfig(input.dispatchDelayMs), ...productionConfig}} : {}),
   }));
-  const packet = ["completed", "completed_during_finalization", "completed_after_finalization"].includes(input.action)
-    ? actionLane === "accept"
-      ? coordinatorPostAcceptPacket(input.scanId)
-      : coordinatorPostRefusalPacket(input.scanId)
-    : undefined;
-  if (packet) {
-    const body = Buffer.from(JSON.stringify(packet));
-    const packetFile = actionLane === "accept" ? "PostAcceptEvidencePacket.json" : "PostRefusalEvidencePacket.json";
-    const uri = `s3://test-bucket/workers/${input.scanId}/${actionLane === "accept" ? "accept" : "reject"}_observation/${packetFile}`;
-    pointers.set(uri, { uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength });
+  const packets = new Map<"accept" | "reject", {completedAt: string; uri: string}>();
+  if (["completed", "completed_during_finalization", "completed_after_finalization"].includes(input.action)) {
+    for (const action of actionLanes) {
+      const packet = action === "accept" ? coordinatorPostAcceptPacket(input.scanId) : coordinatorPostRefusalPacket(input.scanId);
+      const body = Buffer.from(JSON.stringify(packet));
+      const packetFile = action === "accept" ? "PostAcceptEvidencePacket.json" : "PostRefusalEvidencePacket.json";
+      const uri = `s3://test-bucket/workers/${input.scanId}/${action}_observation/${packetFile}`;
+      pointers.set(uri, {uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength});
+      packets.set(action, {uri, completedAt: packet.completedAt});
+    }
   }
+  let lateClickDispatched!: () => void;
+  const lateClickDispatch = new Promise<void>(resolve => { lateClickDispatched = resolve; });
+  let queueLateCheckpoint: ((cutoffAtMs: number) => void) | undefined;
+  let checkpointReads = 0;
   const lambdaClient = {
     async send(command: any, options?: { abortSignal?: AbortSignal }) {
       const workerPayload = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8")) as Record<string, any>;
       const lane = String(workerPayload.workerLane);
+      if (input.lateClickCheckpoint && lane === "runtime_evidence") {
+        await lateClickDispatch;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
       workerCalls.push(lane);
       workerPayloads.push(workerPayload);
-      if (input.enforcementGeometry && lane === `${actionLane}_observation`) {
+      const runningAction = actionLanes.find(action => lane === `${action}_observation`);
+      if (runningAction) workerStartedMs[runningAction] = Date.now();
+      if (input.replayPassiveTailMs && lane === "policy_evidence") {
+        await new Promise(resolve => setTimeout(resolve, input.replayPassiveTailMs));
+      }
+      if (input.enforcementGeometry && runningAction) {
         assert.equal(geometryReleased,true,"No action before exact geometry is released");
-        assert.equal(parseLocalV2DagLambdaDispatchPayload(workerPayload)[`${actionLane}FirstLayerProof`]?.exactSelector,`#${actionLane}`);
+        assert.equal(parseLocalV2DagLambdaDispatchPayload(workerPayload)[`${runningAction}FirstLayerProof`]?.exactSelector,`#${runningAction}`);
       }
 
-      if (input.clickCheckpoint && lane === `${actionLane}_observation`) {
+      if (input.clickCheckpoint && runningAction) {
+        lateClickDispatched();
         const worker = parseLocalV2DagLambdaDispatchPayload(workerPayload);
-        const binding = actionLane === "accept"
+        const binding = runningAction === "accept"
           ? { action: "accept" as const, proof: worker.acceptFirstLayerProof! }
           : { action: "reject" as const, proof: worker.rejectFirstLayerProof! };
         const documentSha256 = binding.action === "accept"
           ? binding.proof.documentSha256 : binding.proof.binding.documentSha256;
-        const delayMs = input.clickCheckpointDelayMs ?? 0;
-        const time = Date.now() + delayMs;
-        const body = buildConsentClickCheckpoint(binding, {
-          action: actionLane, actionSemantics: "direct_label", accessibleLabel: actionLane === "accept" ? "Accept all" : "Reject all",
-          labelSource: "visible_text", selectorHint: `#${actionLane}`,
-          authorizedTargetSha256: documentSha256, frameIdentitySha256: documentSha256,
-        } as Parameters<typeof buildConsentClickCheckpoint>[1], {
-          recheckedAtMs: time, dispatchedAtMs: time, completedAtMs: time,
-        });
-        assert.ok(body);
-        const uri = `s3://test-bucket/v2-dag-lambda/local/${input.scanId}/lanes/${actionLane}_observation/${CONSENT_CLICK_CHECKPOINT_FILES[actionLane]}`;
-        const publishCheckpoint = () => pointers.set(uri, {
-          uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.length,
-        });
-        if (delayMs) setTimeout(publishCheckpoint, delayMs);
-        else publishCheckpoint();
+        const queueCheckpoint = (dispatchedAtMs: number, completedAtMs: number, uploadDelayMs = 0) => {
+          const body = buildConsentClickCheckpoint(binding, {
+            action: runningAction, actionSemantics: "direct_label", accessibleLabel: runningAction === "accept" ? "Accept all" : "Reject all",
+            labelSource: "visible_text", selectorHint: `#${runningAction}`,
+            authorizedTargetSha256: documentSha256, frameIdentitySha256: documentSha256,
+          } as Parameters<typeof buildConsentClickCheckpoint>[1], {
+            recheckedAtMs: dispatchedAtMs, dispatchedAtMs, completedAtMs,
+          });
+          assert.ok(body);
+          clickReserves[runningAction] = binding.proof.expiresAtMs - completedAtMs;
+          const uri = `s3://test-bucket/v2-dag-lambda/local/${input.scanId}/lanes/${runningAction}_observation/${CONSENT_CLICK_CHECKPOINT_FILES[runningAction]}`;
+          const publish = () => {
+            const sha256 = createHash("sha256").update(body).digest("hex");
+            pointers.set(uri, {uri, body, sha256, sizeBytes: body.length});
+            const verified = verifyConsentClickCheckpoint({
+              body, metadataSha256:sha256, binding, coordinatorDispatchAtMs:workerStartedMs[runningAction]!,
+              verifiedAtMs:Date.now(), deadlineAtMs:binding.proof.expiresAtMs,
+            });
+            if (verified) workerVerifiedReceipts.add(runningAction);
+          };
+          const delayMs = completedAtMs + uploadDelayMs - Date.now();
+          if (delayMs > 0) setTimeout(publish, delayMs);
+          else publish();
+        };
+        const late = input.lateClickCheckpoint;
+        if (late) {
+          queueLateCheckpoint = cutoff => queueCheckpoint(Math.min(cutoff - 425, binding.proof.expiresAtMs - 1),
+            cutoff - late.completedBeforeCutoffMs, late.uploadDelayMs);
+        } else {
+          const time = Date.now() + (input.clickCheckpointDelayMs ?? 0);
+          queueCheckpoint(time, time);
+        }
       }
       if(input.presenceOnly)assert.equal(workerPayload.privacyCaptureProfile,PRESENCE_ONLY_CAPTURE_PROFILE);
       if(input.bothActions && lane === "reject_observation") {actionCalls.push(lane);throw new Error("offline fixture: neutral Reject terminal failure");}
@@ -2683,8 +2721,8 @@ async function runCoordinatorFixture(input: {
           parentDispatchSha256: postRefusalParentDispatchSha256(payload), artifactPointers: { cmpPreferencesPacketUri: uri },
           artifactMetadata: { cmpPreferencesPacketUri: { sizeBytes: entry.sizeBytes, sha256: input.preferences === "wrong_hash" ? "0".repeat(64) : entry.sha256 } } })) };
       }
-      const actionWorkerLane = actionLane === "accept" ? "accept_observation" : "reject_observation";
-      if (lane === actionWorkerLane) {
+      if (runningAction) {
+        const packet = packets.get(runningAction);
         actionCalls.push(lane);
         if (input.action === "validation_failed") throw new Error("Evidence validation failed: [field].resolver.[field].[7].[field].[0] (too_big)");
         if (input.action === "hang") {
@@ -2711,9 +2749,9 @@ async function runCoordinatorFixture(input: {
         }
         if (input.action === "none") throw new Error("action should not have dispatched");
         if (!packet) throw new Error("missing action packet fixture");
-        const original = [...pointers.values()].find((candidate) => candidate.uri.includes(`${actionLane === "accept" ? "accept" : "reject"}_observation`))!;
+        const original = pointers.get(packet.uri)!;
         const uri = input.invalidActionHash ? {...original, sha256: "0".repeat(64)} : original;
-        const descriptor = actionLane === "accept"
+        const descriptor = runningAction === "accept"
           ? {
               artifactOnly: true,
               contractVersion: "certscore.v2.lambda-post-accept-evidence-descriptor.v1",
@@ -2751,14 +2789,14 @@ async function runCoordinatorFixture(input: {
         return {
           StatusCode: 200,
           Payload: Buffer.from(JSON.stringify({
-            artifactMetadata: actionLane === "accept"
+            artifactMetadata: runningAction === "accept"
               ? { postAcceptPacketUri: { sha256: uri.sha256, sizeBytes: uri.sizeBytes } }
               : { postRefusalPacketUri: { sha256: uri.sha256, sizeBytes: uri.sizeBytes } },
-            artifactPointers: actionLane === "accept"
+            artifactPointers: runningAction === "accept"
               ? { postAcceptPacketUri: uri.uri }
               : { postRefusalPacketUri: uri.uri },
             parentDispatchSha256: postRefusalParentDispatchSha256(payload),
-            ...(actionLane === "accept" ? { postAcceptEvidence: descriptor } : { postRefusalEvidence: descriptor }),
+            ...(runningAction === "accept" ? { postAcceptEvidence: descriptor } : { postRefusalEvidence: descriptor }),
             scanId: payload.scanId,
             status: "completed",
             workerLane: lane,
@@ -2799,6 +2837,11 @@ async function runCoordinatorFixture(input: {
           parentDispatchSha256: postRefusalParentDispatchSha256(payload),
         })) };
       }
+      if (queueLateCheckpoint && key.endsWith(CONSENT_CLICK_CHECKPOINT_FILES[actionLane]) && ++checkpointReads === 2) {
+        // Anchor the replay to the production coordinator's last regular read,
+        // which starts 250 ms before the standard cutoff.
+        queueLateCheckpoint(Date.now() + 250);
+      }
       const entry = pointers.get(uri);
       if (!entry) throw new Error(`missing fixture object ${uri}`);
       if (Object.values(CONSENT_CLICK_CHECKPOINT_FILES).some(file => key.endsWith(file))) {
@@ -2808,7 +2851,7 @@ async function runCoordinatorFixture(input: {
       }
       if (input.enforcementGeometry && key.endsWith("/ConsentControlGeometryEvidence.json")) {
         await new Promise(resolve => setTimeout(resolve,30));
-        assert.equal(workerPayloads.some(row => row.workerLane === `${actionLane}_observation`),false);
+        assert.equal(workerPayloads.some(row => actionLanes.some(action => row.workerLane === `${action}_observation`)),false);
         geometryReleased = true;
       }
 
@@ -2840,7 +2883,7 @@ async function runCoordinatorFixture(input: {
       }}}:{}),
     });
     const bundle = parseCanonicalEvidenceArtifact(await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"))) as Record<string, any>;
-    return { actionCalls, workerCalls, workerPayloads, payload, artifactRoot, bundle, result, uploads };
+    return { actionCalls, workerCalls, workerPayloads, payload, artifactRoot, bundle, result, uploads, clickReserves, workerStartedMs, workerVerifiedReceipts };
   } catch (error) {
     await rm(artifactRoot, { recursive: true, force: true });
     throw error;
@@ -6768,6 +6811,158 @@ test("Accept late packet join requires an already verified exact click or its ex
       }
     } finally {
       await rm(output.artifactRoot, { recursive: true, force: true });
+    }
+  }));
+});
+
+test("Logentries timing retains a pre-cutoff Accept receipt uploaded after the final regular read", async t => {
+  t.mock.method(console, "log", () => {});
+  const config = {
+    [POST_ACCEPT_WORKER_FEATURE_FLAG]: "1", CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE: "1",
+    CERTSCORE_ACCEPT_CLICK_CHECKPOINT_ENABLED: "1",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET: "test-bucket",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX: "v2-dag-lambda/local",
+  };
+  const previous = new Map(Object.keys(config).map(key => [key, process.env[key]]));
+  Object.assign(process.env, config);
+  t.after(() => {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const scenarios = [
+    {id: 91, completedBeforeCutoffMs: 126, stalled: false},
+    {id: 92, completedBeforeCutoffMs: -100, stalled: false},
+    {id: 93, completedBeforeCutoffMs: 126, stalled: true},
+  ];
+  await Promise.all(scenarios.map(async ({id, completedBeforeCutoffMs, stalled}) => {
+    const scanId = `00000000-0000-4000-8000-0000000000${id}`;
+    const consentBundle = coordinatorConsentBundle(scanId, {inspectionCompleted: true, acceptControlObserved: true});
+    const documentIdentity = {source: "cdp_loader_id", token: "fixture-loader"} as const;
+    consentBundle.domSnapshots = [{...runtimeSnapshotFixture(), documentIdentity}];
+    const observation = consentBundle.consentUiObservations[0]!;
+    Object.assign(observation, {layerInspected: "first_layer", captureStatus: "observed", documentUrl: consentBundle.url,
+      documentIdentity, captureDiagnostics: {completedChannels: ["dom_inventory", "geometry"], failedChannels: [], timedOutChannels: []}});
+    Object.assign(observation.controls[0]!, {tagName: "button", selectorHint: "#accept"});
+    const reads: string[] = [];
+    const output = await runCoordinatorFixture({
+      scanId, consentBundle, actionLane: "accept", action: stalled ? "hang" : "completed", enforcementGeometry: "ready",
+      dispatchDelayMs: 0, clickCheckpoint: true, actionResponseDelayMs: 8_641, acceptPacketReadDelayMs: 300,
+      lateClickCheckpoint: {completedBeforeCutoffMs, uploadDelayMs: completedBeforeCutoffMs > 0 ? 400 : 200},
+      onRead: key => reads.push(key),
+    });
+    try {
+      const manifest = JSON.parse(await readFile(path.join(output.artifactRoot, "LocalV2DagLambdaManifest.json"), "utf8"));
+      const barrier = Date.parse(manifest.laneTimingSummary.passiveLaneBarrierCompletedAt);
+      const cutoff = barrier + POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS;
+      assert.equal(reads.filter(key => key.endsWith(CONSENT_CLICK_CHECKPOINT_FILES.accept)).length, 3);
+      if (completedBeforeCutoffMs < 0) {
+        assert.equal(manifest.acceptClickCheckpoint, undefined);
+        assert.equal(output.bundle.postAcceptLaneOutcome?.evidenceJoined, false);
+        return;
+      }
+      const outcome = output.bundle.postAcceptLaneOutcome;
+      assert.equal(outcome?.evidenceJoined, !stalled);
+      const checkpoint = manifest.acceptClickCheckpoint;
+      assert.ok(checkpoint.completedAtMs < cutoff && checkpoint.completedAtMs > cutoff - 250);
+      assert.ok(checkpoint.verifiedAtMs > cutoff);
+      if (stalled) {
+        assert.equal(outcome?.verifiedClickReceipt?.receiptSha256, checkpoint.receiptSha256);
+        assert.equal(outcome?.verifiedClickReceipt?.completedAtMs, checkpoint.completedAtMs);
+        return;
+      }
+      const packet = manifest.phaseTimings.find((phase: {label: string}) => phase.label === "post_accept_packet_join");
+      const marginMs = barrier + manifest.laneTimingSummary.maxAcceptTailWaitMs - Date.parse(packet.completedAt);
+      assert.ok(marginMs >= 200, `verified packet had ${marginMs} ms left`);
+      t.diagnostic(`Logentries Accept receipt and packet, join reserve ${marginMs} ms`);
+    } finally {
+      await rm(output.artifactRoot, {recursive: true, force: true});
+    }
+  }));
+});
+
+test("five-case local coordinator timing replay", {timeout: 15_000}, async t => {
+  const config = {
+    [POST_ACCEPT_WORKER_FEATURE_FLAG]: "1", [POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]: "1",
+    CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE: "1", CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE: "1",
+    CERTSCORE_ACCEPT_CLICK_CHECKPOINT_ENABLED: "1", CERTSCORE_REJECT_CLICK_CHECKPOINT_ENABLED: "1",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET: "test-bucket",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX: "v2-dag-lambda/local",
+  };
+  const previous = new Map(Object.keys(config).map(key => [key, process.env[key]]));
+  Object.assign(process.env, config);
+  t.after(() => {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+
+  // The paired run reuses these same worker timings, including when no
+  // action is allowed. Passive work outlives the exact consent proof.
+  const scenarios = [
+    {name:"Prozis", accept:true, reject:true, clickMs:250, packetMs:1_420},
+    {name:"Dafiti", accept:true, reject:false, clickMs:230, packetMs:1_250},
+    {name:"SecretHostess", accept:false, reject:false, clickMs:null, packetMs:null},
+    {name:"NRDC", accept:true, reject:false, clickMs:null, packetMs:6_150},
+    {name:"Logentries", accept:true, reject:false, clickMs:4_650, packetMs:8_200},
+  ];
+  await Promise.all(scenarios.map(async (row, index) => {
+    const scanId = `00000000-0000-4000-8000-00000000110${index}`;
+    const bundle = coordinatorConsentBundle(scanId, {inspectionCompleted:true,
+      acceptControlObserved:row.accept, rejectControlObserved:row.reject});
+    const documentIdentity = {source:"cdp_loader_id", token:"fixture-loader"} as const;
+    bundle.domSnapshots = [{...runtimeSnapshotFixture(), documentIdentity}];
+    if (!bundle.consentUiObservations.length) {
+      const empty = coordinatorConsentBundle(scanId, {inspectionCompleted:true, acceptControlObserved:true}).consentUiObservations[0]!;
+      bundle.consentUiObservations = [{...empty, likelyPresent:false, controls:[],
+        acceptControlObserved:false, rejectControlObserved:false}];
+    }
+    const observation = bundle.consentUiObservations[0]!;
+    Object.assign(observation, {layerInspected:"first_layer", captureStatus: row.accept || row.reject ? "observed" : "no_evidence",
+      inventoryOutcome: row.accept || row.reject ? "complete_with_controls" : "complete_empty",
+      documentUrl:bundle.url, documentIdentity,
+      captureDiagnostics:{completedChannels:["dom_inventory","geometry"],failedChannels:[],timedOutChannels:[]}});
+    for (const control of observation.controls) Object.assign(control, {
+      tagName:"button", selectorHint:control.actionType === "accept_all" ? "#accept" : "#reject",
+    });
+    const lateLogentries = row.name === "Logentries";
+    const output = await runCoordinatorFixture({
+      scanId, consentBundle:bundle, enforcementGeometry:"ready", replayParallelActions:true, replayPassiveTailMs:1_200,
+      action:row.packetMs === null ? "none" : row.clickMs === null ? "hang" : "completed",
+      clickCheckpoint:row.clickMs !== null, clickCheckpointDelayMs:row.clickMs ?? undefined,
+      actionResponseDelayMs:row.packetMs ?? undefined,
+      ...(lateLogentries ? {acceptPacketReadDelayMs:250} : {}),
+    });
+    try {
+      const manifest = JSON.parse(await readFile(path.join(output.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
+      const timing = manifest.laneTimingSummary;
+      const barrier = Date.parse(timing.passiveLaneBarrierCompletedAt);
+      const packetReserve = (action: "accept" | "reject") => {
+        const label = action === "accept" ? "post_accept_packet_join" : "post_refusal_packet_join";
+        const tail = action === "accept" ? timing.maxAcceptTailWaitMs : timing.maxRejectTailWaitMs;
+        const phase = manifest.phaseTimings.find((entry: {label: string}) => entry.label === label);
+        return phase ? barrier + tail - Date.parse(phase.completedAt) : null;
+      };
+      const results = (["accept","reject"] as const).map(action => {
+        const outcome = action === "accept" ? output.bundle.postAcceptLaneOutcome : output.bundle.postRefusalLaneOutcome;
+        const clickReserve = output.clickReserves[action] ?? null;
+        const joinReserve = outcome?.evidenceJoined === true ? packetReserve(action) : null;
+        const checkpoint = manifest[`${action}ClickCheckpoint`];
+        const received = Boolean(outcome?.evidenceJoined === true && output.workerVerifiedReceipts.has(action) ||
+          checkpoint && outcome?.verifiedClickReceipt?.receiptSha256 === checkpoint.receiptSha256);
+        const started = output.workerStartedMs[action];
+        if (received) {
+          assert.ok(clickReserve !== null && clickReserve >= 200);
+          assert.ok(joinReserve === null || joinReserve >= 200);
+        }
+        return {action,received,clickReserveMs:clickReserve,joinReserveMs:joinReserve,
+          workerStartBeforePassiveMs:started === undefined ? null : barrier - started};
+      });
+      assert.deepEqual(results.map(result => result.received), [row.clickMs !== null && row.accept, row.clickMs !== null && row.reject]);
+      t.diagnostic(JSON.stringify({site:row.name, scanMs:Date.parse(timing.generatedAt) - Date.parse(timing.coordinatorStartedAt),
+        passiveMs:barrier - Date.parse(timing.coordinatorStartedAt), results}));
+    } finally {
+      await rm(output.artifactRoot,{recursive:true,force:true});
     }
   }));
 });

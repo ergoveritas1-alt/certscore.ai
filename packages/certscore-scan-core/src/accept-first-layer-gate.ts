@@ -7,7 +7,7 @@ import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR } from "./cookiescript-reject-select
 import { createHash } from "node:crypto";
 import type { CanonicalEvidenceBundle, ConsentActionControlProof, ConsentUiObservation } from "@certscore/contracts";
 import {
-  classifyConsentControlLabel, consentSessionAccessLimited, hasConsentControlSemanticVeto,
+  classifyConsentControlLabel, classifyDafitiAdoptAcceptLabel, DAFITI_ADOPT_ACCEPT_CONTROL, CAIA_ACCEPT_CONTROL, consentSessionAccessLimited, hasConsentControlSemanticVeto,
   isConsentControlInteractionEligible, ONETRUST_ITALIAN_ACCEPT_CONTROL, verifyConsentControlInspection,
 } from "@certscore/contracts";
 import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
@@ -162,8 +162,13 @@ function exactGeometryAccept(
   const cookieScriptRole = requireExactSelector && candidate.exactCookieScriptAcceptVerified === true &&
     candidate.selectorHint === "#cookiescript_accept" && candidate.tagName === "div" && candidate.role === "button" &&
     geometry.cmp?.detections?.some(cmp => cmp.canonicalName === "CookieScript") === true;
+  const caia = CAIA_ACCEPT_CONTROL;
+  const caiaAccept = requireExactSelector && document.url === caia.targetUrl &&
+    candidate.exactCaiaAcceptSelectorVerified === true && candidate.tagName === "span" &&
+    candidate.selectorHint === caia.controlSelector && candidate.label === caia.label &&
+    !candidate.ariaLabel && !candidate.title && !candidate.value && candidate.semanticallyInteractive === true;
   if ((requireExactSelector && ((inspection.structuralCoverage !== "complete" && !drupalOverflow) ||
-      (!cookieScriptRole && (candidate.exactNativeAcceptSelectorVerified !== true ||
+      (!cookieScriptRole && !caiaAccept && (candidate.exactNativeAcceptSelectorVerified !== true ||
         !(candidate.tagName === "button" || geometryConsentButtonLinkMatches(candidate, geometry.cmp, "accept")))))) ||
     candidate.enabled !== true || candidate.intersectsViewport !== true || candidate.occlusion?.center !== true ||
     candidate.consentContextConfirmed !== true || candidate.frameContext?.frameKind !== "main_frame" ||
@@ -189,10 +194,18 @@ function exactGeometryAccept(
       container.layer === "first_layer" && container.intersectsViewport) &&
     geometry.containers.some(container => container?.selectorHint === italianAccept.groupSelector &&
       container.containerId === candidate.containerId && container.layer === "first_layer" && container.intersectsViewport);
+  const adopt = DAFITI_ADOPT_ACCEPT_CONTROL;
+  const dafitiAdoptAccept = requireExactSelector && document.url === adopt.targetUrl &&
+    candidate.tagName === "button" && candidate.selectorHint === adopt.controlSelector &&
+    classifyDafitiAdoptAcceptLabel(candidate.label) !== undefined &&
+    !candidate.ariaLabel && !candidate.title && !candidate.value &&
+    candidate.containerSelectorHint === adopt.bannerSelector && Array.isArray(geometry.containers) &&
+    geometry.containers.some(container => container.selectorHint === adopt.bannerSelector &&
+      container.containerId === candidate.containerId && container.layer === "first_layer" && container.intersectsViewport);
   const binding = { cookieScriptRole,
     selector: cookieScriptRole ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : candidate.selectorHint, inventorySelector: candidate.selectorHint,
     sourceLabel: cookieScriptRole && !candidate.ariaLabel && candidate.cookieScriptUppercaseSourceLabel?.toUpperCase() === candidate.label
-      ? candidate.cookieScriptUppercaseSourceLabel : undefined, tagName: candidate.tagName, separateConflicts, oneTrustItalianAccept };
+      ? candidate.cookieScriptUppercaseSourceLabel : undefined, tagName: candidate.tagName, separateConflicts, oneTrustItalianAccept, dafitiAdoptAccept, caiaAccept };
   if (candidate.ariaLabel) {
     // AX inventory can report the accessible name while geometry records the
     // rendered caption. Both must independently support Accept. The receipt
@@ -329,7 +342,7 @@ export function deriveAcceptFirstLayerProof(input: {
         !(control.semanticallyInteractive === true || control.tagName === "button" || control.role === "button") ||
         (control.domBinding && (targetHash(control.domBinding.documentUrl) !== document ||
           control.domBinding.documentIdentity.token !== observation.documentIdentity.token))) return block("control_binding_unverified");
-      if (!(handoff && nativeAccept.oneTrustItalianAccept) && !isActionableAcceptLabel(control.label)) return block("control_binding_unverified");
+      if (!(handoff && (nativeAccept.oneTrustItalianAccept || nativeAccept.dafitiAdoptAccept || nativeAccept.caiaAccept)) && !isActionableAcceptLabel(control.label)) return block("control_binding_unverified");
       if (matches.length !== previouslyMatched) return block("control_ambiguous");
       matches.push(handoff
         ? { document, label: hash(nativeAccept.label), selector: hash(nativeAccept.selector), labelSource: nativeAccept.labelSource, backendNodeId: control.domBinding?.backendNodeId,

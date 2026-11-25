@@ -1541,3 +1541,19 @@ test("the ExitGames preferences-or-refusal button cannot authorize a direct Reje
   assert.equal(classifyConsentControlLabel({...input, ariaLabel: "Deny all", usage: "action"}).intent, "unknown");
   assert.equal(classifyConsentControlLabel({label: "DENY ALL", usage: "action", hasConsentContext: true}).intent, "reject");
 });
+
+test("observes CAIA's exact Swedish labels only in a local cookie context", () => {
+  const contextText = "Cookies och liknande tekniker. Vi använder cookies för personanpassad marknadsföring.";
+  for (const [label, intent] of [["JAG GODKÄNNER", "accept"], ["INSTÄLLNINGAR", "options"]] as const) {
+    const observation = classifyConsentControlLabel({label, contextText});
+    assert.equal(observation.intent, intent);
+    assert.equal(observation.matchedLocale, "sv");
+    assert.ok(observation.reasonCodes.includes("observation_only_label"));
+    assert.equal(classifyConsentControlLabel({label, contextText:"Mitt konto och leveransadress"}).intent, "unknown");
+    assert.equal(classifyConsentControlLabel({label, contextText, usage:"action"}).intent, "unknown");
+    assert.equal(classifyConsentControlLabel({label:label + " för mitt konto", contextText}).intent, "unknown");
+  }
+  const textOnly = classifyConsentSurfaceText({text: contextText + " Jag godkänner. Inställningar."});
+  assert.ok(!textOnly.matches.some(match => match.kind === "control" &&
+    ["jag godkänner", "inställningar"].includes(match.phrase)));
+});

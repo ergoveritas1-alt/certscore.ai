@@ -128,3 +128,48 @@ test("full DOM inventory preserves distinct same-document button-role links for 
   assert.ok(geometry.candidates.some(row => row.label === "Deny" && row.linkDestination === "other_document"));
   assert.ok(!geometry.candidates.some(row => row.exactNativeRejectSelectorVerified));
 });
+
+test("an exact-action preparation hint can precede DOMContentLoaded on a committed document", async t => {
+  const content = '<!doctype html><main>Fixture homepage</main>' +
+    '<section role="dialog" class="cookie-banner" aria-label="Cookie preferences">' +
+    '<p>We use optional cookies for analytics. Choose your cookie preferences.</p>' +
+    '<button id="yes">Accept all cookies</button></section><script defer src="/deferred.js"></script>';
+  let scriptReleasedAt: number | undefined;
+  const server = createServer((request, response) => {
+    if (request.url === "/deferred.js") {
+      setTimeout(() => {
+        scriptReleasedAt = Date.now();
+        response.writeHead(200, {"Content-Type":"application/javascript"}).end("void 0;");
+      }, 1_450);
+      return;
+    }
+    if (request.url !== "/") { response.writeHead(404).end(); return; }
+    response.writeHead(200, {"Content-Type":"text/html"}).end(content);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise<void>(resolve => server.close(() => resolve())); });
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const browser = await chromium.launch({args:["--disable-background-networking","--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"]});
+  t.after(() => browser.close());
+  const root = await mkdtemp(join(tmpdir(), "certscore-early-consent-"));
+  t.after(() => rm(root, {recursive:true,force:true}));
+  const passive = shareConsentActionBrowser(Promise.resolve(browser));
+  let firstAcceptHintAt: number | undefined;
+  const outcome = await runScan({url, scanId:"early-committed-consent", profile:"standard", outDir:root,
+    evidenceLane:"consent_proof", preConsentModuleDeadlineMs:12_000, browserReuseMode:"per_module",
+    borrowedConsentBrowser:browser, openBorrowedConsentContext:passive.openPassiveContext,
+    onFirstLayerObservation(observation) {
+      if (observation.captureStatus === "observed" && observation.layerInspected === "first_layer" &&
+          observation.acceptControlObserved && observation.documentUrl === url && observation.documentIdentity?.source === "cdp_loader_id") {
+        firstAcceptHintAt ??= Date.now();
+      }
+    },
+  });
+  assert.ok(firstAcceptHintAt && scriptReleasedAt);
+  assert.ok(outcome.consentUiObservations.some(row => row.acceptControlObserved));
+  const hintLeadMs = scriptReleasedAt - firstAcceptHintAt;
+  t.diagnostic(JSON.stringify({hintLeadBeforeDeferredScriptMs:hintLeadMs}));
+  if (process.env.CERTSCORE_TEST_OBSERVE_TIMING_ONLY !== "1") assert.ok(hintLeadMs >= 200, `hint led the deferred script by ${hintLeadMs} ms`);
+});

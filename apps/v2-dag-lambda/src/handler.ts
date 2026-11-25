@@ -131,6 +131,9 @@ export const POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 500;
 export const POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 1_000;
 export const POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS = 6_000;
 const POST_ACCEPT_VERIFIED_CLICK_PACKET_ADDITIONAL_TAIL_WAIT_MS = 2_000;
+const ACCEPT_FINAL_CHECKPOINT_PROBE_DELAY_MS = 500;
+const ACCEPT_FINAL_CHECKPOINT_READ_BUDGET_MS = 250;
+const ACCEPT_LATE_CHECKPOINT_PACKET_TAIL_MS = 3_500;
 export const POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS = 12_000;
 export const POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS =
   POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS;
@@ -3216,6 +3219,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     reject: isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateEnforced(payload,"reject"),
   };
   const usePreparedReject = enforced.reject && rejectPreparationCanaryEnabled(payload);
+  function actionDispatchDelayMs(action: ActionLane, configuredMs: number | undefined, defaultMs: number) {
+    // Ordinary lanes have already waited for sealed passive proof. The default
+    // stagger applied before exact gating existed and can now delay release.
+    const delayMs = configuredMs ?? defaultMs;
+    return enforced[action] && !usePreparedReject && delayMs === defaultMs ? 0 : delayMs;
+  }
   let finishRejectRelease: (() => void) | undefined;
   const rejectReleaseSettled = usePreparedReject ? new Promise<void>(resolve => {
     finishRejectRelease = resolve;
@@ -3307,8 +3316,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       ? AbortSignal.any([options.signal, postRefusalAbortController.signal])
       : postRefusalAbortController.signal;
     postRefusalWorkerPromise = waitForPostActionDispatchDelay(
-      payload.postRefusalObservation?.dispatchDelayMs ??
-        POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
+      actionDispatchDelayMs("reject", payload.postRefusalObservation?.dispatchDelayMs, POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS),
       postRefusalWorkerSignal,
     )
       .then(async () => {
@@ -3425,7 +3433,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       ? AbortSignal.any([options.signal, postAcceptAbortController.signal])
       : postAcceptAbortController.signal;
     postAcceptWorkerPromise = waitForPostActionDispatchDelay(
-      payload.postAcceptObservation?.dispatchDelayMs ?? POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
+      actionDispatchDelayMs("accept", payload.postAcceptObservation?.dispatchDelayMs, POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS),
       postAcceptWorkerSignal,
     )
       .then(async () => {
@@ -3902,11 +3910,40 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       }
       // The legacy marker can be checked while the click-qualified packet joins.
       acceptLateFormProgress = verifiedPostAcceptLateFormProgress(payload, options.s3GetClient, options.signal);
+      const clickCutoff = passiveLaneBarrierCompletedAtMs + normalAcceptTailWaitMs;
+      const activeProof = qualifiedForAction()?.accept;
+      if (canReadClickCheckpoint("accept") && activeProof?.outcome === "qualified" &&
+          activeProof.proof.expiresAtMs <= clickCutoff &&
+          clickCutoff + ACCEPT_FINAL_CHECKPOINT_PROBE_DELAY_MS < acceptOuterDeadlineAtMs) {
+        const controller = new AbortController();
+        const signal = AbortSignal.any([controller.signal, clickCheckpointReadController.signal,
+          ...(options.signal ? [options.signal] : [])]);
+        // A click completed just before the cutoff can still be uploading its
+        // receipt. Read once after the bounded write window and keep the
+        // original cutoff for the click itself.
+        const readDeadline = Math.min(acceptOuterDeadlineAtMs,
+          clickCutoff + ACCEPT_FINAL_CHECKPOINT_PROBE_DELAY_MS + ACCEPT_FINAL_CHECKPOINT_READ_BUDGET_MS);
+        try {
+          await awaitPostRefusalWorkerWithinTailBudget({
+            abortController: controller, passiveLaneBarrierCompletedAtMs,
+            maxTailWaitMs: readDeadline - passiveLaneBarrierCompletedAtMs,
+            workerPromise: (async () => {
+              await waitForPostActionDispatchDelay(
+                Math.max(0, clickCutoff + ACCEPT_FINAL_CHECKPOINT_PROBE_DELAY_MS - Date.now()), signal,
+              ).catch(() => undefined);
+              if (!signal.aborted) await readClickCheckpoint("accept", clickCutoff, readDeadline, signal);
+            })(),
+          });
+        } finally {
+          controller.abort();
+        }
+      }
       const checkpoint = verifiedClicks.accept?.checkpoint;
-      if (checkpoint && checkpoint.verifiedAtMs < passiveLaneBarrierCompletedAtMs + normalAcceptTailWaitMs) {
-        postAcceptMaxTailWaitMs = Math.min(
-          normalAcceptTailWaitMs + POST_ACCEPT_VERIFIED_CLICK_PACKET_ADDITIONAL_TAIL_WAIT_MS, acceptOuterTailWaitMs,
-        );
+      if (checkpoint) {
+        const additionalWaitMs = checkpoint.completedAtMs >= clickCutoff - ACCEPT_FINAL_CHECKPOINT_READ_BUDGET_MS
+          ? ACCEPT_LATE_CHECKPOINT_PACKET_TAIL_MS
+          : POST_ACCEPT_VERIFIED_CLICK_PACKET_ADDITIONAL_TAIL_WAIT_MS;
+        postAcceptMaxTailWaitMs = Math.min(normalAcceptTailWaitMs + additionalWaitMs, acceptOuterTailWaitMs);
       }
     }
     if (acceptLateFormProgress) {
@@ -4017,60 +4054,65 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     checkpoint: VerifiedConsentClickCheckpoint; receipt: VerifiedChoiceClickReceipt;
   }>> = {};
   const clickCheckpointReadController = new AbortController();
+  const canReadClickCheckpoint = (action: ClickProofBinding["action"]) => {
+    const state = action === "accept" ? postAcceptState : postRefusalState;
+    const joined = action === "accept" ? joinedPostAcceptPacket : joinedPostRefusalPacket;
+    const cancelled = action === "accept" ? postAcceptState.cancelledNoAccept : postRefusalState.cancelledNoReject;
+    return enforced[action] && consentClickCheckpointEnabled(payload, action) &&
+      !joined && !verifiedClicks[action] && state.dispatchStartedAtMs !== undefined && !cancelled && !options.signal?.aborted;
+  };
+  const readClickCheckpoint = async (
+    action: ClickProofBinding["action"], completedBeforeMs: number, deadlineAtMs: number,
+    readSignal = clickCheckpointReadController.signal,
+  ) => {
+    if (!canReadClickCheckpoint(action) || readSignal.aborted || Date.now() >= deadlineAtMs) return;
+    const dispatchAt = (action === "accept" ? postAcceptState : postRefusalState).dispatchStartedAtMs!;
+    let binding: ClickProofBinding | undefined;
+    const passive = qualifiedForAction();
+    if (action === "accept" && passive?.accept?.outcome === "qualified") {
+      binding = { action, proof: passive.accept.proof };
+    }
+    if (action === "reject" && passive?.reject?.outcome === "qualified") {
+      const proof = readRejectFirstLayerProof({ ...passive.reject, scanId: payload.scanId });
+      if (proof) binding = { action, proof };
+    }
+    if (!binding) return;
+    const boundProof = binding;
+    const timeout = AbortSignal.timeout(Math.max(1, Math.min(500, deadlineAtMs - Date.now())));
+    const signal = AbortSignal.any([readSignal, timeout, ...(options.signal ? [options.signal] : [])]);
+    try {
+      const response = await (options.s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion, 1)).send(new GetObjectCommand({
+        Bucket: requireArtifactBucket(),
+        Key: `${artifactKeyPrefix(payload)}/lanes/${action}_observation/${CONSENT_CLICK_CHECKPOINT_FILES[action]}`,
+        Range: `bytes=0-${REJECT_CLICK_CHECKPOINT_MAX_BYTES - 1}`,
+      }), { abortSignal: signal });
+      if (!response.ContentLength || response.ContentLength > REJECT_CLICK_CHECKPOINT_MAX_BYTES ||
+          response.ContentRange !== `bytes 0-${response.ContentLength - 1}/${response.ContentLength}`) return;
+      const body = await streamToBuffer(response.Body);
+      if (signal.aborted || body.length !== response.ContentLength) return;
+      const verified = verifyConsentClickCheckpoint({
+        body, metadataSha256: response.Metadata?.sha256, binding: boundProof,
+        coordinatorDispatchAtMs: dispatchAt, verifiedAtMs: Date.now(), deadlineAtMs, completedBeforeMs,
+      });
+      if (verified) verifiedClicks[action] ??= {
+        checkpoint: verified,
+        receipt: {
+          policyVersion: "verified_choice_click_receipt.v1",
+          action,
+          scanId: verified.scanId,
+          requestedTargetSha256: boundProof.action === "accept"
+            ? boundProof.proof.requestedTargetSha256 : boundProof.proof.binding.requestedTargetSha256,
+          gateProofSha256: verified.gateProofSha256,
+          receiptSha256: verified.receiptSha256,
+          completedAtMs: verified.completedAtMs,
+        },
+      };
+    } catch { /* A failed receipt read grants no additional join time. */ }
+  };
   const scheduleClickCheckpointReads = (action: ClickProofBinding["action"], maxTailMs: number) => {
     if (!enforced[action] || !consentClickCheckpointEnabled(payload, action)) return [];
     const deadlineAtMs = Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + maxTailMs);
-    const read = () => {
-      const state = action === "accept" ? postAcceptState : postRefusalState;
-      const dispatchAt = state.dispatchStartedAtMs;
-      const joined = action === "accept" ? joinedPostAcceptPacket : joinedPostRefusalPacket;
-      const cancelled = action === "accept" ? postAcceptState.cancelledNoAccept : postRefusalState.cancelledNoReject;
-      if (joined || verifiedClicks[action] || dispatchAt === undefined || cancelled ||
-          options.signal?.aborted || Date.now() >= deadlineAtMs) return;
-      let binding: ClickProofBinding | undefined;
-      const passive = qualifiedForAction();
-      if (action === "accept" && passive?.accept?.outcome === "qualified") {
-        binding = { action, proof: passive.accept.proof };
-      }
-      if (action === "reject" && passive?.reject?.outcome === "qualified") {
-        const proof = readRejectFirstLayerProof({ ...passive.reject, scanId: payload.scanId });
-        if (proof) binding = { action, proof };
-      }
-      if (!binding) return;
-      const boundProof = binding;
-      const timeout = AbortSignal.timeout(Math.max(1, Math.min(500, deadlineAtMs - Date.now())));
-      const signal = AbortSignal.any([clickCheckpointReadController.signal, timeout, ...(options.signal ? [options.signal] : [])]);
-      void (async () => {
-        try {
-          const response = await (options.s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion, 1)).send(new GetObjectCommand({
-            Bucket: requireArtifactBucket(),
-            Key: `${artifactKeyPrefix(payload)}/lanes/${action}_observation/${CONSENT_CLICK_CHECKPOINT_FILES[action]}`,
-            Range: `bytes=0-${REJECT_CLICK_CHECKPOINT_MAX_BYTES - 1}`,
-          }), { abortSignal: signal });
-          if (!response.ContentLength || response.ContentLength > REJECT_CLICK_CHECKPOINT_MAX_BYTES ||
-              response.ContentRange !== `bytes 0-${response.ContentLength - 1}/${response.ContentLength}`) return;
-          const body = await streamToBuffer(response.Body);
-          if (signal.aborted || body.length !== response.ContentLength) return;
-          const verified = verifyConsentClickCheckpoint({
-            body, metadataSha256: response.Metadata?.sha256, binding: boundProof,
-            coordinatorDispatchAtMs: dispatchAt, verifiedAtMs: Date.now(), deadlineAtMs,
-          });
-          if (verified) verifiedClicks[action] ??= {
-            checkpoint: verified,
-            receipt: {
-              policyVersion: "verified_choice_click_receipt.v1",
-              action,
-              scanId: verified.scanId,
-              requestedTargetSha256: boundProof.action === "accept"
-                ? boundProof.proof.requestedTargetSha256 : boundProof.proof.binding.requestedTargetSha256,
-              gateProofSha256: verified.gateProofSha256,
-              receiptSha256: verified.receiptSha256,
-              completedAtMs: verified.completedAtMs,
-            },
-          };
-        } catch { /* A failed receipt read grants no additional join time. */ }
-      })();
-    };
+    const read = () => { void readClickCheckpoint(action, deadlineAtMs, deadlineAtMs); };
     // A click can complete after the first read while its observation is still
     // running. Allow one final read inside the existing coordinator deadline.
     const remaining = deadlineAtMs - Date.now();

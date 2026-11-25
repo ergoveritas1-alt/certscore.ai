@@ -65,6 +65,7 @@ export function verifyConsentClickCheckpoint(input: {
   coordinatorDispatchAtMs: number;
   verifiedAtMs: number;
   deadlineAtMs: number;
+  completedBeforeMs?: number;
 }): VerifiedConsentClickCheckpoint | undefined {
   const { body, metadataSha256, binding, coordinatorDispatchAtMs, verifiedAtMs, deadlineAtMs } = input;
   const { action, proof } = binding;
@@ -77,7 +78,8 @@ export function verifyConsentClickCheckpoint(input: {
   catch { return; }
   if (!row || Object.keys(row).length !== 6 || row.version !== checkpointVersion(action) || row.scanId !== proof.scanId ||
       row.gateProofSha256 !== canonicalSha256(proof) || !validTimes(row, proof) ||
-      row.recheckedAtMs < coordinatorDispatchAtMs || row.completedAtMs > verifiedAtMs) return;
+      row.recheckedAtMs < coordinatorDispatchAtMs || row.completedAtMs > verifiedAtMs ||
+      row.completedAtMs >= (input.completedBeforeMs ?? deadlineAtMs)) return;
   return { ...row, receiptSha256, verifiedAtMs };
 }
 

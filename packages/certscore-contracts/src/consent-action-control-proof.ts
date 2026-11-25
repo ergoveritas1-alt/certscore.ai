@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SUPPORTED_PRIVACY_EVIDENCE_LOCALES } from "./supported-languages";
-import { classifyConsentControlLabel, normalizeConsentControlText, ONETRUST_ITALIAN_ACCEPT_LABEL } from "./consent-control-label-classifier";
+import { classifyConsentControlLabel, hasConsentControlSemanticVeto, normalizeConsentControlText, ONETRUST_ITALIAN_ACCEPT_LABEL } from "./consent-control-label-classifier";
 
 const consentActionControlLocaleSchema = z.enum(SUPPORTED_PRIVACY_EVIDENCE_LOCALES);
 const consentActionControlMatchStrengthSchema = z.enum([
@@ -24,6 +24,33 @@ export const ONETRUST_ITALIAN_ACCEPT_CONTROL = {
   recipeId: "canonical-cmp:OneTrust:accept:v1",
   proofReason: "registered_onetrust_italian_accept.v1",
 } as const;
+
+export const CAIA_ACCEPT_CONTROL = {
+  targetUrl: "https://caiacosmetics.se/",
+  label: "JAG GODKÄNNER",
+  controlSelector: "#cookie_consent_manage_rec",
+  bannerSelector: "#cookie_consent_manager_wrapper > #cookie_consent",
+  recipeId: "canonical-control:caia:accept:v1",
+  proofReason: "registered_caia_accept_listener.v1",
+  cookieName: "air_cookie_consent",
+  grantedValue: '{"1":true,"2":true,"3":true,"4":true}',
+} as const;
+
+export const DAFITI_ADOPT_ACCEPT_CONTROL = {
+  targetUrl: "https://www.dafiti.com.br/",
+  label: "Aceitar",
+  bannerSelector: "#cookie-banner",
+  controlSelector: "#adopt-accept-all-button",
+  recipeId: "canonical-control:adopt:dafiti:accept:v1",
+  proofReason: "registered_dafiti_adopt_accept.v1",
+} as const;
+
+export function classifyDafitiAdoptAcceptLabel(label: string | undefined) {
+  if (label !== DAFITI_ADOPT_ACCEPT_CONTROL.label) return;
+  const result = classifyConsentControlLabel({label, usage: "action", classifierProfile: "multilingual_v1", hasConsentContext: true});
+  if (result.intent === "accept" && result.matchedLocale === "pt" &&
+      result.matchStrength === "contextual" && result.contextSatisfied && !hasConsentControlSemanticVeto(result)) return result;
+}
 
 export const DRUPAL_NO_THANKS_REJECT_CONTROL = {
   label: "No, thanks",
@@ -128,6 +155,32 @@ export const consentActionControlProofSchema = z.object({
         message: "The registered Italian Accept label requires exact OneTrust control and document proof."});
     }
   }
+  const caia = CAIA_ACCEPT_CONTROL;
+  if (proof.recipeId === caia.recipeId || proof.classifierReasonCodes.includes(caia.proofReason)) {
+    if (proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION ||
+      proof.action !== "accept" || proof.actionSemantics !== "direct_label" || proof.labelSource !== "visible_text" ||
+      proof.accessibleLabel !== caia.label || proof.recipeId !== caia.recipeId ||
+      !proof.classifierReasonCodes.includes(caia.proofReason) || proof.selectorHint !== caia.controlSelector ||
+      proof.matchedLocale !== "sv" || proof.matchStrength !== "direct" || !proof.authorizedTargetSha256 ||
+      proof.frameIdentitySha256 !== proof.authorizedTargetSha256) {
+      context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
+        message: "CAIA Accept requires the reviewed listener and exact first-layer document proof."});
+    }
+  }
+  const adopt = DAFITI_ADOPT_ACCEPT_CONTROL;
+  const adoptScope = proof.classifierReasonCodes.includes(adopt.proofReason);
+  if (proof.recipeId === adopt.recipeId || adoptScope) {
+    const classification = classifyDafitiAdoptAcceptLabel(proof.accessibleLabel);
+    if (proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION || !classification ||
+      proof.action !== "accept" || proof.actionSemantics !== "direct_label" || proof.labelSource !== "visible_text" ||
+      proof.recipeId !== adopt.recipeId || !adoptScope ||
+      proof.selectorHint !== adopt.controlSelector || proof.matchedLocale !== "pt" || proof.matchStrength !== "contextual" ||
+      proof.classifierConfidence !== classification.confidence || !proof.authorizedTargetSha256 ||
+      proof.frameIdentitySha256 !== proof.authorizedTargetSha256) {
+      context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
+        message: "The registered Dafiti Accept label requires exact button and document proof."});
+    }
+  }
   if (!proof.labelBoundNecessaryOnly && proof.classifierReasonCodes.some(code => Object.hasOwn(NAMED_NECESSARY_ONLY_REJECT_LABELS, code))) {
     context.addIssue({code: z.ZodIssueCode.custom, path: ["labelBoundNecessaryOnly"],
       message: "Reviewed necessary-only labels must retain their scoped instruction proof."});
@@ -173,7 +226,7 @@ export const consentActionControlProofSchema = z.object({
   }
   if (
     proof.actionSemantics === "direct_label" &&
-    (proof.classifierIntent !== proof.action || (!drupalScope && proof.classifierConfidence < 0.8))
+    (proof.classifierIntent !== proof.action || (!drupalScope && !adoptScope && proof.classifierConfidence < 0.8))
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

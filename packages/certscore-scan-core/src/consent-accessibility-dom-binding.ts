@@ -1,7 +1,7 @@
 import { exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled } from "./exact-native-consent-button-selector.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import type { CDPSession } from "playwright";
-import { consentAccessibilityDomBindingSchema, boundOptOutControlFromAttributes, type BrowserDocumentIdentity, type ConsentAccessibilityDomBinding } from "@certscore/contracts";
+import { consentAccessibilityDomBindingSchema, boundOptOutControlFromAttributes, classifyConsentControlLabel, type BrowserDocumentIdentity, type ConsentAccessibilityDomBinding } from "@certscore/contracts";
 import type { ConsentAccessibilityTreeNode } from "./scanners/pre-consent-runtime-scanner.js";
 import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 
@@ -18,23 +18,32 @@ export async function bindAccessibilityNodesToDom(client: CDPSession, nodes: Con
   const identity = {source: "cdp_loader_id" as const, token: document.identity.token};
   const counts = new Map<number, number>();
   for (const node of nodes) if (node.backendDOMNodeId) counts.set(node.backendDOMNodeId, (counts.get(node.backendDOMNodeId) ?? 0) + 1);
+  const exactNativeCapture = exactAcceptSelectorCaptureEnabled() || exactRejectSelectorCaptureEnabled();
   const candidates = nodes.filter(node => node.visibilityEvidence === "box_model_verified" &&
     node.backendDOMNodeId && counts.get(node.backendDOMNodeId) === 1 &&
-    ["button", "link"].includes(String(node.role?.value).toLowerCase())).slice(0, AX_DOM_BINDING_MAX_NODES);
+    ["button", "link"].includes(String(node.role?.value).toLowerCase()));
+  const decisionIntents = new Map(candidates.flatMap(node => {
+    if (!exactNativeCapture || String(node.role?.value).toLowerCase() !== "button") return [];
+    const result = classifyConsentControlLabel({label: String(node.name?.value ?? ""), hasConsentContext: true});
+    return result.intent === "accept" || result.intent === "reject" ? [[node.nodeId, result.intent] as const] : [];
+  }));
+  // Keep the two native queries for decision controls. Otherwise a visible
+  // settings/close button can use a slot before the actual Accept or Reject.
+  candidates.sort((left, right) => Number(decisionIntents.has(right.nodeId)) - Number(decisionIntents.has(left.nodeId)));
   const deadline = Date.now() + AX_DOM_BINDING_BUDGET_MS;
   const bindings = new Map<string, ConsentAccessibilityDomBinding>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let rootRead: Promise<number> | undefined;
-  let nativeLookups = 0;
-  const exactNativeCapture = exactAcceptSelectorCaptureEnabled() || exactRejectSelectorCaptureEnabled();
-  async function verifiedButton(node: {localName: string; attributes?: string[]; backendNodeId: number}) {
+  const nativeLookups = new Set<"accept" | "reject">();
+  async function verifiedButton(node: {localName: string; attributes?: string[]; backendNodeId: number},
+    intent?: "accept" | "reject") {
     if (!node.attributes) return;
     const index = node.attributes.findIndex((name, i) => i % 2 === 0 && name === "id");
     const id = index >= 0 ? node.attributes[index + 1] : undefined;
     const cookieScript = node.localName === "div" && (id === "cookiescript_accept" || id === "cookiescript_reject");
-    const native = exactNativeCapture && node.localName === "button" && typeof id === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(id);
-    if (!cookieScript && (!native || nativeLookups >= 2)) return;
-    if (native) nativeLookups++;
+    const native = intent && node.localName === "button" && typeof id === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(id);
+    if (!cookieScript && (!native || nativeLookups.has(intent))) return;
+    if (native) nativeLookups.add(intent);
     const selector = cookieScript
       ? id === "cookiescript_accept" ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : COOKIE_SCRIPT_REJECT_ROLE_SELECTOR
       : `#${id}`;
@@ -55,7 +64,7 @@ export async function bindAccessibilityNodesToDom(client: CDPSession, nodes: Con
   }
   try {
     await Promise.race([
-      Promise.all(candidates.map(async node => {
+      Promise.all(candidates.slice(0, AX_DOM_BINDING_MAX_NODES).map(async node => {
         try {
           const result = await client.send("DOM.describeNode", {backendNodeId: node.backendDOMNodeId!, depth: 0, pierce: false});
           if (Date.now() > deadline || result.node.backendNodeId !== node.backendDOMNodeId || result.node.nodeType !== 1) return undefined;
@@ -67,7 +76,7 @@ export async function bindAccessibilityNodesToDom(client: CDPSession, nodes: Con
           if (!parsed.success) return;
           bindings.set(node.nodeId, parsed.data);
           if (optOutControl) return;
-          const verified = await verifiedButton(result.node);
+          const verified = await verifiedButton(result.node, decisionIntents.get(node.nodeId));
           if (verified) bindings.set(node.nodeId, {...parsed.data, ...verified});
         } catch { return undefined; }
       })),

@@ -1632,7 +1632,19 @@ export async function preConsentRuntimeScanner(
                     observation.documentUrl===page.url() && observation.documentIdentity?.token===currentBrowserDocumentIdentity(page)?.token && !effectiveSignal?.aborted) {
                   // Start the existing single basic read from the first positive
                   // typed result, while parser and screenshot work continue.
-                  retainedConsentUiObservation=observation;startCmpBasicCapture();
+                  retainedConsentUiObservation = observation;
+                  const identity = currentBrowserDocumentIdentity(page);
+                  if (response?.ok() && identity?.source === "cdp_loader_id" &&
+                      observation.documentIdentity?.source === "cdp_loader_id" && identity.token &&
+                      observation.captureStatus === "observed" && observation.inventoryOutcome === "complete_with_controls" &&
+                      observation.layerInspected === "first_layer" &&
+                      observation.captureDiagnostics?.completedChannels.includes("dom_inventory") &&
+                      !observation.captureDiagnostics.failedChannels.length && !observation.captureDiagnostics.timedOutChannels.length) {
+                    // This only warms blank workers. The full retained inventory and
+                    // geometry must still authorize each lane after this positive hint.
+                    input.onFirstLayerObservation?.(observation);
+                  }
+                  startCmpBasicCapture();
                 }
                 return observation;
               });
@@ -8891,8 +8903,8 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   // One self-contained browser call avoids installation/probe round trips and stale page globals.
   const inventorySource = String.raw`(input) => {
     const __name = (fn) => fn;
-    const exactNativeButtonSelector = ${exactAcceptSelectorCaptureEnabled() || exactRejectSelectorCaptureEnabled()
-      ? exactNativeConsentButtonSelector.toString() : "undefined"};
+    const exactNativeButtonSelector = ${exactAcceptSelectorCaptureEnabled() || exactRejectSelectorCaptureEnabled() ||
+      page.url() === "https://caiacosmetics.se/" ? exactNativeConsentButtonSelector.toString() : "undefined"};
     const isNonVisitorSurface = ${isNonVisitorConsentSurface.toString()};
     const nonVisitorSurfaces = ${JSON.stringify(CONSENT_NON_VISITOR_SURFACES)};
     const normalize = (value) => (value ?? "").replace(/\s+/g, " ").trim();
@@ -8976,7 +8988,10 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     const contexts = [];
     const rejectedNoContextLabels = [];
     const seen = new Set();
-    const semanticControlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
+    const caiaControlSelectors = location.href === "https://caiacosmetics.se/"
+      ? ", #cookie_consent_manager_wrapper > #cookie_consent span#cookie_consent_manage_rec, #cookie_consent_manager_wrapper > #cookie_consent span#cookie_consent_manage"
+      : "";
+    const semanticControlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']" + caiaControlSelectors;
     const probeStartedAt = performance.now();
     const probeBudgetExpired = () => performance.now() - probeStartedAt >= 180;
     const scopedCandidates = [];
@@ -9066,6 +9081,8 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       if (probeBudgetExpired()) break;
       visitedCandidates += 1;
       if (visitedCandidates > 5_000) break;
+      if (element.localName === "span" && (element.id === "cookie_consent_manage_rec" ||
+          element.id === "cookie_consent_manage") && !exactNativeButtonSelector?.(element)) continue;
       const label = labelFor(element).slice(0, 120);
       const normalizedLabel = label.toLowerCase().replace(/\u0307/g, "");
       if (!hasCanonicalControlLabel(element, label)) continue;
@@ -10482,7 +10499,7 @@ export async function filterAccessibilityTreeToFirstLayer(
   }));
 }
 
-function consentUiObservationFromAccessibilityInventory(
+export function consentUiObservationFromAccessibilityInventory(
   inventory: AccessibilityConsentInventory,
   scanStartedAtMs: number,
   documentUrl: string,

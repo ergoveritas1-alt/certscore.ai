@@ -43,8 +43,21 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
     element.closest("#hs-eu-cookie-confirmation") !== null;
   const buttonLink = hubSpotAnchor || anchor && element.getAttribute("href") === "#" &&
     !root.querySelector("base[href], base[target]");
-  if (!view || view !== view.top || (element.localName !== "button" && !buttonLink) ||
-      element.getRootNode() !== root) return undefined;
+  if (!view || view !== view.top || element.getRootNode() !== root) return undefined;
+  // This function is serialized into the page. These two original CAIA
+  // controls are spans with directly attached listeners, not native buttons.
+  if (view.location.href === "https://caiacosmetics.se/" && element.localName === "span" &&
+      (element.id === "cookie_consent_manage_rec" || element.id === "cookie_consent_manage")) {
+    const selector = "#" + element.id;
+    const banner = "#cookie_consent_manager_wrapper > #cookie_consent";
+    const scope = root.querySelectorAll(banner);
+    const matches = root.querySelectorAll(selector);
+    return scope.length === 1 && scope[0]?.contains(element) &&
+      matches.length === 1 && matches[0] === element &&
+      !element.closest("form,a,button,label,[contenteditable]") && !element.childElementCount
+      ? selector : undefined;
+  }
+  if (element.localName !== "button" && !buttonLink) return undefined;
 
   const resolvesOnly = (selector: string, expected: Element) => {
     if (selector.length > 160) return false;

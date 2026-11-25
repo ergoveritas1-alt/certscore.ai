@@ -4,7 +4,7 @@ import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./
 import { observeCookieScriptReload } from "./cookiescript-reload-persistence.js";
 import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
 import {armOsanoNavigationAccept} from "./osano-navigation-accept.js";
-import { choiceRequestRole } from "@certscore/contracts";
+import { choiceRequestRole, DAFITI_ADOPT_ACCEPT_CONTROL, CAIA_ACCEPT_CONTROL } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
 import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
 import {readWithinActionBoundary as readWithinAcceptDeadline} from "./action-operation-boundary.js";
@@ -184,6 +184,7 @@ export interface PostAcceptActionRecipe {
           expectedValue: string;
           name: string;
           path: string;
+          domain?: string;
         }>;
       }
     | {
@@ -928,7 +929,35 @@ export async function runPostAcceptObserver(
       firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
       acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
       ? recipes.find(recipe => recipe.recipeId === DRUPAL_ACCEPT_RECIPE) : undefined;
-    const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe ?? exactDrupalRecipe;
+    const adopt = DAFITI_ADOPT_ACCEPT_CONTROL;
+    const exactAdoptRecipe: PostAcceptActionRecipe | undefined = firstLayerProof?.exactSelector === adopt.controlSelector &&
+      firstLayerProof.geometrySha256 && firstLayerProof.labelSha256 === hashValue(adopt.label) &&
+      authorizedExactTargetUrl === adopt.targetUrl && firstLayerProof.documentSha256 === hashValue(adopt.targetUrl) &&
+      acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
+      ? {
+        artifactVersion: "certscore.post_accept_action_recipe.v1",
+        recipeId: adopt.recipeId, resolverMethod: "canonical_consent_control_registry_recipe",
+        controlSelector: adopt.controlSelector, controlExpectedNormalizedLabel: adopt.label.toLowerCase(),
+        bannerSelector: adopt.bannerSelector,
+        confirmation: {kind: "canonical_accept_transition", controlSelector: adopt.controlSelector, bannerSelector: adopt.bannerSelector},
+      }
+      : undefined;
+    const caia = CAIA_ACCEPT_CONTROL;
+    const exactCaiaRecipe: PostAcceptActionRecipe | undefined = firstLayerProof?.exactSelector === caia.controlSelector &&
+      firstLayerProof.geometrySha256 && firstLayerProof.labelSha256 === hashValue(caia.label) &&
+      authorizedExactTargetUrl === caia.targetUrl && firstLayerProof.documentSha256 === hashValue(caia.targetUrl) &&
+      acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
+      ? {
+        artifactVersion: "certscore.post_accept_action_recipe.v1",
+        recipeId: caia.recipeId, resolverMethod: "canonical_consent_control_registry_recipe",
+        controlSelector: caia.controlSelector, controlExpectedNormalizedLabel: caia.label.toLowerCase(),
+        bannerSelector: caia.bannerSelector,
+        confirmation: {kind:"cmp_cookie_values_equal", cookies:[{
+          name:caia.cookieName, expectedValue:caia.grantedValue, path:"/", domain:new URL(caia.targetUrl).hostname,
+        }]},
+      }
+      : undefined;
+    const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe ?? exactDrupalRecipe ?? exactAdoptRecipe ?? exactCaiaRecipe;
     const exactActionDeadline = exactNativeRecipe || exactCookieInformation ? firstLayerProof!.expiresAtMs : Infinity;
     const searchDeadline = Math.min(resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs), exactActionDeadline);
     let readyCookieInformationControl: Locator | undefined;
@@ -981,7 +1010,7 @@ export async function runPostAcceptObserver(
         // document, before a full-document geometry or registry sweep.
         const resolution = await waitForDeterministicRecipe(page!, [exactNativeRecipe],
           actionSearchTimeoutMs === 0 ? 0 : Math.max(1, searchDeadline - Date.now()),
-          effectiveSignal, actionDiscovery, recordResolverSnapshot, undefined, true);
+          effectiveSignal, actionDiscovery, recordResolverSnapshot, undefined, true, true);
         return {documentReady:false, resolution};
       }
       return actionSearchTimeoutMs === 0 ? {documentReady:true,resolution:undefined} :
@@ -2189,7 +2218,8 @@ async function waitForDeterministicRecipe(
       : undefined;
     if (Date.now() >= deadlineAtMs) break;
     const remainingMs = Math.max(0, deadlineAtMs - Date.now());
-    const wakeAfterMs = Math.min(prioritizedRecipeId ? 25 : 150, remainingMs);
+    const wakeAfterMs = Math.min(prioritizedRecipeId || (mainFrameOnly && checkExpectedLabelFirst && selectorMatchCount === 1 && remainingMs <= 500)
+      ? 25 : 150, remainingMs);
     if (discovery) {
       await discovery.waitForSignal(attemptRevision, wakeAfterMs, signal);
     } else {
@@ -3608,12 +3638,13 @@ function tcfFingerprint(snapshot: TcfDataSnapshot) {
 
 async function exactCookieStates(
   context: BrowserContext,
-  expectations: Array<{ expectedValue: string; name: string; path: string }>,
+  expectations: Array<{ expectedValue: string; name: string; path: string; domain?: string }>,
 ) {
   const cookies = await context.cookies();
   return Object.fromEntries(expectations.map((expectation) => {
     const matches = cookies.filter((cookie) =>
-      cookie.name === expectation.name && cookie.path === expectation.path
+      cookie.name === expectation.name && cookie.path === expectation.path &&
+      (!expectation.domain || cookie.domain === expectation.domain && cookie.secure)
     ).sort((left, right) => left.domain.localeCompare(right.domain));
     const value = matches.length === 1 ? matches[0]!.value : undefined;
     return [cookieKey(expectation), value === undefined ? undefined : {

@@ -1,4 +1,5 @@
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
+import { CAIA_ACCEPT_CONTROL } from "@certscore/contracts";
 import { exactNativeConsentButtonSelector, exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled } from "./exact-native-consent-button-selector.js";
 import type { Frame, Page } from "playwright";
 import { AEM_LEGAL_FOOTER_LINK_SELECTOR } from "./consent-footer-opt-out.js";
@@ -162,6 +163,7 @@ export interface ConsentControlCandidateEvidence {
   initialOptOutSwitch?: InitialOptOutSwitch;
   selectorHint: string;
   exactNativeAcceptSelectorVerified?: true;
+  exactCaiaAcceptSelectorVerified?: true;
   exactNativeRejectSelectorVerified?: true;
   exactCookieScriptAcceptVerified?: true;
   exactCookieScriptRejectVerified?: true;
@@ -440,7 +442,8 @@ export async function captureConsentControlGeometry(
     drupalAcceptBannerSelector: options.verifyDrupalOverflow ? DRUPAL_ACCEPT_BANNER_SELECTOR : undefined,
     drupalRejectScope: options.verifyDrupalOverflow ? DRUPAL_NO_THANKS_REJECT_CONTROL : undefined,
   };
-  const exactSelectorCapture = exactAcceptSelectorCapture || exactRejectSelectorCapture;
+  const exactSelectorCapture = exactAcceptSelectorCapture || exactRejectSelectorCapture ||
+    page.url() === CAIA_ACCEPT_CONTROL.targetUrl;
   const geometrySource = exactSelectorCapture
     ? `(input) => { const __name = (fn) => fn; return (${collectConsentGeometryInPage.toString()})(input, (${exactNativeConsentButtonSelector.toString()})); }`
     : undefined;
@@ -1151,7 +1154,11 @@ function buildCandidateEvidence(
     selectorHint: (retainExactSelector || borlabsExplanatoryClose) && candidate.exactNativeButtonSelector
       ? candidate.exactNativeButtonSelector : candidate.selectorHint,
     ...(actionType === "accept_all" && retainExactSelector && candidate.exactNativeButtonSelector
-      ? { exactNativeAcceptSelectorVerified: true as const } : {}),
+      ? candidate.tagName === "span" && candidate.frameUrl === CAIA_ACCEPT_CONTROL.targetUrl &&
+          candidate.exactNativeButtonSelector === CAIA_ACCEPT_CONTROL.controlSelector
+        ? {exactCaiaAcceptSelectorVerified: true as const}
+        : {exactNativeAcceptSelectorVerified: true as const}
+      : {}),
     ...(actionType === "reject_all" && retainExactSelector && candidate.exactNativeButtonSelector
       ? { exactNativeRejectSelectorVerified: true as const } : {}),
     ...(actionType === "accept_all" && retainExactSelector && candidate.exactCookieScriptAcceptVerified &&
@@ -1635,6 +1642,8 @@ function collectConsentGeometryInPage(input: {
     "[class*='privacy' i]",
     ...input.registrySelectors,
   ].join(",");
+  const caiaControlSelector = window.location.href === "https://caiacosmetics.se/"
+    ? ["span#cookie_consent_manage_rec", "span#cookie_consent_manage"] : [];
   const controlSelector = [
     "button",
     "[role='button']",
@@ -1656,6 +1665,7 @@ function collectConsentGeometryInPage(input: {
     "input[type='submit']",
     "input[type='checkbox']",
     "input[type='radio']",
+    ...caiaControlSelector,
   ].join(",");
 
   const namedConsentRegions = deepQuerySelectorAll("section[aria-label], [role='region'][aria-label], [role='group'][aria-label]")
@@ -1878,7 +1888,7 @@ function collectConsentGeometryInPage(input: {
     viewportValue: { width: number; height: number },
     contextPattern: RegExp,
   ): RawGeometryCandidate | null {
-    if (isStaticTextOnlyControlCandidate(element)) {
+    if (!isCaiaFirstLayerControl(element) && isStaticTextOnlyControlCandidate(element)) {
       return null;
     }
     // Some CMPs add a class such as `button-row` to a wrapper that contains
@@ -1931,6 +1941,7 @@ function collectConsentGeometryInPage(input: {
     const scrollableAncestorBox = scrollableAncestor ? rectFor(scrollableAncestor) : undefined;
     const clippedByScrollableAncestor = Boolean(scrollableAncestorBox && !containsRect(scrollableAncestorBox, box));
     const container = typeof containerIndex === "number" ? containerItems[containerIndex] : undefined;
+    const caiaFirstLayer = isCaiaFirstLayerControl(element);
     return {
       frameUrl: window.location.href,
       localeHint: document.documentElement.lang || undefined,
@@ -2007,7 +2018,7 @@ function collectConsentGeometryInPage(input: {
                 ? compactText(element.textContent ?? "") : undefined} : {}),
       containerSelectorHint: container?.evidence.selectorHint,
       containerIndex,
-      layer: standalone ? "first_layer" : aemFooterLink ? "footer" : container?.evidence.layer ?? layerFor(element, box),
+      layer: standalone || caiaFirstLayer ? "first_layer" : aemFooterLink ? "footer" : container?.evidence.layer ?? layerFor(element, box),
       enabled: !(element instanceof HTMLButtonElement || element instanceof HTMLInputElement) || !element.disabled,
       semanticallyInteractive: isSemanticallyInteractive(element),
       computedStyle: {
@@ -2112,7 +2123,13 @@ function collectConsentGeometryInPage(input: {
     );
   }
 
+  function isCaiaFirstLayerControl(element: Element): boolean {
+    return element.localName === "span" && caiaControlSelector.some(selector => element.matches(selector)) &&
+      Boolean(selectExactButton?.(element));
+  }
+
   function hasExplicitActionSemantics(element: Element): boolean {
+    if (isCaiaFirstLayerControl(element)) return true;
     const tagName = element.tagName.toLowerCase();
     if (/^(?:a|button|input|select|textarea|summary)$/.test(tagName)) {
       return true;
@@ -2137,7 +2154,8 @@ function collectConsentGeometryInPage(input: {
 
   function hasInteractiveDescendant(element: Element): boolean {
     return deepQuerySelectorAll(
-      "button,a,input,select,textarea,summary,[role='button'],[role='link'],[role='checkbox'],[role='radio'],[role='switch'],[role='tab'],[role='menuitem'],[role='option'],[onclick],[tabindex]",
+      ["button,a,input,select,textarea,summary,[role='button'],[role='link'],[role='checkbox'],[role='radio'],[role='switch'],[role='tab'],[role='menuitem'],[role='option'],[onclick],[tabindex]",
+        ...caiaControlSelector].join(","),
       element,
     ).some((descendant) => descendant !== element && isSemanticallyInteractive(descendant));
   }

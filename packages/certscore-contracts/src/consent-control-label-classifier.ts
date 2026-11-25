@@ -6,7 +6,7 @@ import {
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
 const CUSTOMIZE_OR_DENY_ALL = "customize or deny all";
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v35";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v36";
 export const ONETRUST_ITALIAN_ACCEPT_LABEL = "Accetto i cookie";
 
 /** OneTrust's banner wrapper can repeat the labels of descendant controls. */
@@ -218,6 +218,11 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     exactLabelOnly: true, requiresConsentContext: true,
     ...(phrase === "reject non-functional cookies" ? { variant: "non_functional_only" } : {}),
   })),
+  // Visible labels from the CAIA cookie banner require local cookie context.
+  { locale: "sv", phrase: "jag godkänner", intent: "accept", strength: "direct",
+    exactLabelOnly: true, requiresConsentContext: true, observationOnly: true },
+  { locale: "sv", phrase: "inställningar", intent: "options", strength: "direct",
+    exactLabelOnly: true, requiresConsentContext: true, observationOnly: true },
   { locale: "en", phrase: "limit cookies", intent: "reject", strength: "equivalent",
     variant: "necessary_only", observationOnly: true, exactLabelOnly: true,
     requiresConsentContext: true, requiresLabelBoundNecessaryOnlyContext: true },
@@ -1083,6 +1088,8 @@ const CONTEXTUAL_EXACT_LABEL_ONLY_PHRASES = new Set([
   "decline",
   "details",
   "learn more",
+  "inställningar",
+  "jag godkänner",
   "manage",
   "object",
   "settings",
