@@ -34,7 +34,7 @@ import {
   type ScanNoGoResult
 } from "@certscore/api-contracts";
 import type { PulseResponse } from "@certscore/api-contracts";
-import { deriveChoicePathEvidenceDisposition } from "@certscore/contracts";
+import { CLICK_RECEIPT_OBSERVATION_UNAVAILABLE, deriveChoicePathEvidenceDisposition } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { hasTerminalReportPublicationFailure, reportPublicationResultState, terminalReportPublicationError } from "../../server/scans/report-publication-read-state";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
@@ -528,6 +528,29 @@ export function projectedFindingsFromPulse(pulse: PulseResponse): PulseFindingLi
   return [...byId.values()];
 }
 
+function projectReceiptOnlyObservation(
+  projection: Record<string, unknown> | undefined | null,
+  execution: ReturnType<typeof readChoicePathExecution>,
+  label: "Accept" | "Reject",
+) {
+  if (!projection?.verifiedClickReceipt || !execution?.clickCompleted || execution.observationCompleted) return null;
+  const interpretation = `The ${label} click completed. Post-click activity was not assessed.`;
+  return {
+    status: "unconfirmed" as const,
+    execution,
+    observationCount: 0,
+    productionProjectable: false,
+    evidenceDisposition: "indeterminate" as const,
+    indeterminateReason: CLICK_RECEIPT_OBSERVATION_UNAVAILABLE,
+    interpretation,
+    observationStrategy: "not_applicable" as const,
+    termination: { kind: "unavailable" as const, intentional: false, trigger: "unavailable" as const },
+    completedAt: dateStringOrNull(projection.completedAt),
+    coverageLimitations: [interpretation],
+    limitations: [interpretation],
+  };
+}
+
 export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
   const supportedStatuses = new Set([
     "confirmed_observation",
@@ -556,6 +579,10 @@ export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse
   const afterAction = deriveAfterActionSummary(projection, "reject");
   const confirmation = deriveChoiceConfirmationSummary(projection, "reject");
   const execution = readChoicePathExecution(projection, "reject");
+  const receiptOnly = projectReceiptOnlyObservation(projection, execution, "Reject");
+  if (receiptOnly) return {
+    ...receiptOnly, refusalExercised: false, verdict: "no_confirmed_post_refusal_verdict" as const,
+  };
   const status = stringOrNull(projection?.status);
   if (!status || !supportedStatuses.has(status)) {
     const coverage = plainRecord(
@@ -735,6 +762,10 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
   const afterAction = deriveAfterActionSummary(projection, "accept");
   const confirmation = deriveChoiceConfirmationSummary(projection, "accept");
   const execution = readChoicePathExecution(projection, "accept");
+  const receiptOnly = projectReceiptOnlyObservation(projection, execution, "Accept");
+  if (receiptOnly) return {
+    ...receiptOnly, acceptanceExercised: false, verdict: "no_confirmed_post_accept_verdict" as const,
+  };
   const status = stringOrNull(projection?.status);
   const limitationCode = stringOrNull(coverage?.limitationCode);
   const projectionIndeterminateReason = stringOrNull(projection?.indeterminateReason);

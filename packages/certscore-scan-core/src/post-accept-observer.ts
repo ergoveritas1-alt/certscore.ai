@@ -997,7 +997,7 @@ export async function runPostAcceptObserver(
     }, {documentReady:false, resolution:undefined as AcceptRecipeResolution | undefined}, resolverReadDeadline, effectiveSignal);
     const documentReady=readiness.documentReady;
     const searchEnded=effectiveSignal?.aborted || (actionSearchTimeoutMs>0 && Date.now()>=searchDeadline);
-    if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot({ source: "named_recipe", state: documentReady ? "binding_budget_exhausted" : "document_loading",
+    if ((!documentReady || searchEnded) && !readiness.resolution) recordResolverSnapshot({ source: "named_recipe", state: documentReady || exactNativeRecipe ? "binding_budget_exhausted" : "document_loading",
       selectorMatchCount: 0, visibleCount: 0, enabledCount: 0, labelMatchCount: 0, actionableCount: 0, cmpIds: [], controlLabels: [] });
     const searchRemaining = () => actionSearchTimeoutMs === 0 ? 0 : Math.max(1, searchDeadline - Date.now());
     const exactResolution = !readiness.resolution && documentReady && !searchEnded && actionSearchTimeoutMs > 0
@@ -1083,10 +1083,25 @@ export async function runPostAcceptObserver(
     let control = resolution.control;
     let confirmationScope = resolution.scope;
     if (boundControlDispatch) sourceFrameBinding.bind(page, confirmationScope);
+    // The registered exact OneTrust baseline reads document state. Start it
+    // beside the independent pre-click storage read, and retain it only if
+    // readiness keeps the same control and source frame.
+    const resolvedControl = control;
+    const resolvedExactOneTrust = selectedRecipe === exactOneTrustRecipe && confirmationScope === page &&
+      isRegisteredLoadingConsentRecipe(selectedRecipe, "accept");
+    const exactOneTrustBaseline = resolvedExactOneTrust
+      ? readWithinAcceptDeadline(
+          () => readCaptureConfirmationBaseline(context!, page!, page!, selectedRecipe!.confirmation,
+            resolvedControl, confirmationDiagnostic.reason),
+          undefined, exactActionDeadline, effectiveSignal,
+        ).catch(() => undefined)
+      : undefined;
     stage("storage_baseline");
     const preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined,
       (d) => { storageCollectionDiagnostics.preAction = d; },
-      exactCookieScriptRecipe ? {deadlineAtMs:Math.min(resultBudgetDeadlineAtMs ?? Infinity, exactActionDeadline),signal:effectiveSignal} : undefined);
+      exactCookieScriptRecipe || exactOneTrustBaseline
+        ? {deadlineAtMs:Math.min(resultBudgetDeadlineAtMs ?? Infinity, exactActionDeadline),signal:effectiveSignal}
+        : undefined);
     const preActionCapturedAtMs = elapsed(parentScanStartedAtMs);
     if (cancellation()) {
       return await finalize({
@@ -1110,7 +1125,11 @@ export async function runPostAcceptObserver(
       signal: effectiveSignal, scope: confirmationScope,
     });
     try {
-      if (!exactCookieScriptRecipe && control !== readyCookieInformationControl) await trialAcceptControl(page, control, selectedRecipe);
+      // This exact OneTrust resolver already checked live actionability.
+      // The final bound-handle proof and ordinary Playwright click recheck it.
+      if (!exactCookieScriptRecipe && !resolvedExactOneTrust && control !== readyCookieInformationControl) {
+        await trialAcceptControl(page, control, selectedRecipe);
+      }
     } catch (error) {
       actionabilityError = error;
     }
@@ -1221,9 +1240,12 @@ export async function runPostAcceptObserver(
 
     stage("confirmation_baseline");
     const baseline = () => captureConfirmationBaseline(context!, page!, confirmationScope, selectedRecipe!.confirmation, control, confirmationDiagnostic.reason);
-    let confirmationBaseline = exactCookieScriptRecipe
-      ? await readWithinAcceptDeadline(baseline, undefined, exactActionDeadline, effectiveSignal)
-      : await baseline();
+    let confirmationBaseline = exactOneTrustBaseline && control === resolvedControl &&
+        confirmationScope === page && selectedRecipe === exactOneTrustRecipe
+      ? await exactOneTrustBaseline
+      : exactCookieScriptRecipe || exactOneTrustRecipe
+        ? await readWithinAcceptDeadline(baseline, undefined, exactActionDeadline, effectiveSignal)
+        : await baseline();
     if (!confirmationBaseline) {
       const reason = effectiveSignal.aborted ? "abort_requested_before_action" : "accept_first_layer_proof_expired_before_dispatch";
       return await finalize({resolverFound:true,resolverReason:reason,
@@ -1428,12 +1450,12 @@ export async function runPostAcceptObserver(
         const initial = actionControlProof;
         const proofDeadline = Math.min(resultBudgetDeadlineAtMs ?? Infinity, firstLayerProof.expiresAtMs);
         const recheckStartedAt = Date.now();
-        const deadline = Math.min(proofDeadline, recheckStartedAt + 250);
-        // Chromium can deliver input near the end of an actionability retry.
-        // Leave room for its acknowledgement before recording the exact-click receipt.
+        const standardDeadline = Math.min(proofDeadline, recheckStartedAt + 250);
+        // A live exact-element read can use the same time already reserved for
+        // the click, including its existing absolute and finalization limits.
         const availableClickDeadline = Math.min(proofDeadline, recheckStartedAt + ACCEPT_EXACT_CLICK_WINDOW_MS,
           (resultBudgetDeadlineAtMs ?? Infinity) - observationWindowMs - ACCEPT_RESULT_FINALIZATION_RESERVE_MS);
-        const clickDeadline = firstLayerProof.exactSelector ? Math.max(deadline, availableClickDeadline) : deadline;
+        const deadline = firstLayerProof.exactSelector ? Math.max(standardDeadline, availableClickDeadline) : standardDeadline;
         notifyBeforeDispatch();
         await dispatchWithAcceptFirstLayerProof({
           proof: firstLayerProof,
@@ -1463,7 +1485,7 @@ export async function runPostAcceptObserver(
           },
           clickExact: () => {
             assertDispatch(deadline);
-            const timeout = clickDeadline - Date.now();
+            const timeout = deadline - Date.now();
             if (timeout <= 0) throw new Error("accept_first_layer_proof_expired");
             commit();
             return element.click({ timeout });

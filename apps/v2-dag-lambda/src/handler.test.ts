@@ -2395,6 +2395,8 @@ async function runCoordinatorFixture(input: {
   enforcementGeometry?: "ready" | "wrong_selector" | "missing";
   gateDeadlineMs?: number;
   clickCheckpoint?: boolean;
+  clickCheckpointDelayMs?: number;
+  actionResponseDelayMs?: number;
   consentBundle: CanonicalEvidenceBundle;
   action: "none" | "hang" | "late" | "completed" | "validation_failed" | "completed_during_finalization" | "completed_after_finalization";
   dispatchDelayMs: number;
@@ -2561,7 +2563,8 @@ async function runCoordinatorFixture(input: {
           : { action: "reject" as const, proof: worker.rejectFirstLayerProof! };
         const documentSha256 = binding.action === "accept"
           ? binding.proof.documentSha256 : binding.proof.binding.documentSha256;
-        const time = Date.now();
+        const delayMs = input.clickCheckpointDelayMs ?? 0;
+        const time = Date.now() + delayMs;
         const body = buildConsentClickCheckpoint(binding, {
           action: actionLane, actionSemantics: "direct_label", accessibleLabel: actionLane === "accept" ? "Accept all" : "Reject all",
           labelSource: "visible_text", selectorHint: `#${actionLane}`,
@@ -2571,7 +2574,11 @@ async function runCoordinatorFixture(input: {
         });
         assert.ok(body);
         const uri = `s3://test-bucket/v2-dag-lambda/local/${input.scanId}/lanes/${actionLane}_observation/${CONSENT_CLICK_CHECKPOINT_FILES[actionLane]}`;
-        pointers.set(uri, { uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.length });
+        const publishCheckpoint = () => pointers.set(uri, {
+          uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.length,
+        });
+        if (delayMs) setTimeout(publishCheckpoint, delayMs);
+        else publishCheckpoint();
       }
       if(input.presenceOnly)assert.equal(workerPayload.privacyCaptureProfile,PRESENCE_ONLY_CAPTURE_PROFILE);
       if(input.bothActions && lane === "reject_observation") {actionCalls.push(lane);throw new Error("offline fixture: neutral Reject terminal failure");}
@@ -2632,7 +2639,9 @@ async function runCoordinatorFixture(input: {
             }, { once: true });
           });
         }
-        if (input.action === "late") await new Promise((resolve) => setTimeout(resolve, 25));
+        if (input.action === "late" || input.actionResponseDelayMs !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, input.actionResponseDelayMs ?? 25));
+        }
         if (input.action === "completed_during_finalization") {
           await new Promise<void>((resolve, reject) => {
             options?.abortSignal?.addEventListener("abort", () => reject(new Error("aborted before required artifact read")), {once: true});
@@ -6549,12 +6558,13 @@ for (const action of ["accept","reject"] as const) {
     const config = {
       [flag]: "1",
       [`CERTSCORE_${action.toUpperCase()}_GATE_PRODUCTION_ENFORCE`]: "1",
-      [`CERTSCORE_${action.toUpperCase()}_CLICK_CHECKPOINT_ENABLED`]: "1",
       CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET: "test-bucket",
       CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX: "v2-dag-lambda/local",
     };
-    const previous = new Map(Object.keys(config).map(key => [key, process.env[key]]));
+    const checkpointSetting = `CERTSCORE_${action.toUpperCase()}_CLICK_CHECKPOINT_ENABLED`;
+    const previous = new Map([...Object.keys(config), checkpointSetting].map(key => [key, process.env[key]]));
     Object.assign(process.env, config);
+    delete process.env[checkpointSetting];
     try {
       const scanId = `00000000-0000-4000-8000-00000000001${action === "accept" ? 0 : 1}`;
       const bundle = coordinatorConsentBundle(scanId, {inspectionCompleted:true,
@@ -6567,7 +6577,9 @@ for (const action of ["accept","reject"] as const) {
       Object.assign(observation.controls[0]!, {tagName:"button", selectorHint:`#${action}`});
       const reads: string[] = [];
       const output = await runCoordinatorFixture({scanId, consentBundle:bundle, actionLane:action,
-        action:"hang", enforcementGeometry:"ready", clickCheckpoint:true, dispatchDelayMs:0, onRead:key=>reads.push(key)});
+        action:"hang", enforcementGeometry:"ready", clickCheckpoint:true,
+        clickCheckpointDelayMs: action === "accept" ? 5_400 : 0,
+        dispatchDelayMs:0, onRead:key=>reads.push(key)});
       try {
         const manifest = JSON.parse(await readFile(path.join(output.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
         assert.equal(manifest.consentActionStages[action],"worker_deadline_exceeded");
@@ -6578,8 +6590,19 @@ for (const action of ["accept","reject"] as const) {
         assert.ok(checkpoint.completedAtMs <= checkpoint.verifiedAtMs);
         const deadline = Date.parse(manifest.laneTimingSummary.passiveLaneBarrierCompletedAt) + tailMs;
         assert.ok(checkpoint.verifiedAtMs < deadline);
-        assert.equal(reads.filter(key=>key.endsWith(CONSENT_CLICK_CHECKPOINT_FILES[action])).length,1);
+        assert.equal(reads.filter(key=>key.endsWith(CONSENT_CLICK_CHECKPOINT_FILES[action])).length, action === "accept" ? 2 : 1);
         assert.equal(output.result.artifactPointers[action === "accept" ? "postAcceptPacketUri" : "postRefusalPacketUri"],undefined);
+        const outcome = action === "accept" ? output.bundle.postAcceptLaneOutcome : output.bundle.postRefusalLaneOutcome;
+        assert.equal(outcome?.status, "timed_out");
+        assert.equal(outcome?.evidenceJoined, false);
+        assert.deepEqual(outcome?.verifiedClickReceipt, {
+          policyVersion: "verified_choice_click_receipt.v1",
+          action, scanId,
+          requestedTargetSha256: createHash("sha256").update(bundle.url).digest("hex"),
+          gateProofSha256: checkpoint.gateProofSha256,
+          receiptSha256: checkpoint.receiptSha256,
+          completedAtMs: checkpoint.completedAtMs,
+        });
       } finally { await rm(output.artifactRoot,{recursive:true,force:true}); }
     } finally {
       for (const [key,value] of previous) {
@@ -6588,3 +6611,38 @@ for (const action of ["accept","reject"] as const) {
     }
   });
 }
+
+test("Accept keeps an earlier verified click checkpoint when its full packet joins near the cutoff", async t => {
+  const config = {
+    [POST_ACCEPT_WORKER_FEATURE_FLAG]: "1",
+    CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE: "1",
+    CERTSCORE_ACCEPT_CLICK_CHECKPOINT_ENABLED: "1",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET: "test-bucket",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX: "v2-dag-lambda/local",
+  };
+  const previous = new Map(Object.keys(config).map(key => [key, process.env[key]]));
+  Object.assign(process.env, config);
+  t.after(() => {
+    for (const [key,value] of previous) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const scanId = "00000000-0000-4000-8000-000000000012";
+  const bundle = coordinatorConsentBundle(scanId, {inspectionCompleted:true, acceptControlObserved:true});
+  const documentIdentity = {source:"cdp_loader_id", token:"fixture-loader"} as const;
+  bundle.domSnapshots = [{ ...runtimeSnapshotFixture(), documentIdentity }];
+  const observation = bundle.consentUiObservations[0]!;
+  Object.assign(observation, {layerInspected:"first_layer",captureStatus:"observed",documentUrl:bundle.url,
+    documentIdentity,captureDiagnostics:{completedChannels:["dom_inventory","geometry"],failedChannels:[],timedOutChannels:[]}});
+  Object.assign(observation.controls[0]!, {tagName:"button",selectorHint:"#accept"});
+  const output = await runCoordinatorFixture({scanId,consentBundle:bundle,actionLane:"accept",action:"completed",
+    enforcementGeometry:"ready",clickCheckpoint:true,actionResponseDelayMs:5650,dispatchDelayMs:0});
+  t.after(() => rm(output.artifactRoot,{recursive:true,force:true}));
+  const manifest = JSON.parse(await readFile(path.join(output.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
+  assert.ok(output.result.artifactPointers.postAcceptPacketUri);
+  assert.equal(output.bundle.postAcceptLaneOutcome?.evidenceJoined,true);
+  const cutoff = Date.parse(manifest.laneTimingSummary.passiveLaneBarrierCompletedAt) + POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS;
+  assert.equal(manifest.acceptClickCheckpoint.scanId,scanId);
+  assert.ok(cutoff - manifest.acceptClickCheckpoint.verifiedAtMs >= 200);
+  assert.equal(output.bundle.postAcceptLaneOutcome.verifiedClickReceipt,undefined);
+});

@@ -14,7 +14,8 @@ import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionT
 import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema, postAcceptFormSnapshotDeadline } from "./post-accept-form-snapshots";
 import { isPostAcceptFormBootstrapUrl, postAcceptFormCaptureSchema } from "./post-accept-form-capture";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision, registeredTerminalWindow } from "./terminal-consent-decision";
-import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
+import { assessChoicePathExecution, choiceClickReceiptProjectionSchema, choicePathExecutionSchema,
+  verifiedChoiceClickReceiptSchema, validateClickReceiptProjection, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
 import { actionStoragePhaseDiagnosticsSchema } from "./action-storage-collection-diagnostics";
 import { actionOriginDomStorageObservationSchema, validateOriginDomStorageObservation } from "./action-origin-dom-storage-observation";
@@ -535,6 +536,7 @@ export const postAcceptEvidencePacketSchema = withRuntimeGraphCompatibility(post
 
 export const postAcceptLaneOutcomeSchema = z.object({
   contractVersion: z.literal("certscore.post_accept_lane_outcome.v1"),
+  verifiedClickReceipt: verifiedChoiceClickReceiptSchema.optional(),
   completedAt: z.string().datetime(),
   evidenceJoined: z.boolean(),
   maxTailWaitMs: z.number().int().min(0).max(30_000),
@@ -546,6 +548,12 @@ export const postAcceptLaneOutcomeSchema = z.object({
     "accept_path_incomplete_at_passive_barrier",
   ]).optional(),
 }).superRefine((outcome, context) => {
+  if (outcome.verifiedClickReceipt && (outcome.verifiedClickReceipt.action !== "accept" ||
+      (outcome.status !== "timed_out" && outcome.status !== "failed") ||
+      outcome.verifiedClickReceipt.completedAtMs > Date.parse(outcome.completedAt))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["verifiedClickReceipt"],
+      message: "A verified click receipt must match its incomplete lane." });
+  }
   if (outcome.status === "joined" && (!outcome.evidenceJoined || outcome.limitationCode)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -712,6 +720,7 @@ export const postAcceptReportProjectionSchema = z.object({
   formSnapshotCapture: postAcceptFormSnapshotProjectionSchema.optional(),
   storageCollectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
   execution: choicePathExecutionSchema.optional(),
+  verifiedClickReceipt: choiceClickReceiptProjectionSchema.optional(),
   registeredObservationCompletion: registeredObservationCompletionSchema.optional(),
   resolver: postRefusalResolverSchema.optional(),
   resolverDurationMs: z.number().int().nonnegative().optional(),
@@ -738,7 +747,7 @@ export const postAcceptReportProjectionSchema = z.object({
   acceptanceExercised: z.boolean(),
   acceptanceRegisteredAtMs: z.number().int().nonnegative().optional(),
   registrationStatus: postAcceptRegistrationStatusSchema,
-  resolverMethod: postRefusalResolverSchema.shape.method,
+  resolverMethod: postRefusalResolverSchema.shape.method.or(z.literal("verified_click_receipt")),
   status: z.enum([
     "confirmed_observation",
     "confirmed_clean",
@@ -748,6 +757,14 @@ export const postAcceptReportProjectionSchema = z.object({
     "aborted",
   ]),
 }).superRefine((projection, context) => {
+  validateClickReceiptProjection(projection, "accept", context);
+  if (projection.verifiedClickReceipt && (projection.postAcceptActivity.length || projection.formCapture || projection.formSnapshotCapture || projection.formImageDiagnostics ||
+      projection.afterActionRequests || projection.afterActionStorage || projection.receiptAvailability ||
+      projection.notificationAcknowledgment || projection.resolver || projection.resolverDurationMs !== undefined || projection.retainedActionTiming ||
+      projection.storageCollectionDiagnostics || projection.confirmationDiagnostics || projection.passiveCmpDiagnostics)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["verifiedClickReceipt"],
+      message: "An execution-only receipt cannot carry post-click evidence." });
+  }
   validateActionRetentionBudget({action:"accept",coverage:projection.captureCoverage,requestCount:projection.afterActionRequests?.length ?? 0,capture:projection.afterActionCapture},context);
   if (projection.receiptAvailability && (projection.receiptAvailability.action !== "accept" ||
     projection.receiptAvailability.sourcePacketSha256 !== projection.packetSha256)) {

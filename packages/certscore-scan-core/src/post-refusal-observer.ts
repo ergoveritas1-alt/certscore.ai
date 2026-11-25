@@ -1231,11 +1231,18 @@ export async function runPostRefusalObserver(
       ? Math.min(2_000, actionSearchTimeoutMs - 8_000)
       : 0;
     const initialActionSearchTimeoutMs = actionSearchTimeoutMs - adaptiveExtensionMs;
-    const initialSearchDeadline = resolverStartedAtMs + initialActionSearchTimeoutMs;
     const passiveProof = firstLayerProof;
     const drupalNoThanks = passiveProof?.binding.drupalNoThanks;
-    const controlProofDeadlineAtMs = drupalNoThanks
+    const exactOneTrust = passiveProof?.exactSelector === "#onetrust-reject-all-handler" && authorizedExactTargetUrl &&
+      passiveProof.binding.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
+      rejectFirstLayerProofMatches(passiveProof, input.parentScanId ?? input.scanId, input.url,
+        passiveProof.binding.parentDispatchSha256, resolverStartedAtMs)
+      ? actionRecipes.find(recipe => recipe.cmpId === "OneTrust" && isRegisteredLoadingConsentRecipe(recipe, "reject"))
+      : undefined;
+    const controlProofDeadlineAtMs = passiveProof && (drupalNoThanks || exactOneTrust)
       ? Math.min(passiveProof.expiresAtMs, resultBudgetDeadlineAtMs ?? Infinity) : resultBudgetDeadlineAtMs;
+    const initialSearchDeadline = Math.min(resolverStartedAtMs + initialActionSearchTimeoutMs,
+      exactOneTrust ? controlProofDeadlineAtMs ?? Infinity : Infinity);
     const drupalScope = DRUPAL_NO_THANKS_REJECT_CONTROL;
     const drupalRecipe = drupalNoThanks && authorizedExactTargetUrl &&
       passiveProof.binding.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
@@ -1263,7 +1270,17 @@ export async function runPostRefusalObserver(
     };
     const focusedResolution = initialActionSearchTimeoutMs > 0 && exactCookieInformation
       ? await probeExactCookieInformation(250, effectiveSignal, true) : undefined;
-    const readiness = drupalNoThanks
+    const resolveExactOneTrust = async (recipe: PostRefusalActionRecipe): Promise<DeterministicRecipeResolution> => {
+      const remaining = initialSearchDeadline - Date.now();
+      if (remaining <= 0) return {status:"not_found"};
+      const deadlineSignal = AbortSignal.any([effectiveSignal, AbortSignal.timeout(remaining)]);
+      return readWithinActionBoundary(() => waitForDeterministicRecipe(page!, [recipe],
+        remaining, deadlineSignal, recordResolverSnapshot, actionDiscovery,
+        true, undefined, false, "#onetrust-reject-all-handler"), {status:"not_found"}, initialSearchDeadline, deadlineSignal);
+    };
+    const readiness = exactOneTrust && initialActionSearchTimeoutMs > 0
+      ? {documentReady:true,resolution:await resolveExactOneTrust(exactOneTrust)}
+      : drupalNoThanks
       ? {documentReady:true, resolution:drupalRecipe ? await waitForDeterministicRecipe(page,
           [{...drupalRecipe, controlSelector:drupalScope.bannerSelector}],
           initialActionSearchTimeoutMs === 0 ? 0 : Math.max(1, Math.min(initialSearchDeadline, controlProofDeadlineAtMs ?? Infinity) - Date.now()),
@@ -1305,7 +1322,7 @@ export async function runPostRefusalObserver(
         ));
     if (
       resolution.status === "not_found" &&
-      adaptiveExtensionMs > 0 && !drupalNoThanks &&
+      adaptiveExtensionMs > 0 && !drupalNoThanks && !exactOneTrust &&
       await hasCredibleLateConsentSignal({
         context,
         diagnosticGeometry: resolution.diagnosticGeometry,
@@ -1447,7 +1464,7 @@ export async function runPostRefusalObserver(
     // One shared trial/recovery allowance also covers an opacity transition
     // discovered by final proof. Do not restart it after the search expires.
     const actionReadinessDeadline = Math.min(Date.now() + (input.allowCanonicalRejectDiscovery ? 3_000 : 2_500),
-      drupalNoThanks ? controlProofDeadlineAtMs ?? Infinity : Infinity);
+      (drupalNoThanks || exactOneTrust) ? controlProofDeadlineAtMs ?? Infinity : Infinity);
     try {
       // The bounded exact probe already tested the same scoped control's
       // actionability. The dispatch still rebinds the actual element, checks
@@ -1474,8 +1491,14 @@ export async function runPostRefusalObserver(
         [selectedRecipe],
         Math.min(500, actionabilityRecoveryRemaining()),
         effectiveSignal,
+        undefined,
+        undefined,
+        Boolean(exactOneTrust),
+        undefined,
+        false,
+        exactOneTrust ? "#onetrust-reject-all-handler" : undefined,
       ) : { status: "not_found" };
-      if (reResolution.status === "not_found" && !drupalNoThanks && input.allowCanonicalRejectDiscovery && actionabilityRecoveryRemaining() > 0) {
+      if (reResolution.status === "not_found" && !drupalNoThanks && !exactOneTrust && input.allowCanonicalRejectDiscovery && actionabilityRecoveryRemaining() > 0) {
         reResolution = await waitForCanonicalRejectControlRecipe(
           page,
           Math.min(500, actionabilityRecoveryRemaining()),
@@ -3289,6 +3312,7 @@ async function waitForDeterministicRecipe(
   inspectRegisteredOneTrustWhileLoading = false,
   outerDeadlineAtMs?: number,
   checkExpectedLabelFirst = false,
+  exactMainSelector?: string,
 ): Promise<DeterministicRecipeResolution> {
   // A live candidate may use the remaining outer budget to finish the full
   // uniqueness/stability sweep. A partial sweep never authorizes dispatch.
@@ -3336,7 +3360,7 @@ async function waitForDeterministicRecipe(
     recipeSweep: for (const unboundRecipe of recipesForAttempt) {
       if (signal?.aborted) return { status: "aborted" };
       if (timeoutMs > 0 && Date.now() >= deadlineAtMs) { reportIncompleteSweep(); return { status: sawAmbiguousActionableSet || actionable.length > 1 || scopeAmbiguous ? "ambiguous" : "not_found" }; }
-      const frameUrls = unboundRecipe.controlFrameUrl ? [unboundRecipe.controlFrameUrl]
+      const frameUrls = exactMainSelector ? [undefined] : unboundRecipe.controlFrameUrl ? [unboundRecipe.controlFrameUrl]
         : [undefined, ...new Set(page.frames().filter(frame => frame !== page.mainFrame()).map(frame => frame.url()))];
       for (const frameUrl of frameUrls) {
       if (signal?.aborted) return { status: "aborted" };
@@ -3410,9 +3434,11 @@ async function waitForDeterministicRecipe(
         }
         continue;
       }
-      const controls = scopeResolution.scope.locator(recipe.controlSelector);
+      const recipeControls = scopeResolution.scope.locator(recipe.controlSelector);
+      const controls = exactMainSelector
+        ? recipeControls.and(page.locator(`${recipe.bannerSelector} ${exactMainSelector}`)) : recipeControls;
       const count = await controls.count().catch(() => 0);
-      if (count > 8) return { status: "ambiguous" };
+      if (count > (exactMainSelector ? 1 : 8)) return { status: "ambiguous" };
       selectorMatchCount += count;
       if (count > 0) {
         if (recipe.cmpId) matchedCmpIds.add(recipe.cmpId);

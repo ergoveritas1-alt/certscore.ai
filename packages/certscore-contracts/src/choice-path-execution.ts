@@ -22,6 +22,26 @@ export const choicePathExecutionSchema = z.object({
 
 export type ChoicePathExecution = z.infer<typeof choicePathExecutionSchema>;
 
+const evidenceHash = z.string().regex(/^[a-f0-9]{64}$/);
+
+export const verifiedChoiceClickReceiptSchema = z.object({
+  policyVersion: z.literal("verified_choice_click_receipt.v1"),
+  action: z.enum(["accept", "reject"]),
+  scanId: z.string().min(1).max(200),
+  requestedTargetSha256: evidenceHash,
+  gateProofSha256: evidenceHash,
+  receiptSha256: evidenceHash,
+  completedAtMs: z.number().int().nonnegative().max(8_640_000_000_000_000),
+}).strict();
+
+export type VerifiedChoiceClickReceipt = z.infer<typeof verifiedChoiceClickReceiptSchema>;
+
+export const choiceClickReceiptProjectionSchema = verifiedChoiceClickReceiptSchema.pick({
+  policyVersion: true, action: true, receiptSha256: true,
+});
+
+export const CLICK_RECEIPT_OBSERVATION_UNAVAILABLE = "post_click_observation_unavailable" as const;
+
 /** Retained completion proof for the registered branch, which does not produce
  * an unconfirmed afterActionCapture packet. Bound to the same source packet. */
 export const registeredObservationCompletionSchema = z.object({
@@ -57,6 +77,7 @@ export function retainRegisteredObservationCompletion(input: {
 }
 
 type Projection = {
+  verifiedClickReceipt?: z.infer<typeof choiceClickReceiptProjectionSchema>;
   packetSha256?: string;
   actionControlProof?: { action: string; authorizedTargetSha256?: string };
   terminalDecisionEvidence?: TerminalConsentDecision;
@@ -78,6 +99,10 @@ type Projection = {
 
 /** Only call with a validated typed report projection from verified evidence. */
 export function assessChoicePathExecution(projection: Projection, action: "accept" | "reject"): ChoicePathExecution {
+  if (projection.verifiedClickReceipt?.action === action) return {
+    policyVersion: CHOICE_PATH_EXECUTION_POLICY, status: "limited",
+    clickCompleted: true, observationCompleted: false, consentConfirmed: false,
+  };
   const sourceVerified = /^[a-f0-9]{64}$/.test(projection.packetSha256 ?? "") &&
     projection.actionControlProof?.action === action;
   const exercised = action === "accept" ? projection.acceptanceExercised : projection.refusalExercised;
@@ -118,6 +143,28 @@ export function validateChoicePathExecution(execution: ChoicePathExecution | und
   const expected = assessChoicePathExecution(projection, action);
   if (Object.keys(expected).some((key) => expected[key as keyof ChoicePathExecution] !== execution[key as keyof ChoicePathExecution])) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["execution"], message: "Path execution must agree with its retained source projection." });
+  }
+}
+
+/** A receipt-only projection carries execution and a coverage limitation. */
+export function validateClickReceiptProjection(projection: Projection & {
+  resolverMethod: string; observationCount: number; observationWindowMs: number; contradictionObserved: boolean;
+  indeterminateReason: string | null;
+}, action: "accept" | "reject", context: z.RefinementCtx) {
+  const receipt = projection.verifiedClickReceipt;
+  if (!receipt && projection.resolverMethod !== "verified_click_receipt") return;
+  if (receipt?.action !== action || projection.resolverMethod !== "verified_click_receipt" ||
+      projection.productionProjectable || projection.status !== "unconfirmed" ||
+      projection.registrationStatus !== "unconfirmed" || projection.evidenceDisposition !== "indeterminate" ||
+      projection.indeterminateReason !== CLICK_RECEIPT_OBSERVATION_UNAVAILABLE ||
+      projection.observationCount !== 0 || projection.observationWindowMs !== 0 || projection.contradictionObserved ||
+      projection.acceptanceExercised || projection.refusalExercised ||
+      projection.acceptanceRegisteredAtMs !== undefined || projection.refusalRegisteredAtMs !== undefined ||
+      projection.packetSha256 || projection.actionControlProof || projection.afterActionCapture ||
+      projection.terminalDecisionEvidence || projection.registeredObservationCompletion || projection.captureCoverage ||
+      projection.decisionEvidence || projection.interactionDiagnostics) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["verifiedClickReceipt"],
+      message: "A verified click receipt alone can establish execution only." });
   }
 }
 

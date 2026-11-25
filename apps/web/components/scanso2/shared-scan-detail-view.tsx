@@ -1,3 +1,5 @@
+import { projectVerifiedClickOnlyPath } from "../../lib/scans/choice-path-execution";
+import { retainedConsentAssessment } from "../../lib/scans/after-action-report-eligibility";
 import { formatReportSeconds } from "../../lib/scans/report-time";
 import { choicePathExecutionSchema } from "@certscore/contracts";
 import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
@@ -7900,7 +7902,9 @@ export async function SharedScanDetailView({
   const postRejectTrackingReductionItem = reportableGdprEprivacyCoverageChecklist.find(
     (item) => item.id === "post_reject_tracking_reduction"
   );
-  const executiveRejectPath = buildExecutiveRejectPathProjection(postRejectTrackingReductionItem);
+  const executiveRejectPath = projectVerifiedClickOnlyPath(
+    runtimeArtifacts?.postRefusalEvidenceProjection, retainedConsentAssessment(scanRecord), "reject",
+  ) ?? buildExecutiveRejectPathProjection(postRejectTrackingReductionItem);
   const controlSummary = persistedCanonicalProjection?.consentControlSummary;
   const executiveConsentControls: ExecutiveConsentControlProjection | null = controlSummary ? {
     accept: controlSummary.controls.accept === "observed",

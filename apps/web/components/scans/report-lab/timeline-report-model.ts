@@ -16,7 +16,7 @@ import { projectExecutiveRuntimeCards } from "../../../lib/scans/executive-runti
 import { selectSiteIntegrityFinding, projectStartingPageSiteIntegrityReport } from "../../../lib/scans/site-integrity-report";
 import { projectPublicFirstLayerConsentEvidence, projectDocumentMismatchFooterStatus } from "../../../lib/scans/public-first-layer-consent-evidence";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../../../lib/scans/after-action-report-eligibility";
-import { readChoicePathExecution } from "../../../lib/scans/choice-path-execution";
+import { projectVerifiedClickOnlyPath, readChoicePathExecution } from "../../../lib/scans/choice-path-execution";
 import { consentControlReportLabels } from "../../../lib/scans/consent-control-report";
 import type { ReviewedPolicy } from "../../../lib/scans/full-site-resource-context";
 import { projectReportRuntimeInventory } from "../../../lib/scans/report-runtime-inventory";
@@ -366,6 +366,8 @@ export function buildAcceptPathProjection(
   // Coverage-only outcomes do not establish that an Accept interaction occurred.
   // Keep them in retained diagnostics, not the After Accept report projection.
   if (!projection) return null;
+  const receiptOnly = projectVerifiedClickOnlyPath(projection, retainedConsentAssessment(runtimeArtifacts), "accept");
+  if (receiptOnly) return receiptOnly;
 
   const captureCoverage = afterClickCoverage(projection, "accept");
   const execution = readChoicePathExecution(projection, "accept");
@@ -572,7 +574,9 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const acceptContradictionRow = mapAcceptContradictionFinding(
     surfacedFinding(canonical.ownerUnifiedFindings, "acceptance_signal_contradicts_action"),
   );
-  const rejectPath = buildExecutiveRejectPathProjection(
+  const rejectPath = projectVerifiedClickOnlyPath(
+    runtimeArtifacts?.postRefusalEvidenceProjection, retainedConsentAssessment(scanRecord), "reject",
+  ) ?? buildExecutiveRejectPathProjection(
     reportableChecklistRows.find((item) => item.id === "post_reject_tracking_reduction"),
   );
   const actionTimelines = {

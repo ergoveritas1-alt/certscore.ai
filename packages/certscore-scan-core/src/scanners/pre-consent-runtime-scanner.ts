@@ -74,6 +74,7 @@ import {
   isConsentControlInteractionEligible,
   classifyConsentControlLinkDestination,
   hasUnresolvedConsentDecision,
+  verifyConsentControlInspection,
   UNRESOLVED_CONSENT_DECISION,
   classifyTransportHttpProbeOutcome,
   definitiveTransportCertificateErrorSchema,
@@ -310,6 +311,8 @@ export interface PreConsentRuntimeScannerInput {
   screenshotTimeoutMs?: number;
   /** Non-blocking retention-review handoff; screenshot pixels never create findings. */
   onScreenshotCaptured?: (screenshot: ScreenshotArtifact) => void;
+  /** A typed passive observation may start blank worker setup while capture continues. */
+  onFirstLayerObservation?: (observation: ConsentUiObservation) => void;
   /**
    * Retrieval-only passive checkpoint for an accepted scan. The callback is
    * advisory, fires at most once, and cannot create findings or score effects.
@@ -2012,6 +2015,7 @@ export async function preConsentRuntimeScanner(
           // passive CMP waits can consume the module budget, but must not leave
           // the final evidence packet without the observation already obtained.
           retainedConsentUiObservation = observation;
+          input.onFirstLayerObservation?.(observation);
           startCmpBasicCapture();
           return observation;
         })
@@ -2815,6 +2819,7 @@ export async function preConsentRuntimeScanner(
       )
       : initialConsentObservation;
     retainedConsentUiObservation = consentObservation;
+    input.onFirstLayerObservation?.(consentObservation);
     startCmpBasicCapture();
     let domText = initialDomText;
     let domTextCapture: (DocumentBoundCapture<string> & {
@@ -5109,6 +5114,7 @@ export async function preConsentRuntimeScanner(
     // artifact; a late server-address/size result must not mutate published rows.
     responseCaptureFinalized = true;
     consentObservation = finalizeConsentCaptureDiagnostic(consentObservation);
+    input.onFirstLayerObservation?.(consentObservation);
     retainedConsentUiObservation = consentObservation;
     const gpcCookieReadBinding = captureScope === "runtime_evidence" ? buildGpcCookieReadBinding({
       scanId: input.gpcOptOutPrototype?.scanId ?? input.gpcImpactScanId ?? "", targetUrl: input.normalizedUrl,
@@ -9460,7 +9466,7 @@ async function readRapidChildFrameConsentInventory(
   };
 }
 
-async function readConsentUiObservation(
+export async function readConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
   options: {
@@ -9491,6 +9497,7 @@ async function readConsentUiObservation(
     canonicalConsentInventoryLabels: string[];
     canonicalConsentContextHints: string[];
     canonicalCmpControlSelectors: string[];
+    captureExactSelectors: boolean;
   }>((input) => {
     const certscoreWindow = window as typeof window & {
       __certscoreConsentInventory: (
@@ -9498,6 +9505,7 @@ async function readConsentUiObservation(
         canonicalConsentInventoryLabels?: string[],
         canonicalConsentContextHints?: string[],
         canonicalCmpControlSelectors?: string[],
+        captureExactSelectors?: boolean,
       ) => {
         controls: ConsentUiInventoryControl[];
         diagnostics?: ConsentInventoryProbeDiagnostics;
@@ -9509,6 +9517,7 @@ async function readConsentUiObservation(
         input.canonicalConsentInventoryLabels,
         input.canonicalConsentContextHints,
         input.canonicalCmpControlSelectors,
+        input.captureExactSelectors,
       ),
       frameInaccessibleCount: 0,
       probeSucceeded: true,
@@ -9519,6 +9528,7 @@ async function readConsentUiObservation(
     canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
     canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
     canonicalCmpControlSelectors: CANONICAL_CMP_CONTAINER_SELECTORS,
+    captureExactSelectors: exactAcceptSelectorCaptureEnabled() || exactRejectSelectorCaptureEnabled(),
   }).catch((): {
     documentReadyState?: DocumentReadyState;
     controls: ConsentUiInventoryControl[];
@@ -9564,8 +9574,13 @@ async function readConsentUiObservation(
       hasConsentContext: control.consentContextEvidence === "local_surface",
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
+    const { exactNativeButtonSelector, ...captured } = control;
+    const useExact = actionType === "accept_all" && exactAcceptSelectorCaptureEnabled() ||
+      actionType === "reject_all" && exactRejectSelectorCaptureEnabled() &&
+      (!classification.variant || classification.variant === "necessary_only" && !classification.reasonCodes.includes("observation_only_label"));
     return {
-      ...control,
+      ...captured,
+      ...(useExact && exactNativeButtonSelector ? { selectorHint: exactNativeButtonSelector } : {}),
       actionType: actionType ?? control.actionType,
       semanticRole: classification.semanticRole,
       confidence: classification.confidence,
@@ -9815,6 +9830,7 @@ function normalizeConsentControlLink<T extends { linkHref?: string; linkDestinat
 }
 
 type ConsentUiInventoryControl = ConsentUiObservation["controls"][number] & {
+  exactNativeButtonSelector?: string;
   linkHref?: string;
   scopeText?: string;
   scopeKind?: "paragraph" | "dialog";
@@ -10800,10 +10816,12 @@ function axStringValue(value: AccessibilityNodeValue | undefined) {
 }
 
 const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
+    const __name = fn => fn;
+    const selectExactButton = ${exactNativeConsentButtonSelector.toString()};
     const isNonVisitorSurface = ${isNonVisitorConsentSurface.toString()};
     const nonVisitorSurfaces = ${JSON.stringify(CONSENT_NON_VISITOR_SURFACES)};
     const nonFirstLayerSurfaceSelector = ${JSON.stringify(NON_FIRST_LAYER_SURFACE_SELECTOR)};
-    window.__certscoreConsentInventory = (allowFullDocumentCmpControls, canonicalConsentInventoryLabels = [], canonicalConsentContextHints = [], canonicalCmpControlSelectors = []) => {
+    window.__certscoreConsentInventory = (allowFullDocumentCmpControls, canonicalConsentInventoryLabels = [], canonicalConsentContextHints = [], canonicalCmpControlSelectors = [], captureExactSelectors = false) => {
       const controlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
       const customControlSelectors = [
         "[role='link']",
@@ -11250,6 +11268,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         .sort((left, right) => candidatePriority(right) - candidatePriority(left))
         .slice(0, 1_200);
       const seen = new Set();
+      let retainedCount = 0;
       const controls = candidates.flatMap((element) => {
         if (element.closest?.(nonFirstLayerSurfaceSelector) || isNonVisitorSurface(element, nonVisitorSurfaces)) return [];
         if (!isVisible(element)) {
@@ -11279,7 +11298,9 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         }
         seen.add(dedupeKey);
         const sameOriginFrameControl = isSameOriginFrameElement(element);
+        retainedCount++;
         return [{
+          exactNativeButtonSelector: captureExactSelectors && retainedCount <= 12 && !sameOriginFrameControl ? selectExactButton(element) : undefined,
           actionType: "other",
           label,
           role: element.getAttribute("role") || undefined,
@@ -14398,6 +14419,51 @@ export function hasCurrentPositiveConsentGeometry(
     hasConfirmedFirstLayerGeometryControls(geometry));
 }
 
+/** Preserve a unique fresh native selector when a DOM inventory named only
+ * the element type. The report's coverage and the live click proof stay separate. */
+function reconcileGenericNativeChoiceSelectors(
+  current: ConsentUiObservation,
+  geometryObservation: ConsentUiObservation,
+  geometry: ConsentControlGeometryArtifact,
+  scanStartedAtMs: number,
+): ConsentUiObservation {
+  if (current.documentIdentity?.source !== "cdp_loader_id" ||
+      !sameDocumentCaptureBinding({url: current.documentUrl ?? "", documentIdentity: current.documentIdentity},
+        {url: geometry.pageUrl, documentIdentity: geometry.documentIdentity}) ||
+      !Number.isFinite(Date.parse(geometry.capturedAt)) ||
+      Date.parse(geometry.capturedAt) < scanStartedAtMs + current.observedAtMs ||
+      current.layerInspected !== "first_layer" || current.captureStatus !== "observed" ||
+      !current.captureDiagnostics?.completedChannels.includes("dom_inventory") ||
+      current.captureDiagnostics.timedOutChannels.length || current.captureDiagnostics.failedChannels.length ||
+      current.inventoryDiagnostics?.blockingInaccessibleFrameCount) return current;
+  const inspection = verifyConsentControlInspection(geometry.controlInspection, geometry.candidates);
+  if (inspection?.structuralCoverage !== "complete") return current;
+
+  const controls = current.controls.map(control => {
+    if (control.tagName !== "button" || control.selectorHint !== "button" || control.domBinding ||
+        control.visible !== true || !isConsentControlInteractionEligible(control) ||
+        (control.actionType !== "accept_all" && control.actionType !== "reject_all") ||
+        current.controls.filter(other => other.visible && other.actionType === control.actionType).length !== 1) return control;
+    const isAccept = control.actionType === "accept_all";
+    const matches = geometry.candidates.filter(candidate => candidate.actionType === control.actionType &&
+      candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible");
+    if (matches.length !== 1) return control;
+    const match = matches[0]!;
+    if (match.frameContext.frameKind !== "main_frame" || match.frameContext.frameUrl !== geometry.pageUrl ||
+        match.tagName !== "button" || !match.selectorHint || match.selectorHint === "button" ||
+        match.label !== control.label || (match.ariaLabel && match.ariaLabel !== control.label) ||
+        match.consentContextConfirmed !== true || !match.enabled || !match.intersectsViewport || !match.occlusion.center ||
+        (isAccept ? match.exactNativeAcceptSelectorVerified !== true : match.exactNativeRejectSelectorVerified !== true) ||
+        !inspection.candidates.some(row => row.candidateId === match.candidateId && row.role === "decision" &&
+          !row.unresolvedIntents.includes(isAccept ? "accept" : "reject")) ||
+        !geometryObservation.controls.some(row => row.actionType === control.actionType &&
+          row.label === control.label && row.selectorHint === match.selectorHint)) return control;
+    return {...control, selectorHint: match.selectorHint, consentContextEvidence: "local_surface" as const};
+  });
+  return controls.every((control, index) => control === current.controls[index])
+    ? current : {...current, controls};
+}
+
 export function reconcileConsentUiObservationWithCompletedGeometry(input: {
   artifactPath?: string;
   current: ConsentUiObservation;
@@ -14628,7 +14694,7 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
   });
   if (geometryObservation) {
     return mergeConsentUiObservations(
-      input.current,
+      reconcileGenericNativeChoiceSelectors(input.current, geometryObservation, input.geometry, input.scanStartedAtMs),
       geometryObservation,
       "geometry:confirmed_first_layer_controls",
     );

@@ -131,7 +131,7 @@ export function buildPostRefusalRuntimeProjection(
     rejectInteractionConfirmed: confirmed,
     reportProjectionContractVersion: projection.contractVersion,
     resolverMethod: projection.resolverMethod,
-    scoreEffect: persistenceOnly ? "none" : "canonical_post_refusal_policy",
+    scoreEffect: persistenceOnly || projection.verifiedClickReceipt ? "none" : "canonical_post_refusal_policy",
     storagePresenceDoesNotEstablishActiveUse: persistedStorage.length > 0,
     ...(projection.packetSha256 ? { sourcePacketSha256: projection.packetSha256 } : {}),
   };
@@ -142,7 +142,7 @@ export function buildPostRefusalRuntimeProjection(
           post_refusal_observation_coverage: coverageProjection,
         }
       : {}),
-    afterRejectScoringAssessment: assessAfterRejectScoring(projection),
+    afterRejectScoringAssessment: projection.verifiedClickReceipt ? null : assessAfterRejectScoring(projection),
     californiaRejectPotentialRiskAssessment: !laneOutcome || (laneOutcome.status === "joined" && laneOutcome.evidenceJoined) ? assessRejectPotentialRisk(projection) : null,
     californiaPostRejectAssessment: !laneOutcome || (laneOutcome.status === "joined" && laneOutcome.evidenceJoined)
       ? assessCaliforniaPostReject(projection) : null,

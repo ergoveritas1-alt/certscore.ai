@@ -263,6 +263,8 @@ export interface RunScanInput {
    * but must not infer findings from screenshot pixels.
    */
   onPreConsentScreenshotCaptured?: (screenshot: ScreenshotArtifact) => void;
+  /** A typed passive observation may start blank worker setup while capture continues. */
+  onFirstLayerObservation?: (observation: ConsentUiObservation) => void;
   formSnapshotReviewer?: FormSnapshotReviewer;
   /** Local diagnostic override; production callers retain the 10s default. */
   lateConsentGateMs?: number;
@@ -637,6 +639,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
+        onFirstLayerObservation: evidenceLane === "consent_proof" ? input.onFirstLayerObservation : undefined,
         formSnapshotReviewer: evidenceLane === "runtime_evidence" || evidenceLane === "combined" ? input.formSnapshotReviewer : undefined,
         onPassiveRuntimeCheckpoint: evidenceLane === "runtime_evidence"
           ? notifyPreConsentRuntimePreview
@@ -772,6 +775,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
+        onFirstLayerObservation: evidenceLane === "consent_proof" ? input.onFirstLayerObservation : undefined,
         formSnapshotReviewer: evidenceLane === "runtime_evidence" || evidenceLane === "combined" ? input.formSnapshotReviewer : undefined,
         consentGateAuditHoldout: input.consentGateAuditHoldout,
         waitMode: leanPreConsent ? "fast" : "full",

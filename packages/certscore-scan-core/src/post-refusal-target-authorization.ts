@@ -494,14 +494,19 @@ export function committedConsentServerRedirect(input: {
   signal?: AbortSignal;
 }): boolean {
   const { page, response, requestedUrl, documentSha256, redirectCount, signal } = input;
-  if (signal?.aborted || !documentSha256 || !response?.ok() || redirectCount !== 1 ||
+  if (signal?.aborted || !documentSha256 || !response?.ok() || ![1, 2].includes(redirectCount) ||
       response.url() !== page.url() || documentSha256 !== hashExactTarget(response.url())) return false;
-  const terminal = response.request();
-  const original = terminal.redirectedFrom();
-  if (!original || original.redirectedFrom() || !terminal.isNavigationRequest() ||
-      !original.isNavigationRequest() || hashExactTarget(original.url()) !== hashExactTarget(requestedUrl)) return false;
   try {
-    return terminal.frame() === page.mainFrame() && original.frame() === page.mainFrame();
+    const mainFrame = page.mainFrame();
+    let request = response.request();
+    for (let hop = 0; hop < redirectCount; hop++) {
+      if (!request.isNavigationRequest() || request.frame() !== mainFrame) return false;
+      const previous = request.redirectedFrom();
+      if (!previous) return false;
+      request = previous;
+    }
+    return request.isNavigationRequest() && request.frame() === mainFrame &&
+      !request.redirectedFrom() && hashExactTarget(request.url()) === hashExactTarget(requestedUrl);
   } catch {
     return false;
   }

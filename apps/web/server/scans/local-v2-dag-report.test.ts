@@ -10242,3 +10242,142 @@ test("the Accept stop diagnostic requires the joined packet to belong to the ver
     postAcceptEvidence: { ...packet, parentScanId: "another-scan" } }, options);
   assert.equal(otherParent.runtimeArtifacts?.acceptPathDiagnostic, null);
 });
+
+test("verified click receipts survive report persistence and JSON export without after-click coverage", async (t) => {
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  process.env.NEXT_PUBLIC_APP_URL = "https://certscore.ai";
+  t.after(() => {
+    if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+  });
+  const { buildMaterializedLocalV2Detail } = await loadLocalV2DagReport();
+  const { canonicalEvidenceBundleSchema, postAcceptReportProjectionSchema, postRefusalReportProjectionSchema } = await import("@certscore/contracts");
+  const { buildApiV2ScanResource } = await import("../../lib/api-v2/scan-resource");
+  const { buildPersistedScanReportProjection, readPersistedScanReportProjection,
+    SCAN_REPORT_PROJECTION_VERSION } = await import("./scan-report-projection-contract");
+  const { gpcRuntimeFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const { observedControlAssessment } = await import("../../lib/scans/test-fixtures/observed-control-assessment");
+  const bundle = gpcRuntimeFixture({ enabled: false, url: "https://caltech.edu/" });
+  const record = makeScanRecord();
+  bundle.scanId = record.scan.id;
+  bundle.startedAt = record.scan.createdAt;
+  bundle.completedAt = record.scan.completedAt!;
+  const documentIdentity = { source: "cdp_loader_id" as const, token: "click-receipt-fixture" };
+  bundle.domSnapshots = [{
+    artifactId: "dom_page", url: bundle.url, path: "/", pagePhase: "network_idle",
+    capturedAtMs: 900, consentStateAtTime: "pre_consent", documentIdentity,
+    textExcerpt: "This fixture represents a functioning homepage with substantive public content and a first-layer consent banner.",
+  }];
+  const sourceHash = "a".repeat(64);
+  const sourceUri = "s3://fixture/CanonicalEvidenceBundle.json";
+  record.events = [{
+    createdAt: bundle.completedAt, eventType: "v2_lambda_result.received", id: "exact-click-result",
+    message: "Retained scan evidence.", metadataJson: {
+      artifactOnly: true, processor: LOCAL_V2_DAG_SCAN_PROCESSOR, productionFindingIntegration: false,
+      artifactPointers: { scanArtifactUri: sourceUri },
+      artifactMetadata: { scanArtifactUri: { sha256: sourceHash, sizeBytes: 100 } },
+      artifactAccess: { productionReadMode: "verified_s3" },
+    },
+  }];
+  const options = { policyTextEvidenceContext: {
+    sourceBundle: { verificationStatus: "verified" as const, sha256: sourceHash,
+      schemaVersion: bundle.schemaVersion, uri: sourceUri, sizeBytes: 100 },
+    scanId: bundle.scanId, generatedAt: bundle.completedAt, localOutDir: null, artifactsById: new Map(),
+  } };
+  const verifiedReceipt = (action: "accept" | "reject") => ({
+    policyVersion: "verified_choice_click_receipt.v1" as const,
+    action, scanId: bundle.scanId, requestedTargetSha256: createHash("sha256").update(bundle.url).digest("hex"),
+    gateProofSha256: "b".repeat(64), receiptSha256: "c".repeat(64),
+    completedAtMs: Date.parse(bundle.completedAt) - 100,
+  });
+  const lane = { completedAt: bundle.completedAt, evidenceJoined: false, maxTailWaitMs: 6000, status: "timed_out" as const };
+  bundle.postAcceptLaneOutcome = { ...lane, contractVersion: "certscore.post_accept_lane_outcome.v1",
+    limitationCode: "accept_path_timeout" };
+  bundle.postRefusalLaneOutcome = { ...lane, contractVersion: "certscore.post_refusal_lane_outcome.v1",
+    limitationCode: "reject_path_timeout" };
+  const before = buildMaterializedLocalV2Detail(record, bundle, options);
+  const retained = canonicalEvidenceBundleSchema.parse({
+    ...bundle,
+    postAcceptLaneOutcome: { ...bundle.postAcceptLaneOutcome, verifiedClickReceipt: verifiedReceipt("accept") },
+    postRefusalLaneOutcome: { ...bundle.postRefusalLaneOutcome, verifiedClickReceipt: verifiedReceipt("reject") },
+  });
+  const detail = buildMaterializedLocalV2Detail(record, retained, options);
+  const runtime = detail.runtimeArtifacts;
+  const accept = postAcceptReportProjectionSchema.parse(runtime?.postAcceptEvidenceProjection);
+  const reject = postRefusalReportProjectionSchema.parse(runtime?.postRefusalEvidenceProjection);
+  assert.equal(accept.afterActionCapture, undefined);
+  assert.equal(reject.afterActionCapture, undefined);
+  assert.equal(runtime?.afterRejectScoringAssessment, null);
+  assert.equal(runtime?.californiaPostRejectAssessment, null);
+  assert.deepEqual(buildScanReportUnifiedFindingsForScan(detail), buildScanReportUnifiedFindingsForScan(before));
+  assert.deepEqual(buildCanonicalGdprEprivacyShadowProjection(detail).legacyScoreAssessment,
+    buildCanonicalGdprEprivacyShadowProjection(before).legacyScoreAssessment);
+  // This fixture supplies the independently observed first-layer report controls.
+  const assessment = { ...observedControlAssessment,
+    scan: { ...observedControlAssessment.scan, scanId: bundle.scanId } };
+  detail.runtimeArtifacts = { ...runtime, consentControlAssessment: assessment };
+  if (detail.snapshot) detail.snapshot = { ...detail.snapshot, consentControlAssessment: assessment };
+  const { buildLegacyGdprEprivacyVersionedAssessmentInput } = await import("./score-assessment-projection");
+  const score = buildCanonicalGdprEprivacyShadowProjection(detail);
+  const { debugBuildScanReportUnifiedFindingStateForScan } = await import("../../lib/scans/scan-report-unified-findings");
+  const { derivedContext } = debugBuildScanReportUnifiedFindingStateForScan(detail);
+  const persisted = buildPersistedScanReportProjection(detail, { canonicalReportProjection: {
+    artifactVersion: "persisted-canonical-report-projection-v2",
+    checklistRows: [], derivedContext, globalUnifiedFindings: [],
+    normalizedConcerns: [], ownerUnifiedFindings: [], topFindingIds: [], collectionSurfaceAssessment: null,
+    legacyScoreAssessmentInput: buildLegacyGdprEprivacyVersionedAssessmentInput({
+      assessment: score.legacyScoreAssessment, checklistRows: score.checklistRows,
+      scanId: bundle.scanId, scoredAt: bundle.completedAt, unifiedFindings: [],
+    }),
+  } });
+  const restored = readPersistedScanReportProjection({ scan: detail.scan, snapshot: {
+    report_projection_payload: JSON.parse(persisted.serialized), report_projection_payload_sha256: persisted.sha256,
+    report_projection_payload_size_bytes: persisted.sizeBytes, report_projection_status: "ready",
+    report_projection_version: SCAN_REPORT_PROJECTION_VERSION, report_projection_computed_at: bundle.completedAt,
+  } });
+  assert.ok(restored);
+  const exported = buildApiV2ScanResource({ ...detail, runtimeArtifacts: restored.runtimeArtifacts });
+  for (const observation of [exported.postAcceptObservation, exported.postRefusalObservation]) {
+    assert.deepEqual(observation?.execution, {
+      policyVersion: "choice_path_execution.v1", status: "limited", clickCompleted: true,
+      observationCompleted: false, consentConfirmed: false,
+    });
+    assert.equal(observation?.afterAction, undefined);
+    assert.equal(observation?.termination?.kind, "unavailable");
+    assert.equal(observation?.productionProjectable, false);
+  }
+  const { buildTimelineReportModel } = await import("../../components/scans/report-lab/timeline-report-model");
+  const { buildReportDisplayExport } = await import("../../lib/api-v2/report-display-export");
+  const { buildConsentTrackingOverview } = await import("../../lib/scans/consent-tracking-overview");
+  const report = buildTimelineReportModel(restored);
+  assert.ok("findings" in report);
+  const display: Record<string, unknown> = buildReportDisplayExport(report);
+  const tiles = buildConsentTrackingOverview(report, "gdpr_eprivacy");
+  for (const [action, path] of [["accept", report.acceptPath], ["reject", report.rejectPath]] as const) {
+    assert.equal(path?.execution?.clickCompleted, true);
+    assert.equal(path?.observationWindowMs, null);
+    assert.equal(path?.note, "Post-click activity was not assessed.");
+    assert.deepEqual(display[action === "accept" ? "acceptPath" : "rejectPath"], path);
+    const tile: { count: number | null; state: string } | undefined = tiles.find(row => row.id === action);
+    assert.equal(tile?.count, null);
+    assert.equal(tile?.state, "unavailable");
+  }
+  const pulse = buildPulseProjection({ scanRecord: restored, detail: "full", format: "json", freshnessMode: "latest",
+    requestedUrl: bundle.url, resolutionMode: "test", pulseRequestId: "click-receipt-fixture", waitSeconds: 0 });
+  const { extractExportRow } = await import("../../../../scripts/lib/audit-progress-export");
+  const audit = extractExportRow(pulse, { file: "receipt-routed-export.json", sha256: sourceHash, role: "canonical_export" });
+  assert.equal(audit.states["click.accept"], "completed");
+  assert.equal(audit.states["click.reject"], "completed");
+  assert.equal(buildMaterializedLocalV2Detail(record, retained).runtimeArtifacts?.postAcceptEvidenceProjection, undefined);
+  const limited = canonicalEvidenceBundleSchema.parse({
+    ...retained, runtimeCoverage: { ...retained.runtimeCoverage, coverageStatus: "limited_partial" },
+  });
+  assert.equal(postAcceptReportProjectionSchema.parse(
+    buildMaterializedLocalV2Detail(record, limited, options).runtimeArtifacts?.postAcceptEvidenceProjection,
+  ).execution?.clickCompleted, true);
+  const wrongTarget = structuredClone(retained);
+  wrongTarget.postAcceptLaneOutcome!.verifiedClickReceipt!.requestedTargetSha256 = "d".repeat(64);
+  assert.equal(buildMaterializedLocalV2Detail(record, wrongTarget, options).runtimeArtifacts?.postAcceptEvidenceProjection, undefined);
+  assert.equal(postAcceptReportProjectionSchema.safeParse({ ...accept, afterActionRequests: [] }).success, false);
+  assert.equal(postRefusalReportProjectionSchema.safeParse({ ...reject, productionProjectable: true }).success, false);
+});

@@ -387,6 +387,12 @@ test("settle can be skipped only for the exact main-frame server redirect", () =
 
   response.request = () => ({ ...terminal, redirectedFrom: () => null });
   assert.equal(committedConsentServerRedirect(input), false, "Client-side redirects retain their settle.");
+  const intermediate = { ...original, redirectedFrom: (): typeof original | null => original };
+  response.request = () => ({ ...terminal, redirectedFrom: () => intermediate });
+  assert.equal(committedConsentServerRedirect(input), false, "A mismatched redirect count must settle.");
+  assert.equal(committedConsentServerRedirect({ ...input, redirectCount: 2 }), true);
+  response.request = () => ({ ...terminal, redirectedFrom: () => ({...intermediate, frame: () => ({})}) });
+  assert.equal(committedConsentServerRedirect({ ...input, redirectCount: 2 }), false);
   response.request = () => ({ ...terminal, frame: () => ({}) });
   assert.equal(committedConsentServerRedirect(input), false, "A child frame cannot establish the terminal document.");
   response.request = () => terminal;

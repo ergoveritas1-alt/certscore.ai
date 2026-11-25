@@ -17,7 +17,8 @@ import { measurementRequestEvidenceSchema, readBoundMeasurementRequestEvidence }
 import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision, registeredTerminalWindow } from "./terminal-consent-decision";
-import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
+import { assessChoicePathExecution, choiceClickReceiptProjectionSchema, choicePathExecutionSchema,
+  verifiedChoiceClickReceiptSchema, validateClickReceiptProjection, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
 import { googleConsentModeObservationSchema } from "./google-consent-mode";
 import { actionStoragePhaseDiagnosticsSchema } from "./action-storage-collection-diagnostics";
@@ -1098,6 +1099,7 @@ function sameRetainedStorageIdentity(
 
 export const postRefusalLaneOutcomeSchema = z.object({
   contractVersion: z.literal("certscore.post_refusal_lane_outcome.v1"),
+  verifiedClickReceipt: verifiedChoiceClickReceiptSchema.optional(),
   completedAt: z.string().datetime(),
   evidenceJoined: z.boolean(),
   maxTailWaitMs: z.number().int().min(0).max(30_000),
@@ -1111,6 +1113,12 @@ export const postRefusalLaneOutcomeSchema = z.object({
     "reject_path_incomplete_at_passive_barrier",
   ]).optional(),
 }).superRefine((outcome, context) => {
+  if (outcome.verifiedClickReceipt && (outcome.verifiedClickReceipt.action !== "reject" ||
+      (outcome.status !== "timed_out" && outcome.status !== "failed") ||
+      outcome.verifiedClickReceipt.completedAtMs > Date.parse(outcome.completedAt))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["verifiedClickReceipt"],
+      message: "A verified click receipt must match its incomplete lane." });
+  }
   if (outcome.failureReason && outcome.status !== "failed") context.addIssue({ code: z.ZodIssueCode.custom, message: "Failure detail requires a failed lane outcome.", path: ["failureReason"] });
   if (outcome.status === "joined" && (!outcome.evidenceJoined || outcome.limitationCode)) {
     context.addIssue({
@@ -1401,6 +1409,7 @@ export const postRefusalReportProjectionSchema = z.object({
   retainedActionTiming: retainedActionTimingSchema.optional(),
   storageCollectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
   execution: choicePathExecutionSchema.optional(),
+  verifiedClickReceipt: choiceClickReceiptProjectionSchema.optional(),
   registeredObservationCompletion: registeredObservationCompletionSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
   afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT).optional(),
@@ -1424,7 +1433,7 @@ export const postRefusalReportProjectionSchema = z.object({
   refusalExercised: z.boolean(),
   refusalRegisteredAtMs: z.number().int().nonnegative().optional(),
   registrationStatus: postRefusalRegistrationStatusSchema,
-  resolverMethod: postRefusalResolverSchema.shape.method,
+  resolverMethod: postRefusalResolverSchema.shape.method.or(z.literal("verified_click_receipt")),
   status: z.enum([
     "confirmed_observation",
     "confirmed_clean",
@@ -1434,6 +1443,15 @@ export const postRefusalReportProjectionSchema = z.object({
     "aborted",
   ]),
 }).superRefine((projection, context) => {
+  validateClickReceiptProjection(projection, "reject", context);
+  if (projection.verifiedClickReceipt && (projection.postRefusalActivity.length || projection.preConsentStorageNotCleared.length || projection.scoringEvidence ||
+      projection.sentIdentifierWitness || projection.sourceIdentity || projection.propertySaleSharingSource ||
+      projection.afterActionRequests || projection.afterActionStorage || projection.receiptAvailability ||
+      projection.resolver || projection.retainedActionTiming ||
+      projection.storageCollectionDiagnostics || projection.confirmationDiagnostics || projection.passiveCmpDiagnostics)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["verifiedClickReceipt"],
+      message: "An execution-only receipt cannot carry post-click evidence." });
+  }
   validateActionRetentionBudget({action:"reject",coverage:projection.captureCoverage,requestCount:projection.afterActionRequests?.length ?? 0,capture:projection.afterActionCapture},context);
   if (projection.receiptAvailability && (projection.receiptAvailability.action !== "reject" ||
     projection.receiptAvailability.sourcePacketSha256 !== projection.packetSha256)) {

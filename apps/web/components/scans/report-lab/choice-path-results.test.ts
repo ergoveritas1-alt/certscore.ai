@@ -58,7 +58,7 @@ test("path execution success stays independent of the finding and consent decisi
   const execution = { policyVersion: "choice_path_execution.v1", status: "succeeded",
     clickCompleted: true, observationCompleted: true, consentConfirmed: false };
   const html = render({ ...path, afterClickCoverage: "complete", execution });
-  assert.match(html, /Succeeded/);
+  assert.match(html, /Consent unconfirmed/);
   assert.match(html, /data-path-execution-status="succeeded"/);
   assert.match(html, /Consent-state confirmation: not recorded/);
   assert.doesNotMatch(html, /Succeeded with confirmation/);

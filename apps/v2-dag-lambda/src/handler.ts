@@ -1,3 +1,4 @@
+import { EVIDENCE_WORKER_SCAN_BUDGET_MS, actionReleaseStore, newActionPreparation, parseActionPreparation, proofForReadyAction, type ActionLane, type ActionPreparation } from "./dedicated-action-release.js";
 import { readConsentEvidenceWorkerStream } from "./consent-evidence-stream.js";
 import { buildConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES, REJECT_CLICK_CHECKPOINT_MAX_BYTES,
   verifyConsentClickCheckpoint, type VerifiedConsentClickCheckpoint } from "./reject-click-checkpoint.js";
@@ -15,7 +16,7 @@ import { isRejectPreparationId, newRejectPreparationId, rejectPreparationCanaryE
 import type { Browser } from "playwright";
 import { prepareConsentActionPage, shareConsentActionBrowser, type PreparedConsentActionPage } from "@certscore/scan-core/consent-action-browser";
 import type { PostRefusalObserverInput } from "@certscore/scan-core/post-refusal-observer";
-import { retainRuntimeCmsMetadataSnapshot } from "@certscore/contracts";
+import { retainRuntimeCmsMetadataSnapshot, type VerifiedChoiceClickReceipt } from "@certscore/contracts";
 import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import { assessGpcCmpStateComparison } from "@certscore/scan-core/gpc-cmp-state-comparison";
 import { isLoopbackPostRefusalTarget } from "@certscore/scan-core/post-refusal-target-authorization";
@@ -144,7 +145,7 @@ export const LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS = 2_000;
 export const LOCAL_V2_DAG_LAMBDA_DURATION_WARNING_MS = 60_000;
 export const LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS = 65_000;
 export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS = 45_000;
-export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS = 37_000;
+export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS = EVIDENCE_WORKER_SCAN_BUDGET_MS;
 export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_ARTIFACT_CHAIN_TIMEOUT_MS = 43_000;
 export const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_HANDLER_SAFETY_TIMEOUT_MS = 55_000;
 export const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS = 47_000;
@@ -189,6 +190,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   acceptFirstLayerProof?: AcceptFirstLayerProof;
   rejectFirstLayerProof?: RejectFirstLayerProof;
   /** Isolated browser preparation identifies a one-use, proof-bound release. */
+  actionPreparation?: ActionPreparation;
   rejectPreparationId?: string;
   /** Exact digest of the coordinator dispatch, propagated only to workers. */
   parentDispatchSha256?: string;
@@ -596,15 +598,34 @@ type RejectPacketReady = {
   packet: { uri: string; sha256: string; sizeBytes: number };
 };
 
-type RejectClickProgress = (click: ExactClick) => void;
-
 type InlineConsentBrowser = {
   browser: Promise<Browser>;
-  pages: ReturnType<typeof shareConsentActionBrowser>;
+  openPassiveContext: ReturnType<typeof shareConsentActionBrowser>["openPassiveContext"];
   workspaceRoot?: string;
   awsRequestId?: string;
-  rejectNetworkCheck?: ReturnType<typeof beginExactRejectNetworkCheck>;
+  onObservedAction?: (action: ActionLane) => void;
 };
+
+// This signal starts preparation only. Exact proof releases a worker to navigate.
+export function notifyObservedActionLanes(
+  inline: Pick<InlineConsentBrowser, "onObservedAction">,
+  payload: LocalV2DagLambdaDispatchPayload,
+  observation: CanonicalEvidenceBundle["consentUiObservations"][number],
+  signal?: AbortSignal,
+) {
+  if (!inline.onObservedAction || payload.workerLane !== "consent_proof" || signal?.aborted ||
+      observation.captureStatus !== "observed" || observation.layerInspected !== "first_layer") return;
+  for (const action of ["accept", "reject"] as const) {
+    if (!productionConsentGateEnforced(payload, action)) continue;
+    const enabled = action === "accept" ? isPostAcceptWorkerEnabled(payload) : isPostRefusalRejectWorkerEnabled(payload);
+    const config = action === "accept" ? payload.postAcceptObservation : payload.postRefusalObservation;
+    const auth = config?.interactionAuthorization;
+    if (!enabled || auth?.kind !== "scan_target_resolution" || auth.scanId !== payload.scanId ||
+        auth.requestedUrl !== payload.targetUrl || !observation.controls.some(control =>
+          control.visible && control.actionType === (action === "accept" ? "accept_all" : "reject_all"))) continue;
+    inline.onObservedAction(action);
+  }
+}
 
 type HandlerOptions = {
   inlineConsentBrowser?: InlineConsentBrowser;
@@ -618,7 +639,6 @@ type HandlerOptions = {
   resultPublishTimeoutMs?: number;
   onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady) => void;
   onRejectPacketReady?: (receipt: RejectPacketReady) => void;
-  onRejectClickProgress?: RejectClickProgress;
   runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: {
     deadlineAtMs?: number;
     artifactSignal?: AbortSignal;
@@ -970,6 +990,18 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
         !productionConsentGateEnforced(payload,"reject")) throw new Error("reject_gate_proof_not_allowed");
     payload.rejectFirstLayerProof = proof;
   }
+  if (record.actionPreparation !== undefined) {
+    const attempt = parseActionPreparation(record.actionPreparation);
+    const action = payload.workerLane === "accept_observation" ? "accept" : "reject";
+    const cfg = action === "accept" ? payload.postAcceptObservation : payload.postRefusalObservation;
+    const auth = cfg?.interactionAuthorization;
+    if (!attempt || !gatedActionDispatch || payload.orchestrationMode !== "worker" ||
+        !["accept_observation","reject_observation"].includes(payload.workerLane ?? "") ||
+        record.rejectPreparationId !== undefined || record.acceptFirstLayerProof !== undefined || record.rejectFirstLayerProof !== undefined ||
+        !productionConsentGateEnforced(payload,action) || !cfg?.enabled || auth?.kind !== "scan_target_resolution" ||
+        auth.scanId !== payload.scanId || auth.requestedUrl !== payload.targetUrl) throw new Error("action_preparation_not_allowed");
+    payload.actionPreparation = attempt;
+  }
   if (record.rejectPreparationId !== undefined) {
     if (!gatedActionDispatch || !isRejectPreparationId(record.rejectPreparationId) || payload.rejectFirstLayerProof ||
         payload.orchestrationMode !== "worker" || payload.workerLane !== "reject_observation" ||
@@ -978,7 +1010,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     }
     payload.rejectPreparationId = record.rejectPreparationId;
   }
-  if (gatedActionDispatch && !payload.acceptFirstLayerProof && !payload.rejectFirstLayerProof && !payload.rejectPreparationId) {
+  if (gatedActionDispatch && !payload.acceptFirstLayerProof && !payload.rejectFirstLayerProof && !payload.rejectPreparationId && !payload.actionPreparation) {
     throw new Error("consent_gated_action_dispatch_requires_exact_proof");
   }
   return payload;
@@ -1475,6 +1507,12 @@ export async function runLocalV2DagLambdaArtifactChain(
     }
   }
 
+  const borrowed = options.borrowedConsentBrowser;
+  if (borrowed) {
+    for (const observation of bundle.consentUiObservations) {
+      notifyObservedActionLanes(borrowed, payload, observation, options.signal);
+    }
+  }
   const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({
     artifactRoot,
     bundle,
@@ -1541,12 +1579,16 @@ async function runLocalV2DagLambdaScanBundle(
     try {
       const { runScan } = await import("@certscore/scan-core");
       if (localGpcAdaptiveEnabled(payload) && !options.localGpcAdaptiveParticipant) throw new Error("Adaptive local comparison requires the paired simulator.");
-      const borrowedConsentBrowser = await options.borrowedConsentBrowser?.browser;
+      const inline = options.borrowedConsentBrowser;
+      const borrowedConsentBrowser = await inline?.browser;
       options.signal?.throwIfAborted();
       const bundle = await runScan({
         scanId: payload.scanId,
         borrowedConsentBrowser,
-        openBorrowedConsentContext: options.borrowedConsentBrowser?.pages.openPassiveContext,
+        openBorrowedConsentContext: inline?.openPassiveContext,
+        onFirstLayerObservation: inline
+          ? observation => notifyObservedActionLanes(inline, payload, observation, options.signal)
+          : undefined,
         localPolicyNanoAssistProvider: options.localPolicyNanoAssistProvider,
         resourceInventoryCrawl: payload.resourceInventoryCrawl,
         resourceInventoryDiscovery: payload.resourceInventoryDiscovery,
@@ -1636,7 +1678,8 @@ function isLocalConsentHandoffPayload(payload: LocalV2DagLambdaDispatchPayload) 
 
 function isCloudConsentHandoffPayload(payload: LocalV2DagLambdaDispatchPayload) {
   return payload.targetEnvironment === "production" && payload.workerLane === "consent_proof" &&
-    payload.orchestrationMode === "worker" && productionConsentGateEnforced(payload,"reject") &&
+    payload.orchestrationMode === "worker" &&
+    (productionConsentGateEnforced(payload,"reject") || productionConsentGateEnforced(payload,"accept")) &&
     !isLoopbackPostRefusalTarget(payload.targetUrl) &&
     typeof payload.parentDispatchSha256 === "string" && /^[a-f0-9]{64}$/.test(payload.parentDispatchSha256);
 }
@@ -2457,9 +2500,12 @@ function unsupportedPostRefusalPacket(input: {
 type ClickProofBinding = Parameters<typeof buildConsentClickCheckpoint>[0];
 type ExactClick = Parameters<NonNullable<PostRefusalObserverInput["onExactRejectClickCompleted"]>>[0];
 
-function consentClickCheckpointEnabled(action: ClickProofBinding["action"]) {
-  return process.env[action === "accept" ? "CERTSCORE_ACCEPT_CLICK_CHECKPOINT_ENABLED" :
-    "CERTSCORE_REJECT_CLICK_CHECKPOINT_ENABLED"] === "1";
+function consentClickCheckpointEnabled(payload: LocalV2DagLambdaDispatchPayload, action: ClickProofBinding["action"]) {
+  const setting = process.env[action === "accept" ? "CERTSCORE_ACCEPT_CLICK_CHECKPOINT_ENABLED" :
+    "CERTSCORE_REJECT_CLICK_CHECKPOINT_ENABLED"];
+  if (setting !== undefined) return setting === "1";
+  return productionConsentGateEnforced(payload, action) &&
+    classifyV2DagLambdaResultDisposition(payload).kind === "persisted_scan";
 }
 
 function consentClickCheckpointSink(
@@ -2468,7 +2514,7 @@ function consentClickCheckpointSink(
   options: { s3Client?: S3PutClient; signal?: AbortSignal },
   readRecheck: () => { outcome: "passed" | "failed"; observedAtMs: number } | undefined,
 ): ((click: ExactClick) => void) | undefined {
-  if (!consentClickCheckpointEnabled(binding.action)) return;
+  if (!consentClickCheckpointEnabled(payload, binding.action)) return;
   let started = false;
   return ({ control, dispatchedAtMs, completedAtMs }) => {
     const recheck = readRecheck();
@@ -2516,6 +2562,50 @@ export function beginExactRejectNetworkCheck(
   };
 }
 
+/** Prepare one private process while the coordinator seals the passive evidence.
+ * There is no target navigation here. The observer rechecks the live control. */
+export async function prepareDedicatedConsentWorker(input: {
+  action: ActionLane;
+  deadlineAtMs: number;
+  signal?: AbortSignal;
+  launch: (remainingMs: number) => Promise<Browser>;
+  onReady?: (signal: AbortSignal) => Promise<unknown>;
+  take: (signal: AbortSignal) => Promise<AcceptFirstLayerProof | RejectFirstLayerProof>;
+}) {
+  const remaining = input.deadlineAtMs - Date.now();
+  if (remaining <= 0) throw new Error("action_preparation_timeout");
+  input.signal?.throwIfAborted();
+  const cancellation = new AbortController();
+  const signal = AbortSignal.any([cancellation.signal, AbortSignal.timeout(remaining),
+    ...(input.signal ? [input.signal] : [])]);
+  const launched = input.launch(remaining);
+  const ready = launched.then(async browser => {
+    signal.throwIfAborted();
+    const page = await prepareConsentActionPage(browser, true, input.action);
+    await input.onReady?.(signal);
+    return page;
+  });
+  let abortWait!: () => void;
+  const aborted = new Promise<never>((_, reject) => {
+    abortWait = () => reject(signal.reason);
+    signal.addEventListener("abort", abortWait, {once: true});
+    if (signal.aborted) abortWait();
+  });
+  try {
+    const prepared = ready.then(async page => ({ page, proof: await input.take(signal) }));
+    const { page, proof } = await Promise.race([prepared, aborted]);
+    signal.throwIfAborted();
+    if (Date.now() >= Math.min(input.deadlineAtMs, proof.expiresAtMs)) throw new Error("action_release_expired");
+    return { page, proof };
+  } catch (error) {
+    cancellation.abort();
+    void launched.then(browser => browser.close()).catch(() => undefined);
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", abortWait);
+  }
+}
+
 export async function startBlankExactActionBrowser(timeoutMs: number) {
   const { chromium } = await import("playwright");
   const options = chromiumLaunchOptions({ headless: true });
@@ -2539,7 +2629,6 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   options: {
     artifactRoot: string;
     earlyActionPage?: Promise<PreparedConsentActionPage>;
-    onRejectClickProgress?: RejectClickProgress;
     onRejectPacketReady?: (receipt: RejectPacketReady) => void;
     prepared?: { browser: Browser; gate: RejectPreparationGate };
     s3Client?: S3PutClient;
@@ -2678,12 +2767,6 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
         },
         onExactRejectClickCompleted: (click: ExactClick) => {
           onExactRejectClickCompleted?.(click);
-          if (!options.onRejectClickProgress || options.signal?.aborted ||
-              gateRecheck?.outcome !== "passed" || !firstLayerProof) return;
-          const checkpoint = buildConsentClickCheckpoint({ action: "reject", proof: firstLayerProof }, click.control, {
-            recheckedAtMs: gateRecheck.observedAtMs, dispatchedAtMs: click.dispatchedAtMs, completedAtMs: click.completedAtMs,
-          });
-          if (checkpoint) options.onRejectClickProgress(click);
         },
         onExactRejectPacketSealed: (sealed: PostRefusalEvidencePacket) => {
           if (gateRecheck?.outcome !== "passed" || earlyArchive || options.signal?.aborted) return;
@@ -3143,12 +3226,6 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     resolveRejectProof = decision => {
       if (released) return;
       released = true;
-      const inline = options.inlineConsentBrowser;
-      if (inline && !inline.rejectNetworkCheck && decision?.outcome === "qualified" && !options.signal?.aborted) {
-        inline.rejectNetworkCheck = beginExactRejectNetworkCheck(payload.targetUrl, {
-          ...decision, scanId: payload.scanId,
-        }, options.signal);
-      }
       resolve(decision);
     };
   });
@@ -3159,6 +3236,35 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const gateDeclines: Partial<Record<"accept" | "reject", string>> = {};
   const consentGateDispatchDeadlineMs = {accept:options.deadlineAtMs ?? Infinity,reject:options.deadlineAtMs ?? Infinity};
   const consentParentSha256 = postRefusalParentDispatchSha256(payload);
+  const dispatchedProofs: { accept?: AcceptFirstLayerProof; reject?: RejectFirstLayerProof } = {};
+  const qualifiedForAction = () => {
+    if (!shadowPassive) return;
+    const accept = shadowPassive.accept, reject = shadowPassive.reject;
+    const boundAccept = accept?.outcome === "qualified" && dispatchedProofs.accept?.sourceSha256 === accept.proof.sourceSha256
+      && dispatchedProofs.accept?.geometrySha256 === accept.proof.geometrySha256
+      && dispatchedProofs.accept?.exactSelector === accept.proof.exactSelector
+      && dispatchedProofs.accept?.labelSha256 === accept.proof.labelSha256 ? dispatchedProofs.accept : undefined;
+    const boundReject = reject?.outcome === "qualified" && dispatchedProofs.reject?.binding.sourceSha256 === reject.binding.sourceSha256
+      && dispatchedProofs.reject?.binding.geometrySha256 === reject.binding.geometrySha256
+      && dispatchedProofs.reject?.exactSelector === reject.exactSelector
+      && dispatchedProofs.reject?.binding.labelSha256 === reject.binding.labelSha256 ? dispatchedProofs.reject : undefined;
+    return {
+      ...shadowPassive,
+      accept: boundAccept && accept?.outcome === "qualified" ? { ...accept, proof: boundAccept } : accept,
+      reject: boundReject && reject?.outcome === "qualified"
+        ? { ...reject, issuedAtMs: boundReject.issuedAtMs, expiresAtMs: boundReject.expiresAtMs } : reject,
+    };
+  };
+  const preparations = dedicatedConsentLanes({
+    payload, lambdaClient: options.lambdaClient, s3Client: options.s3Client, s3GetClient: options.s3GetClient,
+    deadlineAtMs: options.deadlineAtMs,
+    signalFor: action => {
+      const laneSignal = action === "accept" ? postAcceptAbortController.signal : postRefusalAbortController.signal;
+      return options.signal ? AbortSignal.any([laneSignal, options.signal]) : laneSignal;
+    },
+    onRejectPacketReady: (notice, expected) => receiveRejectPacket(notice, expected),
+  });
+  if (options.inlineConsentBrowser) options.inlineConsentBrowser.onObservedAction = preparations.observe;
   const postRefusalState: {
     passiveAbsence: boolean;
     passiveCoverageLimited?: boolean;
@@ -3174,8 +3280,13 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   } = { passiveAbsence: false, cancelledNoReject: false, settled: false, started: false, timedOut: false };
   let postRefusalWorkerPromise: Promise<void> | undefined;
   let earlyRejectPacket: ReturnType<typeof startRejectPacketVerification> | undefined;
-  let verifiedInlineRejectClickAtMs: number | undefined;
-  let inlineRejectContinuation: "aria_label" | "onetrust_native" | undefined;
+  const receiveRejectPacket = (notice: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => {
+    earlyRejectPacket = startRejectPacketVerification(notice, expected, {
+      awsRegion: payload.awsRegion, s3GetClient: evidenceReader, signal: postRefusalAbortController.signal,
+    });
+    void earlyRejectPacket?.verified.catch(() => undefined);
+  };
+  let rejectContinuation: "aria_label" | "onetrust_native" | undefined;
   const postRefusalAbortController = new AbortController();
   postRefusalAbortController.signal.addEventListener("abort", () => {
     postRefusalState.error = postRefusalState.cancelledNoReject
@@ -3209,7 +3320,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         try {
           postRefusalWorkerSignal.throwIfAborted();
           const nowMs = Date.now();
+          const preparedLane = preparations.decide("reject");
           if (enforced.reject && (nowMs >= consentGateDispatchDeadlineMs.reject || !(rejectFirstLayerProofMatches(proof,payload.scanId,payload.targetUrl,consentParentSha256,nowMs)))) {
+            await preparedLane?.decline().catch(() => undefined);
             gateDeclines.reject = decision?.outcome === "blocked" ? decision.reason :
               decision?.outcome === "qualified" ? "proof_expired" : "source_unavailable";
             postRefusalState.error = gateDeclines.reject;
@@ -3218,11 +3331,19 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             return undefined;
           }
           if (preparationError) throw preparationError;
-          postRefusalState.dispatchStartedAtMs = nowMs;
-          if (options.inlineConsentBrowser && !preparationId && proof && payload.postRefusalObservation?.observationWindowMs === 8_000) {
-            inlineRejectContinuation = proof.binding.labelSource === "aria_label" ? "aria_label" :
+          if (proof && !preparationId && payload.postRefusalObservation?.observationWindowMs === 8_000) {
+            rejectContinuation = proof.binding.labelSource === "aria_label" ? "aria_label" :
               proof.exactSelector === "#onetrust-reject-all-handler" ? "onetrust_native" : undefined;
           }
+          if (preparedLane && proof) {
+            const released = await preparedLane.release(proof, () => consentGateDispatchDeadlineMs.reject, renewed => {
+              dispatchedProofs.reject = renewed;
+              postRefusalState.dispatchStartedAtMs = renewed.issuedAtMs;
+            });
+            if (released) return preparedLane.result;
+            if (Date.now() >= Math.min(proof.expiresAtMs, consentGateDispatchDeadlineMs.reject)) throw new Error("action_release_expired");
+          }
+          postRefusalState.dispatchStartedAtMs = Date.now();
           if (preparationId && proof && prepared && sendRejectProof) {
             await sendRejectProof({
               scanId: payload.scanId, targetUrl: payload.targetUrl,
@@ -3236,20 +3357,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             parentScanId: payload.scanId,
             signal: postRefusalWorkerSignal,
             ...(proof ? {rejectFirstLayerProof:proof} : {}),
-            inlineConsentBrowser: options.inlineConsentBrowser,
-            ...(inlineRejectContinuation ? { onRejectClickProgress: (click: ExactClick) => {
-              if (inlineRejectContinuation === "aria_label" || click.control.cmpId === "OneTrust") {
-                verifiedInlineRejectClickAtMs ??= click.completedAtMs;
-              }
-            } } : {}),
-            ...(proof && useCloudConsentHandoff ? {
-              onRejectPacketReady: (notice: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => {
-                earlyRejectPacket = startRejectPacketVerification(notice, expected, {
-                  awsRegion: payload.awsRegion, s3GetClient: evidenceReader, signal: postRefusalWorkerSignal,
-                });
-                void earlyRejectPacket?.verified.catch(() => undefined);
-              },
-            } : {}),
+            ...(proof && useCloudConsentHandoff ? { onRejectPacketReady: receiveRejectPacket } : {}),
             workerLane: "reject_observation",
           });
         } finally {
@@ -3318,8 +3426,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
 
         postAcceptWorkerSignal.throwIfAborted();
         const nowMs = Date.now();
+        const preparedLane = preparations.decide("accept");
         if (enforced.accept && (nowMs >= consentGateDispatchDeadlineMs.accept || !(proof?.exactSelector && proof.parentDispatchSha256 === consentParentSha256 &&
             acceptFirstLayerProofMatches(proof,payload.scanId,payload.targetUrl,nowMs)))) {
+          await preparedLane?.decline().catch(() => undefined);
           gateDeclines.accept = decision?.outcome === "blocked" ? decision.reason :
             decision?.outcome === "qualified" ? "proof_expired" : "source_unavailable";
           postAcceptState.error = gateDeclines.accept;
@@ -3327,14 +3437,21 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           postAcceptState.settled = true;
           return undefined;
         }
-        postAcceptState.dispatchStartedAtMs = nowMs;
+        if (preparedLane && proof) {
+          const released = await preparedLane.release(proof, () => consentGateDispatchDeadlineMs.accept, renewed => {
+            dispatchedProofs.accept = renewed;
+            postAcceptState.dispatchStartedAtMs = renewed.issuedAtMs;
+          });
+          if (released) return preparedLane.result;
+          if (Date.now() >= Math.min(proof.expiresAtMs, consentGateDispatchDeadlineMs.accept)) throw new Error("action_release_expired");
+        }
+        postAcceptState.dispatchStartedAtMs = Date.now();
         return invokeLocalV2DagLambdaWorker({
           lambdaClient: options.lambdaClient,
           parentPayload: payload,
           parentScanId: payload.scanId,
           signal: postAcceptWorkerSignal,
           ...(proof ? {acceptFirstLayerProof:proof} : {}),
-          inlineConsentBrowser: options.inlineConsentBrowser,
           workerLane: "accept_observation",
         });
       })
@@ -3361,13 +3478,14 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     accept: enforced.accept || isPostAcceptWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "accept"),
     reject: enforced.reject || isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateShadowEnabled(payload, "reject"),
   };
-  const useCloudConsentHandoff = enforced.reject && !options.lambdaClient;
+  const useCloudConsentHandoff = (enforced.reject || enforced.accept) && !options.lambdaClient;
   const sharedEvidenceStore = useCloudConsentHandoff && !options.s3GetClient
     ? localV2DagLambdaS3Client(payload.awsRegion) : undefined;
   const evidenceReader = options.s3GetClient ?? sharedEvidenceStore;
   const streamReader = options.s3GetClient ?? (sharedEvidenceStore
     ? localV2DagLambdaS3Client(payload.awsRegion,1,sharedEvidenceStore.config.requestHandler) : undefined);
   let streamedConsent: { receipt: LocalConsentEvidenceReady; verified: ReturnType<typeof readConsentEvidenceReady> } | undefined;
+  let earlyAccept: ReturnType<typeof evaluateConsentGateShadow>["accept"];
   let earlyReject: ReturnType<typeof evaluateConsentGateShadow>["reject"];
   const receiveConsentEvidence = (receipt: LocalConsentEvidenceReady, expected: LocalV2DagLambdaDispatchPayload) => {
     if (!receipt.bundle || !receipt.geometry) throw new Error("Consent worker early notice is incomplete.");
@@ -3376,11 +3494,16 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       s3GetClient: streamReader!,
     }, true).then(evidence => {
       if (!options.signal?.aborted) {
-        const decision = evaluateConsentGateShadow({
-          ...evidence, channels:{accept:false,reject:true}, scanId:expected.scanId,
-          targetUrl:expected.targetUrl, parentDispatchSha256:expected.parentDispatchSha256!,
-          nowMs:Date.now(), deadlineAtMs:options.deadlineAtMs ?? Infinity,
-        }).reject;
+        const decisions = evaluateConsentGateShadow({
+          ...evidence, channels: { accept: enforced.accept && !usePreparedReject, reject: enforced.reject },
+          scanId: expected.scanId, targetUrl: expected.targetUrl, parentDispatchSha256: expected.parentDispatchSha256!,
+          nowMs: Date.now(), deadlineAtMs: options.deadlineAtMs ?? Infinity,
+        });
+        if (decisions.accept?.outcome === "qualified") {
+          earlyAccept = decisions.accept;
+          resolveConsentProof({ accept: earlyAccept });
+        }
+        const decision = decisions.reject;
         if (decision?.outcome === "qualified") {
           earlyReject = decision;
           resolveRejectProof(decision);
@@ -3447,9 +3570,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         channels:shadowChannels, bundle, scanId:payload.scanId, targetUrl:payload.targetUrl,
         sourceSha256, parentDispatchSha256, nowMs:Date.now(), deadlineAtMs:options.deadlineAtMs ?? Infinity, geometry,
       };
+      const reusableAccept = earlyAccept?.outcome === "qualified" && geometry?.sha256 === earlyAccept.proof.geometrySha256 &&
+        sourceSha256 === earlyAccept.proof.sourceSha256 ? earlyAccept : undefined;
+      if (reusableAccept) input.channels = {...input.channels, accept: false};
       shadowPassive = earlyReject?.outcome === "qualified" &&
           geometry?.sha256 === earlyReject.binding.geometrySha256 && sourceSha256 === earlyReject.binding.sourceSha256
-        ? { ...evaluateConsentGateShadow({...input,channels:{...shadowChannels,reject:false}}), reject:earlyReject }
+        ? { ...evaluateConsentGateShadow({...input,channels:{...input.channels,reject:false}}), reject:earlyReject }
         : usePreparedReject
         ? await evaluatePreparationGateRejectFirst(input, partial => {
             shadowPassive = partial;
@@ -3459,6 +3585,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             ).catch(() => undefined);
           }, options.signal)
         : evaluateConsentGateShadow(input);
+      if (reusableAccept) shadowPassive.accept = reusableAccept;
     }).catch(() => { /* Existing coordinator joins handle artifact failures. */ })
       .finally(() => {
         resolveRejectProof(shadowPassive?.reject);
@@ -3771,9 +3898,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     const remaining = await awaitRejectWorkerWithLateClickAllowance({
       abortController: postRefusalAbortController, passiveLaneBarrierCompletedAtMs,
       maxTailWaitMs: postRefusalMaxTailWaitMs, absoluteDeadlineAtMs: options.deadlineAtMs,
-      inlineDispatch: inlineRejectContinuation && postRefusalState.dispatchStartedAtMs !== undefined
-        ? { kind: inlineRejectContinuation, startedAtMs: postRefusalState.dispatchStartedAtMs } : undefined,
-      verifiedClickAtMs: () => verifiedInlineRejectClickAtMs,
+      inlineDispatch: rejectContinuation && postRefusalState.dispatchStartedAtMs !== undefined
+        ? { kind: rejectContinuation, startedAtMs: postRefusalState.dispatchStartedAtMs } : undefined,
+      verifiedClickAtMs: () => verifiedClicks.reject?.checkpoint.completedAtMs,
       workerPromise, workerAlreadySettled,
     });
     postRefusalMaxTailWaitMs = remaining.maxTailWaitMs;
@@ -3850,23 +3977,27 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       return true;
     }
   };
-  const verifiedClicks: Partial<Record<ClickProofBinding["action"], VerifiedConsentClickCheckpoint>> = {};
+  const verifiedClicks: Partial<Record<ClickProofBinding["action"], {
+    checkpoint: VerifiedConsentClickCheckpoint; receipt: VerifiedChoiceClickReceipt;
+  }>> = {};
   const clickCheckpointReadController = new AbortController();
-  const scheduleClickCheckpointRead = (action: ClickProofBinding["action"], maxTailMs: number) => {
-    if (!enforced[action] || !consentClickCheckpointEnabled(action)) return;
+  const scheduleClickCheckpointReads = (action: ClickProofBinding["action"], maxTailMs: number) => {
+    if (!enforced[action] || !consentClickCheckpointEnabled(payload, action)) return [];
     const deadlineAtMs = Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + maxTailMs);
-    return setTimeout(() => {
+    const read = () => {
       const state = action === "accept" ? postAcceptState : postRefusalState;
       const dispatchAt = state.dispatchStartedAtMs;
       const joined = action === "accept" ? joinedPostAcceptPacket : joinedPostRefusalPacket;
       const cancelled = action === "accept" ? postAcceptState.cancelledNoAccept : postRefusalState.cancelledNoReject;
-      if (joined || dispatchAt === undefined || cancelled || options.signal?.aborted || Date.now() >= deadlineAtMs) return;
+      if (joined || verifiedClicks[action] || dispatchAt === undefined || cancelled ||
+          options.signal?.aborted || Date.now() >= deadlineAtMs) return;
       let binding: ClickProofBinding | undefined;
-      if (action === "accept" && shadowPassive?.accept?.outcome === "qualified") {
-        binding = { action, proof: shadowPassive.accept.proof };
+      const passive = qualifiedForAction();
+      if (action === "accept" && passive?.accept?.outcome === "qualified") {
+        binding = { action, proof: passive.accept.proof };
       }
-      if (action === "reject" && shadowPassive?.reject?.outcome === "qualified") {
-        const proof = readRejectFirstLayerProof({ ...shadowPassive.reject, scanId: payload.scanId });
+      if (action === "reject" && passive?.reject?.outcome === "qualified") {
+        const proof = readRejectFirstLayerProof({ ...passive.reject, scanId: payload.scanId });
         if (proof) binding = { action, proof };
       }
       if (!binding) return;
@@ -3884,17 +4015,36 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
               response.ContentRange !== `bytes 0-${response.ContentLength - 1}/${response.ContentLength}`) return;
           const body = await streamToBuffer(response.Body);
           if (signal.aborted || body.length !== response.ContentLength) return;
-          verifiedClicks[action] = verifyConsentClickCheckpoint({
+          const verified = verifyConsentClickCheckpoint({
             body, metadataSha256: response.Metadata?.sha256, binding: boundProof,
             coordinatorDispatchAtMs: dispatchAt, verifiedAtMs: Date.now(), deadlineAtMs,
           });
+          if (verified) verifiedClicks[action] ??= {
+            checkpoint: verified,
+            receipt: {
+              policyVersion: "verified_choice_click_receipt.v1",
+              action,
+              scanId: verified.scanId,
+              requestedTargetSha256: boundProof.action === "accept"
+                ? boundProof.proof.requestedTargetSha256 : boundProof.proof.binding.requestedTargetSha256,
+              gateProofSha256: verified.gateProofSha256,
+              receiptSha256: verified.receiptSha256,
+              completedAtMs: verified.completedAtMs,
+            },
+          };
         } catch { /* A click receipt cannot delay or change the observation join. */ }
       })();
-    }, Math.max(0, deadlineAtMs - Date.now() - 750));
+    };
+    // A click can complete after the first read while its observation is still
+    // running. Allow one final read inside the existing coordinator deadline.
+    const remaining = deadlineAtMs - Date.now();
+    if (remaining <= 0) return [];
+    const leadTimes = remaining > 750 ? [750, 250] : [250];
+    return leadTimes.map(leadMs => setTimeout(read, Math.max(0, remaining - leadMs)));
   };
   const clickCheckpointReadTimers = [
-    scheduleClickCheckpointRead("accept", POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS),
-    scheduleClickCheckpointRead("reject", POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS),
+    ...scheduleClickCheckpointReads("accept", POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS),
+    ...scheduleClickCheckpointReads("reject", POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS),
   ];
   const [postRefusalCompletedInsideBarrier, postAcceptCompletedInsideBarrier] = await Promise.all([
     joinPostRefusalWithinBarrier(),
@@ -3903,8 +4053,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     for (const timer of clickCheckpointReadTimers) clearTimeout(timer);
     clickCheckpointReadController.abort();
   });
-  const acceptClickCheckpoint = joinedPostAcceptPacket ? undefined : verifiedClicks.accept;
-  const rejectClickCheckpoint = joinedPostRefusalPacket ? undefined : verifiedClicks.reject;
+  const acceptClickCheckpoint = verifiedClicks.accept?.checkpoint;
+  const rejectClickCheckpoint = verifiedClicks.reject?.checkpoint;
   if (postRefusalCompletedInsideBarrier === false && !postRefusalState.cancelledNoReject) {
     postRefusalState.error = "reject_path_exceeded_post_primary_join_budget";
     postRefusalState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
@@ -3936,6 +4086,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       ...(joinedPostRefusalPacket ? { postRefusalEvidence: joinedPostRefusalPacket } : {}),
       postRefusalLaneOutcome: {
         contractVersion: "certscore.post_refusal_lane_outcome.v1",
+        ...(!joinedPostRefusalPacket && rejectClickCheckpoint ? { verifiedClickReceipt: verifiedClicks.reject!.receipt } : {}),
         completedAt: outcomeCompletedAt,
         evidenceJoined: postRefusalJoin === "joined",
         maxTailWaitMs: postRefusalMaxTailWaitMs,
@@ -3969,6 +4120,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       ...(joinedPostAcceptPacket ? { postAcceptEvidence: joinedPostAcceptPacket } : {}),
       postAcceptLaneOutcome: {
         contractVersion: "certscore.post_accept_lane_outcome.v1",
+        ...(!joinedPostAcceptPacket && acceptClickCheckpoint ? { verifiedClickReceipt: verifiedClicks.accept!.receipt } : {}),
         completedAt: outcomeCompletedAt,
         evidenceJoined: postAcceptJoin === "joined",
         maxTailWaitMs: postAcceptMaxTailWaitMs,
@@ -4086,7 +4238,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   });
 
   const shadow = shadowChannels.accept || shadowChannels.reject ? buildProductionConsentGateShadow({
-    scanId:payload.scanId, channels:shadowChannels, passive:shadowPassive, nowMs:Date.now(), enforced, gateDeclines,
+    scanId:payload.scanId, channels:shadowChannels, passive:qualifiedForAction(), nowMs:Date.now(), enforced, gateDeclines,
     acceptRecheck:postAcceptState.result?.acceptGateWorkerRecheck,
     rejectRecheck:postRefusalState.result?.rejectGateWorkerRecheck,
     rejectPacketSha256:postRefusalState.result?.artifactMetadata?.postRefusalPacketUri?.sha256,
@@ -4399,9 +4551,87 @@ export async function invokeLocalV2DagLambdaWorkers(input: {
   return results;
 }
 
+/** Reserve at most one worker per observed action for this coordinator. A later
+ * passive decision can release its worker or close the lane before any hint. */
+export function dedicatedConsentLanes(input: {
+  payload: LocalV2DagLambdaDispatchPayload;
+  lambdaClient?: LambdaInvokeClient;
+  s3Client?: S3PutClient;
+  s3GetClient?: S3GetClient;
+  deadlineAtMs?: number;
+  signalFor: (action: ActionLane) => AbortSignal;
+  onRejectPacketReady?: (receipt: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => void;
+}) {
+  const pending = new Map<ActionLane, {
+    result: Promise<LocalV2DagLambdaShardResult>;
+    decline: () => Promise<void>;
+    release<P extends AcceptFirstLayerProof | RejectFirstLayerProof>(
+      proof: P, deadlineAtMs: () => number, onRelease?: (proof: P) => void,
+    ): Promise<boolean>;
+  }>();
+  const decided = new Set<ActionLane>();
+  return {
+    observe(action: ActionLane) {
+      const signal = input.signalFor(action);
+      if (signal.aborted || pending.has(action) || decided.has(action)) return;
+      const attempt = newActionPreparation(input.deadlineAtMs ?? Infinity);
+      const remaining = attempt.waitUntilMs - Date.now();
+      if (remaining <= 0) return;
+      const releaseSignal = AbortSignal.any([signal, AbortSignal.timeout(remaining)]);
+      const workerLane = action === "accept" ? "accept_observation" : "reject_observation";
+      const prefix = artifactKeyPrefix({ ...input.payload, orchestrationMode: "worker", workerLane });
+      const defaultClient = !input.s3Client || !input.s3GetClient
+        ? localV2DagLambdaS3Client(input.payload.awsRegion, 1) : undefined;
+      const get = input.s3GetClient ?? defaultClient!;
+      const store = actionReleaseStore(requireArtifactBucket(), prefix, attempt, input.s3Client ?? defaultClient!);
+      const opened = store.initialize(releaseSignal);
+      const result = opened.then(() => {
+        releaseSignal.throwIfAborted();
+        console.info(JSON.stringify({event: "consent_action_preparation_started.v1", scanId: input.payload.scanId,
+          action, startedAtMs: Date.now(), waitUntilMs: attempt.waitUntilMs}));
+        return invokeLocalV2DagLambdaWorker({
+          actionPreparation: attempt, workerLane, lambdaClient: input.lambdaClient, parentPayload: input.payload,
+          parentScanId: input.payload.scanId, signal,
+          onRejectPacketReady: action === "reject" ? input.onRejectPacketReady : undefined,
+        });
+      });
+      void result.catch(() => undefined);
+      pending.set(action, {
+        result,
+        async decline() {
+          await opened;
+          await store.decline(get, releaseSignal);
+        },
+        async release(proof, deadlineAtMs, onRelease) {
+          try {
+            await opened;
+          } catch {
+            // Without a reservation there was no invocation to race with.
+            signal.throwIfAborted();
+            return false;
+          }
+          const readyBy = Math.min(proof.expiresAtMs, deadlineAtMs(), attempt.waitUntilMs);
+          if (readyBy <= Date.now()) throw new Error("action_release_expired");
+          const handoff = AbortSignal.any([releaseSignal, AbortSignal.timeout(Math.max(1, readyBy - Date.now()))]);
+          const tag = await store.waitForReady(get, readyBy, handoff);
+          const dispatch = proofForReadyAction(proof, Math.min(deadlineAtMs(), attempt.waitUntilMs));
+          onRelease?.(dispatch);
+          await store.release(tag, dispatch, releaseSignal);
+          return true;
+        },
+      });
+    },
+    decide(action: ActionLane) {
+      decided.add(action);
+      return pending.get(action);
+    },
+  };
+}
+
 export async function invokeLocalV2DagLambdaWorker(input: {
   acceptFirstLayerProof?: AcceptFirstLayerProof;
   rejectFirstLayerProof?: RejectFirstLayerProof;
+  actionPreparation?: ActionPreparation;
   rejectPreparationId?: string;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   inlineConsentBrowser?: InlineConsentBrowser;
@@ -4410,23 +4640,24 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   parentScanId: string;
   onConsentEvidenceReady?: (receipt: LocalConsentEvidenceReady, expected: LocalV2DagLambdaDispatchPayload) => void;
   onRejectPacketReady?: (receipt: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => void;
-  onRejectClickProgress?: RejectClickProgress;
   signal?: AbortSignal;
   workerLane: LocalV2DagLambdaWorkerLane;
 }): Promise<LocalV2DagLambdaShardResult> {
   assertPrivacyCaptureProfile(input.parentPayload, input.workerLane);
   const workerLane = input.workerLane;
   const enforceWorker = input.acceptFirstLayerProof !== undefined || input.rejectFirstLayerProof !== undefined ||
-    input.rejectPreparationId !== undefined;
+    input.rejectPreparationId !== undefined || input.actionPreparation !== undefined;
   const lambdaClient = input.rejectPreparationId
     ? new LambdaClient({ region:input.parentPayload.awsRegion, maxAttempts:1 })
     : input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,
     ...(enforceWorker || input.parentPayload.saleSharingOptOut?.canaryAuthorization ||
       input.parentPayload.privacyCaptureProfile===CONDITIONAL_OPT_OUT_CAPTURE_PROFILE ? {maxAttempts:1} : {}) });
   const { gpcObservation: parentGpcObservation, acceptFirstLayerProof: _acceptProof, rejectFirstLayerProof: _rejectProof,
+    actionPreparation: _preparation, rejectPreparationId: _rejectPreparationId,
     ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
     ...parentPayloadWithoutGpcObservation,
+    ...(input.actionPreparation ? {actionPreparation:input.actionPreparation} : {}),
     ...(["cmp_preferences", "sale_sharing_opt_out", "policy_evidence", "runtime_evidence"].includes(workerLane) ||
       (workerLane === "consent_proof" && (productionConsentGateShadowEnabled(input.parentPayload, "accept") ||
         productionConsentGateShadowEnabled(input.parentPayload, "reject") ||
@@ -4471,13 +4702,10 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   let responsePayload: Uint8Array | undefined;
   const onConsentReady = isCloudConsentHandoffPayload(workerPayload) ? input.onConsentEvidenceReady : undefined;
   const onRejectReady = workerLane === "reject_observation" && workerPayload.targetEnvironment === "production" &&
-    input.rejectFirstLayerProof && !input.rejectPreparationId ? input.onRejectPacketReady : undefined;
-  const inlineAction = workerLane === "accept_observation"
-    ? isPostAcceptWorkerEnabled(workerPayload) &&
-      (!productionConsentGateEnforced(workerPayload, "accept") || Boolean(input.acceptFirstLayerProof))
-    : workerLane === "reject_observation" && !input.rejectPreparationId && isPostRefusalRejectWorkerEnabled(workerPayload) &&
-      (!productionConsentGateEnforced(workerPayload, "reject") || Boolean(input.rejectFirstLayerProof));
-  if (input.inlineConsentBrowser && (workerLane === "consent_proof" || inlineAction)) {
+    !input.lambdaClient && (input.rejectFirstLayerProof || input.actionPreparation) && !input.rejectPreparationId ? input.onRejectPacketReady : undefined;
+  // Conditional action lanes always invoke Lambda. Only passive capture can
+  // borrow the coordinator's Chromium process for its first-layer signal.
+  if (input.inlineConsentBrowser && workerLane === "consent_proof") {
     const inline = input.inlineConsentBrowser;
     // Retain the same worker parser, network validation, scan deadlines, and
     // original evidence checks. Only the physical invocation is shared.
@@ -4488,10 +4716,6 @@ export async function invokeLocalV2DagLambdaWorker(input: {
       workspaceRoot: inline.workspaceRoot,
       ...(onConsentReady ? { onConsentEvidenceReady: (notice: LocalConsentEvidenceReady) =>
         onConsentReady(notice, workerPayload) } : {}),
-      ...(workerLane === "reject_observation" && input.onRejectClickProgress
-        ? { onRejectClickProgress: input.onRejectClickProgress } : {}),
-      ...(onRejectReady ? { onRejectPacketReady: (notice: RejectPacketReady) =>
-        onRejectReady(notice, workerPayload) } : {}),
     });
     responsePayload = Buffer.from(JSON.stringify(result));
   } else if (onConsentReady || onRejectReady) {
@@ -4529,6 +4753,10 @@ export async function invokeLocalV2DagLambdaWorker(input: {
       responseReceivedAt: new Date(responseReceivedAtMs).toISOString(),
     },
   };
+  if (input.actionPreparation && (result.scanId !== input.parentScanId ||
+      result.parentDispatchSha256 !== workerPayload.parentDispatchSha256)) {
+    throw new Error("Prepared action worker result did not match its parent dispatch.");
+  }
   if (
     workerLane === "gpc_observation" &&
     result.parentDispatchSha256 !== postRefusalParentDispatchSha256(input.parentPayload)
@@ -7364,7 +7592,34 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     if (payload.targetEnvironment === "production" && !publicNetworkGuardEnabled(process.env)) {
       throw new Error("Production scanner network guard must remain enabled.");
     }
-    if (!options.runArtifactChain && payload.orchestrationMode === "worker") {
+    if (payload.actionPreparation) {
+      const dispatched = payload;
+      const attempt = payload.actionPreparation;
+      const action = payload.workerLane === "accept_observation" ? "accept" : "reject";
+      const enabled = action === "accept" ? isPostAcceptWorkerEnabled(payload) : isPostRefusalRejectWorkerEnabled(payload);
+      if (!enabled) throw new Error("action_preparation_worker_disabled");
+      const client = localV2DagLambdaS3Client(payload.awsRegion, 1);
+      const store = actionReleaseStore(requireArtifactBucket(), artifactKeyPrefix(payload), attempt, options.s3Client ?? client);
+      const safetyBudget = options.handlerSafetyTimeoutMs ?? (Number(process.env.CERTSCORE_V2_DAG_LAMBDA_HANDLER_SAFETY_TIMEOUT_MS) ||
+        LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS);
+      const workBudget = Math.min(options.scannerWorkTimeoutMs ?? EVIDENCE_WORKER_SCAN_BUDGET_MS, Math.max(10, safetyBudget - 7_000));
+      const { page, proof } = await prepareDedicatedConsentWorker({
+        action, deadlineAtMs: Math.min(attempt.waitUntilMs, handlerStartedAtMs + workBudget),
+        signal: options.callerSignal, launch: startBlankExactActionBrowser,
+        onReady: signal => store.markReady(options.s3GetClient ?? client, signal),
+        take: signal => store.take(options.s3GetClient ?? client, {
+          action, scanId: dispatched.scanId, targetUrl: dispatched.targetUrl,
+          parentDispatchSha256: dispatched.parentDispatchSha256!,
+        }, signal),
+      });
+      earlyActionPage = Promise.resolve(page);
+      console.info(JSON.stringify({event: "consent_action_preparation_released.v1", action, scanId: payload.scanId,
+        awsRequestId: options.awsRequestId, elapsedMs: Date.now() - handlerStartedAtMs,
+        proofRemainingMs: proof.expiresAtMs - Date.now()}));
+      if ("binding" in proof) payload.rejectFirstLayerProof = proof;
+      else payload.acceptFirstLayerProof = proof;
+    }
+    if (!earlyActionPage && !options.runArtifactChain && payload.orchestrationMode === "worker") {
       const accept = payload.workerLane === "accept_observation" && isPostAcceptWorkerEnabled(payload)
         ? payload.acceptFirstLayerProof : undefined;
       const reject = payload.workerLane === "reject_observation" && isPostRefusalRejectWorkerEnabled(payload)
@@ -7381,18 +7636,11 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       }
       const action = payload.workerLane === "accept_observation" && isPostAcceptWorkerEnabled(payload) ? "accept"
         : payload.workerLane === "reject_observation" && isPostRefusalRejectWorkerEnabled(payload) ? "reject" : undefined;
-      const legacySharedAction = options.inlineConsentBrowser && action !== undefined &&
-        !productionConsentGateEnforced(payload, action);
-      if (action && (proof || legacySharedAction)) {
-        // Blank context setup can overlap URL validation. The worker still
-        // follows the configured eligibility policy and its existing checks.
+      if (action && proof) {
         const authorization = action === "accept" ? payload.postAcceptObservation?.interactionAuthorization
           : payload.postRefusalObservation?.interactionAuthorization;
         const needsNetworkGuard = authorization?.kind === "scan_target_resolution";
-        const borrowed = options.inlineConsentBrowser;
-        earlyActionPage = borrowed
-          ? borrowed.pages.prepare(action, needsNetworkGuard, options.callerSignal)
-          : startBlankExactActionBrowser(Math.max(1, proof!.expiresAtMs - Date.now())).then(async browser => {
+        earlyActionPage = startBlankExactActionBrowser(Math.max(1, proof.expiresAtMs - Date.now())).then(async browser => {
             try {
               options.callerSignal?.throwIfAborted();
               return await prepareConsentActionPage(browser, needsNetworkGuard, action);
@@ -7404,12 +7652,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         void earlyActionPage.catch(() => undefined);
       }
     }
-    const plannedRejectValidation = payload.rejectFirstLayerProof
-      ? await options.inlineConsentBrowser?.rejectNetworkCheck?.(
-        payload.targetUrl, payload.rejectFirstLayerProof, options.callerSignal,
-      ) : undefined;
-    const validatedTarget = plannedRejectValidation ??
-      await assertPublicNetworkUrl(payload.targetUrl, { signal: options.callerSignal });
+    const validatedTarget = await assertPublicNetworkUrl(payload.targetUrl, { signal: options.callerSignal });
     if (validatedTarget.hostname.toLowerCase() !== payload.hostname.toLowerCase()) {
       throw new Error("Lambda scan target hostname does not match its validated target URL.");
     }
@@ -7440,12 +7683,12 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         payload.orchestrationMode === "sharded" && payload.targetEnvironment === "production" &&
         isAwsLambdaRuntime() && (isPostRefusalRejectWorkerEnabled(payload) || isPostAcceptWorkerEnabled(payload)) &&
         !rejectPreparationCanaryEnabled(payload)) {
-      // The passive lane would launch Chromium anyway. Each enabled action
-      // keeps its own context, dispatch delay and eligibility policy.
+      // Keep the passive observation callback in the coordinator. Action workers
+      // receive only a serializable dispatch and launch their own Chromium.
       const browser = startBlankExactActionBrowser(LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS);
       void browser.catch(() => undefined);
       ownedConsentBrowser = {
-        browser, pages: shareConsentActionBrowser(browser),
+        browser, openPassiveContext: shareConsentActionBrowser(browser).openPassiveContext,
         workspaceRoot: options.workspaceRoot, awsRequestId: options.awsRequestId,
       };
     }
@@ -7468,7 +7711,6 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         ? runLocalV2DagLambdaPostRefusalArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
             earlyActionPage,
-            onRejectClickProgress: options.onRejectClickProgress,
             onRejectPacketReady: dispatchPayload.targetEnvironment === "production" &&
               dispatchPayload.rejectFirstLayerProof && productionConsentGateEnforced(dispatchPayload, "reject")
               ? options.onRejectPacketReady : undefined,
@@ -7574,6 +7816,12 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         preferenceBudget - setupElapsedMs, handlerSafetyTimeoutMs - 2_000));
       artifactChainTimeoutMs = Math.max(10, Math.min(options.artifactChainTimeoutMs ?? preferenceBudget + 1_000,
         preferenceBudget + 1_000 - setupElapsedMs, handlerSafetyTimeoutMs - 1_000));
+    }
+    if (payload.actionPreparation) {
+      // Blank preparation consumes the same absolute worker budget as scanning.
+      const elapsed = Date.now() - handlerStartedAtMs;
+      scannerWorkTimeoutMs = Math.max(1,scannerWorkTimeoutMs-elapsed);
+      artifactChainTimeoutMs = Math.max(1,artifactChainTimeoutMs-elapsed);
     }
     resultPublishTimeoutMs = Math.max(10, Math.min(
       options.resultPublishTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,

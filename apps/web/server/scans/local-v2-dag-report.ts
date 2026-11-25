@@ -73,7 +73,13 @@ import {
   canonicalPolicyDocumentBrandRelationship,
   policyTextEvidenceProjectionSchema,
   projectPostAcceptEvidenceForReport,
+  postAcceptReportProjectionSchema,
   postRefusalReportProjectionSchema,
+  POST_ACCEPT_REPORT_PROJECTION_VERSION,
+  POST_REFUSAL_REPORT_PROJECTION_VERSION,
+  CLICK_RECEIPT_OBSERVATION_UNAVAILABLE,
+  CHOICE_PATH_EXECUTION_POLICY,
+  type VerifiedChoiceClickReceipt,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type CanonicalEvidenceBundle,
   type NormalizedVendorObservation,
@@ -6503,6 +6509,38 @@ export function buildMaterializedLocalV2Detail(
     }
   };
   const timingArtifacts = buildLocalV2DagTimingArtifacts(bundle);
+  const diagnosticSource = bundle.scanId === scanRecord.scan.id ? options.policyTextEvidenceContext?.sourceBundle : undefined;
+  const diagnosticSourceHash = diagnosticSource?.verificationStatus === "verified" &&
+    /^[a-f0-9]{64}$/.test(diagnosticSource.sha256 ?? "") ? diagnosticSource.sha256 : undefined;
+  const clickReceiptProjection = (receipt: VerifiedChoiceClickReceipt | undefined) => {
+    if (!receipt || localV2NoGo || bundle.scanId !== receipt.scanId || !diagnosticSourceHash ||
+        receipt.completedAtMs < Date.parse(bundle.startedAt)) return null;
+    const pointer = getLocalV2DagLambdaArtifactPointer(scanRecord, "scanArtifactUri");
+    if (!pointer?.verificationRequired || pointer.sha256 !== diagnosticSourceHash) return null;
+    const target = new URL(bundle.url);
+    target.hash = "";
+    if (receipt.requestedTargetSha256 !== createHash("sha256").update(target.href).digest("hex")) return null;
+    return {
+      verifiedClickReceipt: { policyVersion: receipt.policyVersion, action: receipt.action, receiptSha256: receipt.receiptSha256 },
+      completedAt: new Date(receipt.completedAtMs).toISOString(),
+      status: "unconfirmed" as const,
+      registrationStatus: "unconfirmed" as const,
+      productionProjectable: false,
+      evidenceDisposition: "indeterminate" as const,
+      indeterminateReason: CLICK_RECEIPT_OBSERVATION_UNAVAILABLE,
+      limitations: [CLICK_RECEIPT_OBSERVATION_UNAVAILABLE],
+      observationCount: 0,
+      observationWindowMs: 0,
+      contradictionObserved: false,
+      resolverMethod: "verified_click_receipt" as const,
+      execution: {
+        policyVersion: CHOICE_PATH_EXECUTION_POLICY, status: "limited" as const,
+        clickCompleted: true, observationCompleted: false, consentConfirmed: false,
+      },
+    };
+  };
+  const rejectReceipt = clickReceiptProjection(bundle.postRefusalLaneOutcome?.verifiedClickReceipt);
+  const acceptReceipt = clickReceiptProjection(bundle.postAcceptLaneOutcome?.verifiedClickReceipt);
   const postRefusalPacketPointer = getLocalV2DagLambdaArtifactPointer(
     scanRecord,
     "postRefusalPacketUri",
@@ -6514,7 +6552,10 @@ export function buildMaterializedLocalV2Detail(
           ? { packetSha256: postRefusalPacketPointer.sha256 }
           : {}),
       })
-    : getReconciledPostRefusalReportProjection(scanRecord),bundle,options.policyTextEvidenceContext?.sourceBundle);
+    : getReconciledPostRefusalReportProjection(scanRecord) ?? (rejectReceipt ? postRefusalReportProjectionSchema.parse({
+        ...rejectReceipt, contractVersion: POST_REFUSAL_REPORT_PROJECTION_VERSION,
+        refusalExercised: false, postRefusalActivity: [], preConsentStorageNotCleared: [],
+      }) : null), bundle, options.policyTextEvidenceContext?.sourceBundle);
   const postRefusalRuntimeProjection = buildPostRefusalRuntimeProjection(
     postRefusalReportProjection,
     bundle.postRefusalLaneOutcome,
@@ -6530,14 +6571,14 @@ export function buildMaterializedLocalV2Detail(
           ? { packetSha256: postAcceptPacketPointer.sha256 }
           : {}),
       })
-    : null;
+    : acceptReceipt ? postAcceptReportProjectionSchema.parse({
+        ...acceptReceipt, contractVersion: POST_ACCEPT_REPORT_PROJECTION_VERSION,
+        acceptanceExercised: false, postAcceptActivity: [],
+      }) : null;
   const { acceptPathDiagnostic, ...postAcceptRuntimeProjection } = buildPostAcceptRuntimeProjection(
     postAcceptReportProjection,
     bundle.postAcceptLaneOutcome,
   );
-  const diagnosticSource = bundle.scanId === scanRecord.scan.id ? options.policyTextEvidenceContext?.sourceBundle : undefined;
-  const diagnosticSourceHash = diagnosticSource?.verificationStatus === "verified" &&
-    /^[a-f0-9]{64}$/.test(diagnosticSource.sha256 ?? "") ? diagnosticSource.sha256 : undefined;
   // A joined packet has its own parent identity even when the containing bundle is verified.
   const acceptDiagnosticBound = !bundle.postAcceptEvidence || bundle.postAcceptEvidence.parentScanId === bundle.scanId;
   const cms = runtimeEvidenceReportable

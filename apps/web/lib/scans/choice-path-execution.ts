@@ -1,3 +1,4 @@
+import { isAfterActionReportEligible } from "./after-action-report-eligibility";
 import { formatReportSeconds } from "./report-time";
 import {
   assessChoicePathExecution,
@@ -28,6 +29,24 @@ export function readChoicePathExecution(value: unknown, action: "accept" | "reje
     : postRefusalReportProjectionSchema.safeParse(value);
   if (!parsed.success) return undefined;
   return parsed.data.execution ?? assessChoicePathExecution(parsed.data, action);
+}
+
+export function projectVerifiedClickOnlyPath(value: unknown, assessment: unknown, action: "accept" | "reject") {
+  if (!value || typeof value !== "object" || !("verifiedClickReceipt" in value) || !value.verifiedClickReceipt ||
+      !isAfterActionReportEligible(assessment, action)) return null;
+  const execution = readChoicePathExecution(value, action);
+  if (!execution?.clickCompleted) return null;
+  return {
+    label: `${action === "accept" ? "Accept" : "Reject"} click completed`,
+    note: "Post-click activity was not assessed.",
+    execution,
+    evidenceRows: [],
+    registrationConfirmed: false,
+    observationWindowMs: null,
+    resolverMethod: null,
+    scoreEffect: "none" as const,
+    state: "incomplete" as const,
+  };
 }
 
 /** Display-safe phase diagnosis from validated evidence; never changes execution
@@ -83,7 +102,9 @@ export function readChoicePathLimitation(
   };
   if (execution.clickCompleted) return {
     code: "observation_incomplete" as const,
-    message: `The ${label} click completed, but the post-click observation was incomplete.${navigationMessage}`,
+    message: projection.verifiedClickReceipt
+      ? `The ${label} click completed. Post-click activity was not assessed.`
+      : `The ${label} click completed, but the post-click observation was incomplete.${navigationMessage}`,
   };
   if (!projection.resolver?.found) return {
     code: "control_unresolved" as const,
