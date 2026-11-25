@@ -1,5 +1,38 @@
+import { createHash } from "node:crypto";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
-import type { Locator } from "playwright";
+import type { Locator, Page } from "playwright";
+import { readWithinActionBoundary } from "./action-operation-boundary.js";
+import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
+
+export type RetainedNativeConsentSelector = { selector: string; labelSha256: string; expiresAtMs: number };
+
+/** Use a live, complete candidate sweep to bind the retained selector before
+ * repeating per-candidate reads. The existing deterministic recipe sweep and
+ * exact pre-dispatch recheck still verify the bound control independently. */
+export async function findRetainedNativeConsentControl(input: {
+  page: Page;
+  controls: Locator;
+  candidate: ConsentControlCandidateEvidence;
+  geometry?: ConsentControlGeometryArtifact;
+  retained: RetainedNativeConsentSelector;
+  deadlineAtMs: number;
+  signal?: AbortSignal;
+}): Promise<Locator | undefined> {
+  const { page, controls, candidate, geometry, retained, signal } = input;
+  const coverage = geometry?.controlInspection?.captureCoverage;
+  if (geometry?.pageUrl !== page.url() || !coverage?.mainFrameAvailable || !coverage.documentAndFramesStable ||
+      coverage.inventoryTruncated || coverage.documentReadyState === "loading" || coverage.capturedFrameCount !== coverage.frameCount ||
+      candidate.frameContext.frameKind !== "main_frame" || candidate.tagName !== "button" || candidate.ariaLabel ||
+      createHash("sha256").update(candidate.label).digest("hex") !== retained.labelSha256) return undefined;
+  const selector = page.locator(retained.selector);
+  const exact = controls.and(selector);
+  const deadline = Math.min(input.deadlineAtMs, retained.expiresAtMs, Date.now() + 150);
+  const matches = await readWithinActionBoundary(async () => {
+    const [selected, bound] = await Promise.all([selector.count(), exact.count()]);
+    return selected === 1 && bound === 1;
+  }, false, deadline, signal).catch(() => false);
+  return matches ? exact : undefined;
+}
 
 /** Shared bounded registry capacity; both action observers fail on overflow. */
 /** One additional registered Drupal metadata entry; the existing search

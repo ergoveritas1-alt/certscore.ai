@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import test from "node:test";
 import { chromium } from "playwright";
@@ -7,7 +8,7 @@ import { runPostAcceptObserver } from "./post-accept-observer.js";
 import { runPostRefusalObserver } from "./post-refusal-observer.js";
 import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
 import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes.js";
-import { consentActionBindingDeadline, prioritizeConsentActionRecipes } from "./consent-action-recipe-priority.js";
+import { consentActionBindingDeadline, findRetainedNativeConsentControl, prioritizeConsentActionRecipes } from "./consent-action-recipe-priority.js";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
 
 test("a stalled cookie routing hint cannot block retained button geometry", { timeout: 10_000 }, async () => {
@@ -74,6 +75,37 @@ test("a live CMP and conflicting script hint are both considered within the orig
   assert.equal(consentActionBindingDeadline(100, 1000, 200), 950);
   assert.equal(consentActionBindingDeadline(100, 300, 200), 300);
   assert.equal(consentActionBindingDeadline(100, undefined, 200), 100);
+});
+
+test("a retained selector can route only one native control from stable live geometry", async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader("Content-Type", "text/html");
+    response.end('<section id="cookie-banner" role="dialog"><p>Choose whether to allow optional cookies.</p><button id="choice">Accept all</button><button>Reject all</button></section>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${address.port}/`);
+    const geometry = await captureConsentControlGeometry(page, { timeoutMs: 1000 });
+    const candidate = geometry.candidates.find(row => row.actionType === "accept_all");
+    assert.ok(candidate);
+    const input = {
+      page, candidate, geometry, controls: page.locator("#cookie-banner #choice"),
+      retained: { selector: "#choice", labelSha256: createHash("sha256").update("Accept all").digest("hex"), expiresAtMs: Date.now() + 6000 },
+      deadlineAtMs: Date.now() + 1000,
+    };
+    assert.equal(await (await findRetainedNativeConsentControl(input))?.count(), 1);
+    assert.equal(await findRetainedNativeConsentControl({ ...input, retained: { ...input.retained, expiresAtMs: Date.now() } }), undefined);
+    await page.locator("#choice").evaluate(button => document.body.append(button.cloneNode(true)));
+    assert.equal(await findRetainedNativeConsentControl(input), undefined);
+  } finally {
+    await browser?.close();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
 });
 
 for (const action of ["accept", "reject"] as const) {

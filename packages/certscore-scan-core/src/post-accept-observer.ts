@@ -34,7 +34,7 @@ import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { genericConsentActionLabelSupported } from "./consent-action-label-eligibility.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
 import { inspectCustomAcceptControl, isCustomAcceptControlCandidate, sameCustomAcceptControlBinding } from "./custom-accept-control.js";
-import { CONSENT_ACTION_RECIPE_CANDIDATE_MAX, prioritizeConsentActionRecipes, consentActionBindingDeadline, liveConsentActionCmp } from "./consent-action-recipe-priority.js";
+import { CONSENT_ACTION_RECIPE_CANDIDATE_MAX, prioritizeConsentActionRecipes, consentActionBindingDeadline, findRetainedNativeConsentControl, liveConsentActionCmp, type RetainedNativeConsentSelector } from "./consent-action-recipe-priority.js";
 import type { ActionTcfData } from "./consent-action-tcf-state.js";
 import { captureOneTrustBaseline, oneTrustBaselineLimitation, type OneTrustBaseline } from "./onetrust-consent-state.js";
 import { decodeTcfV2PurposeConsents, readConsentActionTcfData } from "./consent-action-tcf-state.js";
@@ -894,6 +894,11 @@ export async function runPostAcceptObserver(
 
     stage("resolver");
     const resolverStartedAtMs = Date.now();
+    const retainedNativeSelector = firstLayerProof?.exactSelector && firstLayerProof.geometrySha256 &&
+      !firstLayerProof.labelSource && authorizedExactTargetUrl &&
+      firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
+      ? { selector: firstLayerProof.exactSelector, labelSha256: firstLayerProof.labelSha256, expiresAtMs: firstLayerProof.expiresAtMs }
+      : undefined;
     const exactCookieScriptRecipe = firstLayerProof?.exactSelector === COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR &&
       firstLayerProof.geometrySha256 && authorizedExactTargetUrl &&
       firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
@@ -995,6 +1000,7 @@ export async function runPostAcceptObserver(
           effectiveSignal,
           actionDiscovery,
           recordResolverSnapshot,
+          retainedNativeSelector,
         )
       : await waitForDeterministicRecipe(
           page!,
@@ -1981,6 +1987,7 @@ async function waitForDeterministicRecipe(
   reportDiagnostic?: ResolverReporter,
   outerDeadlineAtMs?: number,
   mainFrameOnly = false,
+  checkExpectedLabelFirst = false,
 ): Promise<
   | {
       status: "found";
@@ -2080,14 +2087,17 @@ async function waitForDeterministicRecipe(
         }
         for (let index = 0; index < count; index += 1) {
           const control = locator.nth(index);
+          const expectedLabel = recipe.controlExpectedNormalizedLabel;
+          const retainedLabelMatches = checkExpectedLabelFirst && expectedLabel !== undefined
+            ? (await normalizedAcceptLocatorLabels(control)).includes(expectedLabel)
+            : undefined;
+          if (retainedLabelMatches === false) continue;
           const [visible, enabled] = await Promise.all([
             control.isVisible().catch(() => false),
             locatorEnabledWithinDeadline(control, deadlineAtMs),
           ]);
-          const expectedLabelPresent = recipe.controlExpectedNormalizedLabel === undefined ||
-            (await normalizedAcceptLocatorLabels(control)).includes(
-              recipe.controlExpectedNormalizedLabel,
-            );
+          const expectedLabelPresent = retainedLabelMatches ??
+            (expectedLabel === undefined || (await normalizedAcceptLocatorLabels(control)).includes(expectedLabel));
           if (visible) visibleCount += 1;
           if (enabled) enabledCount += 1;
           if (expectedLabelPresent) labelMatchCount += 1;
@@ -2112,7 +2122,9 @@ async function waitForDeterministicRecipe(
     if (incompleteScopedSweep) reportIncompleteSweep();
     else reportDiagnostic?.({ source: "named_recipe",
       state: matches.length > 1 ? "multiple_actionable" : matches.length === 1 ? "single_actionable"
-        : selectorMatchCount === 0 ? "selector_absent" : visibleCount === 0 ? "control_hidden"
+        : selectorMatchCount === 0 ? "selector_absent"
+        : checkExpectedLabelFirst && labelMatchCount === 0 ? "label_mismatch"
+        : visibleCount === 0 ? "control_hidden"
           : enabledCount === 0 ? "control_disabled" : labelMatchCount === 0 ? "label_mismatch"
             : scopeNotInteractive ? "control_hidden" : viewportPendingRecipeIds.length > 0 ? "control_not_hit_target" : "geometry_unavailable",
       selectorMatchCount: Math.min(64, selectorMatchCount), visibleCount: Math.min(64, visibleCount),
@@ -2153,6 +2165,7 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
   signal?: AbortSignal,
   discovery?: ConsentActionDiscovery,
   reportDiagnostic?: ResolverReporter,
+  retainedNativeSelector?: RetainedNativeConsentSelector,
 ): Promise<AcceptRecipeResolution> {
   const deadlineAtMs = Date.now() + timeoutMs;
   let geometryCmpName: string | undefined;
@@ -2187,6 +2200,7 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
         rememberCmp,
         reportDiagnostic,
         deadlineAtMs,
+        retainedNativeSelector,
       );
       if (
         canonicalResolution.status === "found" ||
@@ -2214,6 +2228,7 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
         rememberCmp,
         reportDiagnostic,
         deadlineAtMs,
+        retainedNativeSelector,
       );
       if (
         initialCanonicalResolution.status === "found" ||
@@ -2259,6 +2274,7 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
       rememberCmp,
       reportDiagnostic,
       deadlineAtMs,
+      retainedNativeSelector,
     );
     if (canonicalResolution.status === "found" || canonicalResolution.status === "aborted") {
       return canonicalResolution;
@@ -2279,6 +2295,7 @@ async function waitForCanonicalAcceptControlRecipe(
   onCmpDetected?: (name: string) => void,
   reportDiagnostic?: ResolverReporter,
   outerDeadlineAtMs?: number,
+  retainedNativeSelector?: RetainedNativeConsentSelector,
 ): Promise<AcceptRecipeResolution> {
   const deadlineAtMs = Date.now() + timeoutMs;
   let sawAmbiguousCanonicalControl = false;
@@ -2377,13 +2394,17 @@ async function waitForCanonicalAcceptControlRecipe(
       const controls = scope.scope.locator(controlSelector);
       const controlCount = Math.min(await controls.count().catch(() => 0), 9);
       if (controlCount > 8) { bindingState("multiple_actionable"); return { status: "ambiguous" }; }
-      const actionableControls: Locator[] = [];
+      const exactControl = controlCount > 0 && retainedNativeSelector && scope.scope === page
+        ? await findRetainedNativeConsentControl({ page, controls, candidate, geometry,
+            retained: retainedNativeSelector, deadlineAtMs: bindingDeadlineAtMs, signal })
+        : undefined;
+      const actionableControls: Locator[] = exactControl ? [exactControl] : [];
       let failedStage: typeof snapshot.state = "selector_absent";
       const stages: Array<typeof snapshot.state> = ["selector_absent", "control_hidden", "control_disabled", "label_mismatch", "control_not_hit_target"];
       const failed = (stage: typeof snapshot.state) => {
         if (stages.indexOf(stage) > stages.indexOf(failedStage)) failedStage = stage;
       };
-      for (let index = 0; index < controlCount; index += 1) {
+      for (let index = 0; !exactControl && index < controlCount; index += 1) {
         const control = controls.nth(index);
         if (!await control.isVisible().catch(() => false)) { failed("control_hidden"); continue; }
         if (Date.now() >= bindingDeadlineAtMs) { bindingState("binding_budget_exhausted"); break; }
@@ -2456,6 +2477,8 @@ async function waitForCanonicalAcceptControlRecipe(
         discovery,
         reportDiagnostic,
         outerDeadlineAtMs ?? deadlineAtMs,
+        false,
+        Boolean(exactControl),
       );
       if (resolved.status === "found" && Date.now() >= (outerDeadlineAtMs ?? deadlineAtMs)) {
         bindingState("binding_budget_exhausted");
