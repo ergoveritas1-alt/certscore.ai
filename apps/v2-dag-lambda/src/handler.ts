@@ -130,6 +130,7 @@ export const POST_ACCEPT_WORKER_FEATURE_FLAG =
 export const POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 500;
 export const POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 1_000;
 export const POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS = 6_000;
+const POST_ACCEPT_VERIFIED_CLICK_PACKET_ADDITIONAL_TAIL_WAIT_MS = 2_000;
 export const POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS = 12_000;
 export const POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS =
   POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS;
@@ -3870,35 +3871,58 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   // Accept and Reject have independent absolute post-passive deadlines and
   // are joined concurrently, including packet verification. This prevents
   // either lane from consuming the other's bounded chance to retain an
-  // already-terminal result. A dedicated Reject lane can finish retaining its
-  // packet after the normal cutoff when an exact-click checkpoint has verified.
+  // already-terminal result. A verified exact click can extend the bounded
+  // packet join for Accept and for a dedicated Reject lane.
   let joinedPostRefusalPacket: PostRefusalEvidencePacket | undefined;
   let joinedPostAcceptPacket: PostAcceptEvidencePacket | undefined;
-  let postAcceptMaxTailWaitMs = POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS;
+  const acceptOuterDeadlineAtMs = enforced.accept && consentClickCheckpointEnabled(payload, "accept")
+    ? options.deadlineAtMs ?? Infinity
+    : Infinity;
+  const acceptOuterTailWaitMs = Math.max(0, acceptOuterDeadlineAtMs - passiveLaneBarrierCompletedAtMs);
+  const normalAcceptTailWaitMs = Math.min(POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS, acceptOuterTailWaitMs);
+  let postAcceptMaxTailWaitMs = normalAcceptTailWaitMs;
+  let acceptLateFormProgress: Promise<boolean> | undefined;
   const awaitPostAcceptWithinTail = async (workerPromise: Promise<void>, workerAlreadySettled = false): Promise<boolean> => {
-    if (postAcceptMaxTailWaitMs === POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS) {
-      const completedAtNormalLimit = await awaitPostRefusalWorkerWithinTailBudget({
-        abortController: new AbortController(),
-        maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
-        passiveLaneBarrierCompletedAtMs,
-        workerAlreadySettled,
-        workerPromise,
-      });
-      if (completedAtNormalLimit) return true;
-      if (await verifiedPostAcceptLateFormProgress(payload, options.s3GetClient)) {
-        postAcceptMaxTailWaitMs += POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS;
-      } else {
-        postAcceptAbortController.abort(new Error("Accept Path exceeded its post-primary join budget."));
-        return false;
-      }
+    if (postAcceptAbortController.signal.aborted || options.signal?.aborted) {
+      void workerPromise.catch(() => undefined);
+      return false;
     }
-    return awaitPostRefusalWorkerWithinTailBudget({
-      abortController: postAcceptAbortController,
+    const waitForAccept = (abortController: AbortController) => awaitPostRefusalWorkerWithinTailBudget({
+      abortController,
       maxTailWaitMs: postAcceptMaxTailWaitMs,
       passiveLaneBarrierCompletedAtMs,
       workerAlreadySettled,
       workerPromise,
     });
+    if (postAcceptMaxTailWaitMs === normalAcceptTailWaitMs) {
+      if (await waitForAccept(new AbortController())) return true;
+      if (options.signal?.aborted || Date.now() >= acceptOuterDeadlineAtMs) {
+        postAcceptAbortController.abort(new Error("Accept Path exceeded its post-primary join budget."));
+        return false;
+      }
+      // The legacy marker can be checked while the click-qualified packet joins.
+      acceptLateFormProgress = verifiedPostAcceptLateFormProgress(payload, options.s3GetClient, options.signal);
+      const checkpoint = verifiedClicks.accept?.checkpoint;
+      if (checkpoint && checkpoint.verifiedAtMs < passiveLaneBarrierCompletedAtMs + normalAcceptTailWaitMs) {
+        postAcceptMaxTailWaitMs = Math.min(
+          normalAcceptTailWaitMs + POST_ACCEPT_VERIFIED_CLICK_PACKET_ADDITIONAL_TAIL_WAIT_MS, acceptOuterTailWaitMs,
+        );
+      }
+    }
+    if (acceptLateFormProgress) {
+      if (postAcceptMaxTailWaitMs > normalAcceptTailWaitMs && await waitForAccept(new AbortController())) return true;
+      const lateForm = await acceptLateFormProgress;
+      acceptLateFormProgress = undefined;
+      const lateFormTailWaitMs = Math.min(
+        normalAcceptTailWaitMs + POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS, acceptOuterTailWaitMs,
+      );
+      if (!lateForm || options.signal?.aborted || lateFormTailWaitMs <= postAcceptMaxTailWaitMs) {
+        postAcceptAbortController.abort(new Error("Accept Path exceeded its post-primary join budget."));
+        return false;
+      }
+      postAcceptMaxTailWaitMs = lateFormTailWaitMs;
+    }
+    return waitForAccept(postAcceptAbortController);
   };
   let postRefusalMaxTailWaitMs = POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
   const readDedicatedRejectCheckpoint = enforced.reject && consentClickCheckpointEnabled(payload, "reject") &&
@@ -4044,7 +4068,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
               completedAtMs: verified.completedAtMs,
             },
           };
-        } catch { /* A click receipt cannot delay or change the observation join. */ }
+        } catch { /* A failed receipt read grants no additional join time. */ }
       })();
     };
     // A click can complete after the first read while its observation is still
@@ -5586,12 +5610,13 @@ async function readPostAcceptPacketFromArtifactResult(
 export async function verifiedPostAcceptLateFormProgress(
   payload: LocalV2DagLambdaDispatchPayload,
   s3GetClient?: S3GetClient,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   try {
     const response = await (s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new GetObjectCommand({
       Bucket: requireArtifactBucket(),
       Key: `${artifactKeyPrefix(payload)}/lanes/accept_observation/LateFormCaptureProgress.json`,
-    }), { abortSignal: AbortSignal.timeout(500) });
+    }), { abortSignal: signal ? AbortSignal.any([signal, AbortSignal.timeout(500)]) : AbortSignal.timeout(500) });
     const body = await streamToBuffer(response.Body);
     if (body.byteLength > 512) return false;
     const progress = JSON.parse(body.toString("utf8")) as Record<string, unknown>;

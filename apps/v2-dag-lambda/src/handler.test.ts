@@ -2451,6 +2451,8 @@ async function runCoordinatorFixture(input: {
   clickCheckpoint?: boolean;
   clickCheckpointDelayMs?: number;
   actionResponseDelayMs?: number;
+  acceptPacketReadDelayMs?: number;
+  acceptLateFormProgress?: boolean;
   consentBundle: CanonicalEvidenceBundle;
   action: "none" | "hang" | "late" | "completed" | "validation_failed" | "completed_during_finalization" | "completed_after_finalization";
   dispatchDelayMs: number;
@@ -2789,6 +2791,14 @@ async function runCoordinatorFixture(input: {
       const key = String(command.input.Key ?? "");
       input.onRead?.(key);
       const uri = `s3://${String(command.input.Bucket)}/${key}`;
+      if (input.acceptLateFormProgress && key.endsWith("/accept_observation/LateFormCaptureProgress.json")) {
+        return { Body: Buffer.from(JSON.stringify({
+          contractVersion: "certscore.post_accept_late_form_progress.v1",
+          scanId: payload.scanId,
+          targetSha256: createHash("sha256").update(payload.targetUrl).digest("hex"),
+          parentDispatchSha256: postRefusalParentDispatchSha256(payload),
+        })) };
+      }
       const entry = pointers.get(uri);
       if (!entry) throw new Error(`missing fixture object ${uri}`);
       if (Object.values(CONSENT_CLICK_CHECKPOINT_FILES).some(file => key.endsWith(file))) {
@@ -2807,6 +2817,9 @@ async function runCoordinatorFixture(input: {
         // This models the already-required GetObject's I/O turn, not a new
         // coordinator delay or a grace period for the action lane.
         await new Promise<void>(resolve => setImmediate(resolve));
+      }
+      if (input.acceptPacketReadDelayMs && key.endsWith("/PostAcceptEvidencePacket.json")) {
+        await new Promise<void>(resolve => setTimeout(resolve, input.acceptPacketReadDelayMs));
       }
       return { Body: entry.body };
     },
@@ -6637,7 +6650,7 @@ for (const action of ["accept","reject"] as const) {
       try {
         const manifest = JSON.parse(await readFile(path.join(output.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
         assert.equal(manifest.consentActionStages[action],"worker_deadline_exceeded");
-        assert.equal(manifest.laneTimingSummary[timeKey],tailMs);
+        assert.equal(manifest.laneTimingSummary[timeKey], action === "accept" ? 8_000 : tailMs);
         assert.equal(manifest[action + "GateShadowReceipt"].finalRecheck.outcome,"unavailable");
         const checkpoint = manifest[action + "ClickCheckpoint"];
         assert.equal(checkpoint.scanId,scanId);
@@ -6699,4 +6712,62 @@ test("Accept keeps an earlier verified click checkpoint when its full packet joi
   assert.equal(manifest.acceptClickCheckpoint.scanId,scanId);
   assert.ok(cutoff - manifest.acceptClickCheckpoint.verifiedAtMs >= 200);
   assert.equal(output.bundle.postAcceptLaneOutcome.verifiedClickReceipt,undefined);
+});
+
+test("Accept late packet join requires an already verified exact click or its existing late-form marker", async t => {
+  const config = {
+    [POST_ACCEPT_WORKER_FEATURE_FLAG]: "1",
+    CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE: "1",
+    CERTSCORE_ACCEPT_CLICK_CHECKPOINT_ENABLED: "1",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET: "test-bucket",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX: "v2-dag-lambda/local",
+  };
+  const previous = new Map(Object.keys(config).map(key => [key, process.env[key]]));
+  Object.assign(process.env, config);
+  t.after(() => {
+    for (const [key,value] of previous) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const scenarios = [
+    { id: "13", checkpoint: true, lateForm: false, joined: true, tailMs: 8_000 },
+    { id: "14", checkpoint: false, lateForm: false, joined: false, tailMs: 6_000 },
+    { id: "15", checkpoint: true, lateForm: true, joined: true, tailMs: 18_000 },
+    { id: "16", checkpoint: true, lateForm: false, joined: false, outerMs: 7_200 },
+  ];
+  await Promise.all(scenarios.map(async scenario => {
+    const scanId = `00000000-0000-4000-8000-0000000000${scenario.id}`;
+    const bundle = coordinatorConsentBundle(scanId, {inspectionCompleted:true, acceptControlObserved:true});
+    const documentIdentity = {source:"cdp_loader_id", token:"fixture-loader"} as const;
+    bundle.domSnapshots = [{ ...runtimeSnapshotFixture(), documentIdentity }];
+    const observation = bundle.consentUiObservations[0]!;
+    Object.assign(observation, {layerInspected:"first_layer",captureStatus:"observed",documentUrl:bundle.url,
+      documentIdentity,captureDiagnostics:{completedChannels:["dom_inventory","geometry"],failedChannels:[],timedOutChannels:[]}});
+    Object.assign(observation.controls[0]!, {tagName:"button",selectorHint:"#accept"});
+    const output = await runCoordinatorFixture({
+      scanId, consentBundle: bundle, actionLane: "accept", action: "completed", enforcementGeometry: "ready",
+      clickCheckpoint: scenario.checkpoint, acceptLateFormProgress: scenario.lateForm,
+      actionResponseDelayMs: scenario.lateForm ? 8_400 : 6_400, acceptPacketReadDelayMs: 950, dispatchDelayMs: 0,
+      gateDeadlineMs: scenario.outerMs,
+    });
+    try {
+      const manifest = JSON.parse(await readFile(path.join(output.artifactRoot, "LocalV2DagLambdaManifest.json"), "utf8"));
+      const timing = manifest.laneTimingSummary;
+      assert.equal(Boolean(manifest.acceptClickCheckpoint), scenario.checkpoint);
+      assert.equal(output.bundle.postAcceptLaneOutcome?.evidenceJoined, scenario.joined);
+      assert.equal(Boolean(output.result.artifactPointers.postAcceptPacketUri), scenario.joined);
+      if (scenario.tailMs) assert.equal(timing.maxAcceptTailWaitMs, scenario.tailMs);
+      else assert.ok(timing.maxAcceptTailWaitMs > 6_000 && timing.maxAcceptTailWaitMs <= scenario.outerMs!);
+      const barrier = Date.parse(timing.passiveLaneBarrierCompletedAt);
+      if (manifest.acceptClickCheckpoint) assert.ok(manifest.acceptClickCheckpoint.verifiedAtMs < barrier + 6_000);
+      if (scenario.joined) {
+        const packetPhase = manifest.phaseTimings.find((phase: { label: string }) => phase.label === "post_accept_packet_join");
+        const completedAfterBarrierMs = Date.parse(packetPhase.completedAt) - barrier;
+        assert.ok(completedAfterBarrierMs > (scenario.lateForm ? 8_000 : 6_000));
+        assert.ok(timing.maxAcceptTailWaitMs - completedAfterBarrierMs >= 200);
+      }
+    } finally {
+      await rm(output.artifactRoot, { recursive: true, force: true });
+    }
+  }));
 });
