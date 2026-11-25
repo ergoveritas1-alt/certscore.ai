@@ -9,6 +9,7 @@ import {createFinalConsentGeometryRefresh, finalConsentGeometryRefreshReason, pr
 import retained from "./test-fixtures/retained-consent-checkpoints.json";
 import aePartial from "./test-fixtures/retained-ae-partial-refresh.json";
 import {reconcileConsentGeometryInventoryCoverage} from "./consent-geometry-inventory-coverage";
+import {DRUPAL_CMP, DRUPAL_ACCEPT_SELECTOR} from "./drupal-consent-overflow-geometry.js";
 import {isStableConsentProofPacket} from "./scanners/pre-consent-runtime-scanner";
 
 function setup() {
@@ -43,6 +44,57 @@ function setup() {
   return {state, counts, controller, geometry, observation, screenshot, prepared, dependencies,
     input: {observation, geometry: geometry(500), screenshot}, now: () => clock, setNow: (n: number) => {clock=n;}};
 }
+
+test("stale Drupal overflow gets one bounded read and only verified non-rendered frames permit positive-only retention", async () => {
+  for (const mode of ["verified", "unaccounted_frame", "missing_proof", "changed_revision", "budget"] as const) {
+    const f = setup();
+    f.state.frames = Array.from({length:25}, () => ({}));
+    f.observation.documentReadyState = "interactive";
+    f.observation.inventoryOutcome = "partial";
+    f.observation.captureStatus = "observed";
+    f.observation.captureDiagnostics = {completedChannels:["dom_inventory"], timedOutChannels:[], failedChannels:[]};
+    f.observation.controls = [{label:"Accept", actionType:"accept_all", selectorHint:DRUPAL_ACCEPT_SELECTOR, tagName:"button", visible:true}];
+    const geometry = f.input.geometry;
+    geometry.cmp.detections = [{canonicalName:DRUPAL_CMP}] as typeof geometry.cmp.detections;
+    geometry.containers = [{selectorHint:"#sliding-popup", layer:"first_layer", intersectsViewport:true}] as typeof geometry.containers;
+    geometry.candidates = [{candidateId:"candidate_0", actionType:"accept_all", label:"Accept", selectorHint:DRUPAL_ACCEPT_SELECTOR,
+      tagName:"button", containerSelectorHint:"#popup-buttons", layer:"first_layer", decisionStatus:"confirmed_visible",
+      frameContext:{frameKind:"main_frame",frameUrl:geometry.pageUrl}, enabled:true, intersectsViewport:true,
+      boundingBox:{width:30,height:20}, occlusion:{center:true}, consentContextConfirmed:true,
+      exactNativeAcceptSelectorVerified:true}] as unknown as typeof geometry.candidates;
+    const inspection = geometry.controlInspection!;
+    inspection.structuralCoverage = "limited";
+    inspection.retainedCandidateCount = 1;
+    inspection.candidates = [{candidateId:"candidate_0",role:"decision",unresolvedIntents:[]}];
+    Object.assign(inspection.captureCoverage, {frameCount:25,capturedFrameCount:9,documentReadyState:"interactive",documentAndFramesStable:false});
+    assert.equal(finalConsentGeometryRefreshReason({...f.input,scanStartedAtMs:0}),"stale_drupal_overflow_geometry");
+    if (mode === "budget") f.dependencies.moduleDeadlineAtMs = f.now()+1499;
+    const refresh = createFinalConsentGeometryRefresh({...f.dependencies, async capture(options) {
+      f.counts.capture++;
+      assert.equal(options.timeoutMs,1100);
+      assert.equal(options.verifyDrupalOverflow,true);
+      f.setNow(f.now()+100);
+      const fresh = structuredClone(geometry);
+      fresh.capturedAt = new Date(f.now()).toISOString();
+      fresh.captureTiming = {version:"consent_geometry_capture_timing.v1",mainFrameCompletedAt:fresh.capturedAt,completedAt:fresh.capturedAt};
+      Object.assign(fresh.controlInspection!.captureCoverage, {capturedFrameCount:12,documentReadyState:"complete"});
+      if (mode !== "missing_proof") fresh.drupalOverflowGeometry = {version:"drupal_overflow_accept_geometry.v1",
+        capturedAt:fresh.capturedAt,documentToken:f.state.documentIdentity.token,nonRenderedFrameCount:mode === "unaccounted_frame" ? 12 : 13};
+      if (mode === "changed_revision") f.state.frameRevision++;
+      return fresh;
+    }});
+    const before = structuredClone(f.input);
+    const result = await refresh(f.input);
+    const expected = {verified:"retained",unaccounted_frame:"invalid_capture",missing_proof:"invalid_capture",
+      changed_revision:"document_changed",budget:"budget_unavailable"} as const;
+    assert.equal(result.outcome,expected[mode]);
+    assert.equal(result.limitedPositiveOnly,mode === "verified" ? true : undefined);
+    assert.equal(f.counts.commit,mode === "verified" ? 1 : 0);
+    assert.equal((await refresh(f.input)).outcome,"already_considered");
+    assert.equal(f.counts.capture,mode === "budget" ? 0 : 1);
+    assert.deepEqual(f.input,before);
+  }
+});
 
 test("retained AE interactive multi-frame partials qualify for structural refresh without becoming complete", () => {
   for (const source of aePartial) {

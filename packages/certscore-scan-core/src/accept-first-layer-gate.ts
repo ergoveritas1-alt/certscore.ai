@@ -1,5 +1,7 @@
 import { geometryConsentButtonLinkMatches } from "./exact-native-consent-button-selector.js";
 import { consentGateDocument } from "./consent-gate-document.js";
+import { DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP, drupalOverflowObservationMatches,
+  hasVerifiedDrupalOverflowGeometry } from "./drupal-consent-overflow-geometry.js";
 import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
@@ -52,6 +54,7 @@ export type AcceptFirstLayerProof = {
   exactSelector?: string;
   labelSource?: "aria_label";
   scopedLabelConflict?: true;
+  drupalOverflow?: true;
   issuedAtMs: number;
   expiresAtMs: number;
 };
@@ -63,7 +66,10 @@ export function readAcceptFirstLayerProof(value: unknown): AcceptFirstLayerProof
   const nativeBound = Object.hasOwn(value, "exactSelector");
   const sourceBound = Object.hasOwn(value, "labelSource");
   const conflictBound = Object.hasOwn(value, "scopedLabelConflict");
-  if (Object.keys(value).length !== (geometryBound ? 11 : 9) + Number(sourceBound) + Number(conflictBound) + Number(nativeBound) ||
+  const drupalBound = Object.hasOwn(value, "drupalOverflow");
+  if (Object.keys(value).length !== (geometryBound ? 11 : 9) + Number(sourceBound) + Number(conflictBound) + Number(nativeBound) + Number(drupalBound) ||
+    (drupalBound && (proof.drupalOverflow !== true || !geometryBound || !nativeBound || sourceBound || conflictBound ||
+      proof.exactSelector !== DRUPAL_ACCEPT_SELECTOR || proof.labelSha256 !== hash("Accept"))) ||
     (nativeBound && (!geometryBound || typeof proof.exactSelector !== "string" ||
       !proof.exactSelector || proof.exactSelector.length > 500 || hash(proof.exactSelector) !== proof.selectorSha256)) ||
     (sourceBound && (!geometryBound || proof.labelSource !== "aria_label")) ||
@@ -142,10 +148,12 @@ function exactGeometryAccept(
   geometry: ConsentControlGeometryArtifact,
   document: CanonicalEvidenceBundle["domSnapshots"][number],
   requireExactSelector: boolean,
+  drupalOverflow: boolean,
 ) {
   const inspection = verifyConsentControlInspection(geometry.controlInspection, geometry.candidates);
   if (!inspection || inspection.captureCoverage.inventoryTruncated ||
-    !inspection.captureCoverage.mainFrameAvailable || !inspection.captureCoverage.documentAndFramesStable) return undefined;
+    !inspection.captureCoverage.mainFrameAvailable ||
+    (!inspection.captureCoverage.documentAndFramesStable && !drupalOverflow)) return undefined;
 
   const candidates = geometry.candidates.filter(candidate =>
     candidate.actionType === "accept_all" && candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible");
@@ -154,7 +162,7 @@ function exactGeometryAccept(
   const cookieScriptRole = requireExactSelector && candidate.exactCookieScriptAcceptVerified === true &&
     candidate.selectorHint === "#cookiescript_accept" && candidate.tagName === "div" && candidate.role === "button" &&
     geometry.cmp?.detections?.some(cmp => cmp.canonicalName === "CookieScript") === true;
-  if ((requireExactSelector && (inspection.structuralCoverage !== "complete" ||
+  if ((requireExactSelector && ((inspection.structuralCoverage !== "complete" && !drupalOverflow) ||
       (!cookieScriptRole && (candidate.exactNativeAcceptSelectorVerified !== true ||
         !(candidate.tagName === "button" || geometryConsentButtonLinkMatches(candidate, geometry.cmp, "accept")))))) ||
     candidate.enabled !== true || candidate.intersectsViewport !== true || candidate.occlusion?.center !== true ||
@@ -224,7 +232,8 @@ export type AcceptGatePassiveDecision =
 
 /** The caller supplies the verified consent_proof bundle and, if available, geometry from that worker's verified manifest. */
 export function deriveAcceptFirstLayerProof(input: {
-  bundle: Pick<CanonicalEvidenceBundle, "scanId" | "url" | "consentSurfaceInspection" | "consentUiObservations" | "domSnapshots" | "scanNoGoAssessment">;
+  bundle: Pick<CanonicalEvidenceBundle, "scanId" | "url" | "consentSurfaceInspection" | "consentUiObservations" | "domSnapshots" | "scanNoGoAssessment"> &
+    Partial<Pick<CanonicalEvidenceBundle, "startedAt">>;
   scanId: string;
   targetUrl: string;
   parentDispatchSha256: string;
@@ -257,7 +266,10 @@ export function deriveAcceptFirstLayerProof(input: {
   if (!inspection.actionableControlObserved) {
     return block(inspection.inspectionCompleted ? "no_first_layer_accept" : "passive_capture_incomplete");
   }
-  const nativeAccept = documentGeometry && exactGeometryAccept(documentGeometry, committedDocument, input.requireExactSelector === true);
+  const drupalOverflow = input.requireExactSelector === true && documentGeometry !== undefined &&
+    hasVerifiedDrupalOverflowGeometry(documentGeometry) && Date.parse(documentGeometry.captureTiming?.completedAt ?? "") <= nowMs;
+  const scanStartedAtMs = drupalOverflow ? Date.parse(bundle.startedAt ?? "") : NaN;
+  const nativeAccept = documentGeometry && exactGeometryAccept(documentGeometry, committedDocument, input.requireExactSelector === true, drupalOverflow);
   if (committedDocument !== bundle.domSnapshots.at(-1) && !nativeAccept) return block("control_binding_unverified");
   const matches: Array<{ document: string; label: string; selector?: string; passiveSelector?: string;
     labelSource?: "aria_label"; scopedLabelConflict?: true; backendNodeId?: number }> = [];
@@ -266,6 +278,10 @@ export function deriveAcceptFirstLayerProof(input: {
     if (observation.controls.length > MAX_CONTROLS) return block("passive_capture_incomplete");
     const document = observation.documentUrl && targetHash(observation.documentUrl);
     const capture = observation.captureDiagnostics;
+    const verifiedDrupalCapture = drupalOverflow && documentGeometry &&
+      Number.isSafeInteger(observation.observedAtMs) && observation.observedAtMs >= 0 &&
+      Date.parse(documentGeometry.capturedAt) >= scanStartedAtMs + observation.observedAtMs &&
+      drupalOverflowObservationMatches(observation, documentGeometry);
     if (document !== committedTarget || observation.documentIdentity?.token !== documentToken) {
       if (observation.acceptControlObserved) missing = "source_binding_invalid";
       continue;
@@ -274,7 +290,7 @@ export function deriveAcceptFirstLayerProof(input: {
       UNVERIFIED_INVENTORY_OUTCOMES.has(observation.inventoryOutcome ?? "") ||
       observation.basis.includes("bounded_capture_timeout_or_failure") ||
       !capture?.completedChannels.includes("dom_inventory") ||
-      !capture.completedChannels.some(channel => channel === "geometry" || channel === "accessibility_tree") ||
+      (!verifiedDrupalCapture && !capture.completedChannels.some(channel => channel === "geometry" || channel === "accessibility_tree")) ||
       capture.failedChannels.length || capture.timedOutChannels.length ||
       (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) > 0) {
       missing = "passive_capture_incomplete";
@@ -290,7 +306,7 @@ export function deriveAcceptFirstLayerProof(input: {
       continue;
     }
 
-    if (!observation.acceptControlObserved) continue;
+    if (!observation.acceptControlObserved || (drupalOverflow && !verifiedDrupalCapture)) continue;
 
     const previouslyMatched = matches.length;
     for (const control of observation.controls) {
@@ -338,6 +354,7 @@ export function deriveAcceptFirstLayerProof(input: {
     ...(input.requireExactSelector && nativeAccept ? { exactSelector: nativeAccept.selector } : {}),
     ...(match.labelSource ? { labelSource: match.labelSource } : {}),
     ...(match.scopedLabelConflict ? { scopedLabelConflict: true } : {}),
+    ...(drupalOverflow ? { drupalOverflow: true } : {}),
     issuedAtMs: nowMs, expiresAtMs: Math.min(deadlineAtMs, nowMs + ACCEPT_FIRST_LAYER_GATE_MS),
   });
   if (!proof) return block("source_binding_invalid");
@@ -364,6 +381,8 @@ export async function dispatchWithAcceptFirstLayerProof(input: {
 }) {
   const matches = (value: ConsentActionControlProof | undefined) => value?.action === "accept" &&
     value.authorizedTargetSha256 === input.proof.documentSha256 &&
+    (!input.proof.drupalOverflow || (value.recipeId === DRUPAL_ACCEPT_RECIPE && value.cmpId === DRUPAL_CMP &&
+      value.frameIdentitySha256 === input.proof.documentSha256 && value.labelSource === "visible_text")) &&
     (input.proof.selectorSha256
       ? hash(value.selectorHint) === input.proof.selectorSha256 && hash(value.accessibleLabel) === input.proof.labelSha256 &&
         (!input.proof.labelSource || input.proof.labelSource === value.labelSource)

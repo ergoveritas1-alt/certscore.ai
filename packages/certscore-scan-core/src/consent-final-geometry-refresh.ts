@@ -7,6 +7,8 @@ import type {ConsentControlGeometryArtifact} from "./consent-control-geometry";
 import type {ConsentGeometryAccessDiagnostic, ConsentGeometryEgressDiagnostic} from "./consent-geometry-access";
 import {sameDocumentCaptureBinding, type DocumentCaptureBinding} from "./document-bound-capture";
 import {reconcileConsentGeometryInventoryCoverage} from "./consent-geometry-inventory-coverage";
+import {CONSENT_GEOMETRY_FRAME_LIMIT, DRUPAL_OVERFLOW_FRAME_LIMIT, drupalOverflowObservationMatches,
+  hasVerifiedDrupalOverflowGeometry} from "./drupal-consent-overflow-geometry.js";
 
 export const FINAL_CONSENT_GEOMETRY_REFRESH_POLICY = "final_consent_geometry_refresh.v3";
 export const FINAL_CONSENT_GEOMETRY_REFRESH_MS = 1500;
@@ -61,7 +63,7 @@ function sameState(a: State, b: State) {
  * current frame. Semantic uncertainty remains in the canonical finalizer. */
 type EligibilityBlocker = NonNullable<ConsentCaptureDiagnostic["eligibilityBlocker"]>;
 type RefreshInput = {observation: ConsentUiObservation; geometry?: ConsentControlGeometryArtifact; scanStartedAtMs: number};
-type Eligibility = {reason: "stale_geometry" | "limited_geometry"} | {blocker: EligibilityBlocker};
+type Eligibility = {reason: "stale_geometry" | "limited_geometry" | "stale_drupal_overflow_geometry"} | {blocker: EligibilityBlocker};
 
 export function finalConsentGeometryRefreshReason(input: RefreshInput) {
   const eligibility = evaluateFinalConsentGeometryEligibility(input);
@@ -86,7 +88,14 @@ export function evaluateFinalConsentGeometryEligibility(input: RefreshInput): El
   const inspection = verifyConsentControlInspection(g.controlInspection, g.candidates);
   if (!inspection) return {blocker: "geometry_inspection_unverified"};
   const c = inspection.captureCoverage;
-  if (c.frameCount > 12) return {blocker: "geometry_frame_cap_exceeded"};
+  if (c.frameCount > CONSENT_GEOMETRY_FRAME_LIMIT) {
+    const capturedAt = Date.parse(g.capturedAt);
+    return c.frameCount <= DRUPAL_OVERFLOW_FRAME_LIMIT && c.mainFrameAvailable && !c.inventoryTruncated &&
+      c.documentReadyState !== "loading" && c.capturedFrameCount > 0 &&
+      capturedAt >= input.scanStartedAtMs && capturedAt < input.scanStartedAtMs + o.observedAtMs &&
+      drupalOverflowObservationMatches(o, g)
+      ? {reason: "stale_drupal_overflow_geometry"} : {blocker: "geometry_frame_cap_exceeded"};
+  }
   if (c.inventoryTruncated || !c.mainFrameAvailable || c.frameCount < 1 ||
       c.capturedFrameCount > c.frameCount || c.documentReadyState === "loading")
     return {blocker: "geometry_coverage_incomplete"};
@@ -154,7 +163,8 @@ export function createFinalConsentGeometryRefresh(dependencies: {
   readState: () => State;
   allowLimitedPositiveRefresh?: boolean;
   waitForDocumentComplete?: (timeoutMs: number) => Promise<unknown>;
-  capture: (options: {timeoutMs: number; screenshotArtifactRef: string; documentIdentity: NonNullable<State["documentIdentity"]>}) => Promise<ConsentControlGeometryArtifact>;
+  capture: (options: {timeoutMs: number; screenshotArtifactRef: string; documentIdentity: NonNullable<State["documentIdentity"]>;
+    verifyDrupalOverflow?: true}) => Promise<ConsentControlGeometryArtifact>;
   prepare: (geometry: ConsentControlGeometryArtifact) => Promise<PreparedConsentGeometry>;
 }) {
   let considered = false;
@@ -171,6 +181,7 @@ export function createFinalConsentGeometryRefresh(dependencies: {
     const ineligible = (eligibilityBlocker: EligibilityBlocker): FinalConsentGeometryRefreshResult =>
       ({...result("ineligible"), eligibilityBlocker});
     const eligibility = evaluateFinalConsentGeometryEligibility({...input, scanStartedAtMs: dependencies.scanStartedAtMs});
+    const drupalOverflowRefresh = "reason" in eligibility && eligibility.reason === "stale_drupal_overflow_geometry";
     const priorGeometry = input.geometry;
     const priorCoverage = priorGeometry?.controlInspection?.captureCoverage;
     const limitedPositiveOnly = dependencies.allowLimitedPositiveRefresh === true &&
@@ -200,7 +211,8 @@ export function createFinalConsentGeometryRefresh(dependencies: {
         Date.parse(priorGeometry.capturedAt) > started) return ineligible("checkpoint_timestamp_invalid");
     if (state.frames.length === 0) return ineligible("live_frames_missing");
     if (limitedPositiveOnly && image.capturedAtMs < o.observedAtMs) return ineligible("screenshot_timestamp_invalid");
-    if (state.frames.length > 12 && !limitedPositiveOnly) return ineligible("live_frame_cap_exceeded");
+    if (state.frames.length > CONSENT_GEOMETRY_FRAME_LIMIT && !limitedPositiveOnly &&
+        !(drupalOverflowRefresh && state.frames.length <= DRUPAL_OVERFLOW_FRAME_LIMIT)) return ineligible("live_frame_cap_exceeded");
     if (dependencies.moduleDeadlineAtMs - started < FINAL_CONSENT_GEOMETRY_REFRESH_MS) return result("budget_unavailable");
     const deadline = Math.min(dependencies.moduleDeadlineAtMs, started + FINAL_CONSENT_GEOMETRY_REFRESH_MS);
     const commitDeadline = deadline - CLEANUP_RESERVE_MS;
@@ -228,7 +240,8 @@ export function createFinalConsentGeometryRefresh(dependencies: {
       }
       if (readBudget <= 0) return result("timed_out", true);
       const geometry = await beforeDeadline(dependencies.capture({timeoutMs: readBudget,
-        screenshotArtifactRef: image.path, documentIdentity: state.documentIdentity!}),
+        screenshotArtifactRef: image.path, documentIdentity: state.documentIdentity!,
+        ...(drupalOverflowRefresh ? {verifyDrupalOverflow:true} : {})}),
       readDeadline, now, dependencies.signal);
       if (now() >= started + FINAL_CONSENT_GEOMETRY_READ_MS) return result("timed_out", true);
       if (!current()) return result(dependencies.signal?.aborted ? "cancelled" : now() >= commitDeadline ? "timed_out" : "document_changed", true);
@@ -247,7 +260,8 @@ export function createFinalConsentGeometryRefresh(dependencies: {
             !coverage.mainFrameAvailable || coverage.inventoryTruncated) return result("invalid_capture", true);
         if (!geometry.summary.firstLayerAccept && !geometry.summary.firstLayerReject && !geometry.summary.firstLayerOptions)
           return result("no_positive_control", true);
-      } else if (inspection.structuralCoverage !== "complete") {
+      } else if (inspection.structuralCoverage !== "complete" &&
+          !(drupalOverflowRefresh && hasVerifiedDrupalOverflowGeometry(geometry) && drupalOverflowObservationMatches(o, geometry))) {
         return result("invalid_capture", true);
       }
       const staging = dependencies.prepare(geometry);
@@ -258,7 +272,7 @@ export function createFinalConsentGeometryRefresh(dependencies: {
       const artifactPath = prepared.commitIfCurrent(current);
       if (!artifactPath) return result("retention_failed", true);
       const retained = result("retained", true);
-      if (limitedPositiveOnly) retained.limitedPositiveOnly = true;
+      if (limitedPositiveOnly || drupalOverflowRefresh && inspection.structuralCoverage === "limited") retained.limitedPositiveOnly = true;
       retained.geometry = geometry;
       retained.artifactPath = artifactPath;
       return retained;

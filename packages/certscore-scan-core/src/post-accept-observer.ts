@@ -99,6 +99,7 @@ import {
 import { readCmpApiConsentSnapshot, type CmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
 import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
 import { acceptFirstLayerProofMatches, dispatchWithAcceptFirstLayerProof, type AcceptFirstLayerProof } from "./accept-first-layer-gate.js";
+import { DRUPAL_ACCEPT_RECIPE } from "./drupal-consent-overflow-geometry.js";
 import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
 import { captureCookieYesConfirmationBaseline, matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import {
@@ -916,7 +917,11 @@ export async function runPostAcceptObserver(
       acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
       ? recipes.find(recipe => recipe.cmpId === "OneTrust" && recipe.controlSelector === firstLayerProof.exactSelector)
       : undefined;
-    const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe;
+    const exactDrupalRecipe = firstLayerProof?.drupalOverflow && authorizedExactTargetUrl &&
+      firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
+      acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
+      ? recipes.find(recipe => recipe.recipeId === DRUPAL_ACCEPT_RECIPE) : undefined;
+    const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe ?? exactDrupalRecipe;
     const exactActionDeadline = exactNativeRecipe || exactCookieInformation ? firstLayerProof!.expiresAtMs : Infinity;
     const searchDeadline = Math.min(resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs), exactActionDeadline);
     let readyCookieInformationControl: Locator | undefined;
@@ -1227,6 +1232,7 @@ export async function runPostAcceptObserver(
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
       expectedNativeSelector: firstLayerProof?.exactSelector,
+      requireDrupalBanner: firstLayerProof?.drupalOverflow,
       deadlineAtMs: exactCookieScriptRecipe ? Math.min(resultBudgetDeadlineAtMs ?? Infinity, firstLayerProof!.expiresAtMs) : resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
@@ -1320,6 +1326,7 @@ export async function runPostAcceptObserver(
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
             expectedNativeSelector: firstLayerProof?.exactSelector,
+            requireDrupalBanner: firstLayerProof?.drupalOverflow,
             deadlineAtMs: resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
@@ -1442,6 +1449,7 @@ export async function runPostAcceptObserver(
               recipeId: recipe.recipeId,
               selectorHint: firstLayerProof.exactSelector ?? recipe.controlSelector,
               expectedNativeSelector: firstLayerProof.exactSelector,
+              requireDrupalBanner: firstLayerProof.drupalOverflow,
               signal: effectiveSignal,
             });
             return verified.status === "verified" ? verified.proof : undefined;

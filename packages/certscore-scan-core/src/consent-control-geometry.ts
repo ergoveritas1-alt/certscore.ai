@@ -2,6 +2,8 @@ import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SC
 import { exactNativeConsentButtonSelector, exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled } from "./exact-native-consent-button-selector.js";
 import type { Frame, Page } from "playwright";
 import { AEM_LEGAL_FOOTER_LINK_SELECTOR } from "./consent-footer-opt-out.js";
+import { CONSENT_GEOMETRY_FRAME_LIMIT, DRUPAL_ACCEPT_BANNER_SELECTOR, DRUPAL_OVERFLOW_FRAME_LIMIT,
+  type DrupalOverflowGeometry } from "./drupal-consent-overflow-geometry.js";
 import {
   classifyConsentControlLabel,
   classifyConsentInspectionRole,
@@ -235,6 +237,7 @@ export interface ConsentControlGeometryArtifact {
   captureTiming?: {version: "consent_geometry_capture_timing.v1"; mainFrameCompletedAt: string; completedAt: string};
   firstLayerOptOutGeometry?: FirstLayerOptOutGeometryDiagnostic;
   mainFrameVisualCapture?: ConsentMainFrameVisualCapture;
+  drupalOverflowGeometry?: DrupalOverflowGeometry;
   viewport: {
     width: number;
     height: number;
@@ -266,6 +269,7 @@ interface CaptureConsentControlGeometryOptions {
   /** Action-search retries must not queue another read behind a timed-out RPC.
    * A skipped frame stays unavailable; late data is never reused. */
   avoidOverlappingFrameReads?: boolean;
+  verifyDrupalOverflow?: boolean;
 }
 
 const pendingActionGeometryReads = new WeakSet<Frame>();
@@ -331,6 +335,7 @@ interface RawGeometryCandidate {
 
 interface RawGeometryCapture {
   inventoryLimited: boolean;
+  drupalNativeAccept?: boolean;
   documentReadyState: string;
   pageUrl: string;
   viewport: {
@@ -429,6 +434,7 @@ export async function captureConsentControlGeometry(
     initialOptionalOffCloseRecipes: KNOWN_CMP_REGISTRY.flatMap(entry => entry.initialOptionalOffCloseObservation ? [entry.initialOptionalOffCloseObservation] : []),
     nonFirstLayerSurfaceSelector: KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(","),
     aemFooterLinkSelector: AEM_LEGAL_FOOTER_LINK_SELECTOR,
+    drupalAcceptBannerSelector: options.verifyDrupalOverflow ? DRUPAL_ACCEPT_BANNER_SELECTOR : undefined,
   };
   const exactSelectorCapture = exactAcceptSelectorCapture || exactRejectSelectorCapture;
   const geometrySource = exactSelectorCapture
@@ -437,10 +443,13 @@ export async function captureConsentControlGeometry(
   const initialPageUrl = page.url();
   const mainFrame = page.mainFrame();
   const initialFrames = page.frames();
+  const verifyDrupalOverflow = options.verifyDrupalOverflow && options.timeoutMs &&
+    initialFrames.length > CONSENT_GEOMETRY_FRAME_LIMIT && initialFrames.length <= DRUPAL_OVERFLOW_FRAME_LIMIT;
   const childFrames = initialFrames.filter(frame => frame !== mainFrame)
-    .map(frame => ({frame, priority: cmpFramePriority(frame.url())}))
+    .map(frame => ({frame, priority: cmpFramePriority(frame.url()) * 2 +
+      (verifyDrupalOverflow && /^https?:/.test(frame.url()) ? 1 : 0)}))
     .sort((left, right) => right.priority - left.priority)
-    .slice(0, 11);
+    .slice(0, CONSENT_GEOMETRY_FRAME_LIMIT - 1);
   const frames = [mainFrame, ...childFrames.map(({frame}) => frame)];
   const frameOutcomes = frames.map<OptOutGeometryFrameOutcome>(() => "failed");
   // Frame captures run concurrently, so dividing the deadline by the number
@@ -461,7 +470,9 @@ export async function captureConsentControlGeometry(
   let navigatedDuringCapture = false, mainFrameNavigatedDuringCapture = false;
   const onNavigation = (frame: Frame) => { navigatedDuringCapture = true; if (frame === mainFrame) mainFrameNavigatedDuringCapture = true; };
   page.on("framenavigated", onNavigation);
-  const [captureResults, retainedCookieNames] = await Promise.all([Promise.all(frames.map(async (frame, frameIndex) => {
+  const frameRevision = options.readFrameRevision?.();
+  const frameReadsStartedAtMs = Date.now();
+  const frameReads = Promise.all(frames.map(async (frame, frameIndex) => {
     try {
       if (options.avoidOverlappingFrameReads && pendingActionGeometryReads.has(frame)) {
         frameOutcomes[frameIndex] = "pending_read";
@@ -487,13 +498,22 @@ export async function captureConsentControlGeometry(
     } catch {
       return undefined;
     }
-  })), cookieNamesPromise]).finally(() => page.off("framenavigated", onNavigation));
+  }));
+  const overflowProbe = verifyDrupalOverflow && frameTimeoutMs
+    ? frameReads.then(results => {
+        const remainingMs = frameTimeoutMs - (Date.now() - frameReadsStartedAtMs);
+        if (remainingMs <= 0 || navigatedDuringCapture || results.some(result => !result)) return undefined;
+        return promiseWithTimeout(verifyNonRenderedGeometryFrames(initialFrames, frames), remainingMs);
+      }) : undefined;
+  const [captureResults, retainedCookieNames, nonRenderedFrameCount] = await Promise.all([frameReads, cookieNamesPromise, overflowProbe])
+    .finally(() => page.off("framenavigated", onNavigation));
   const successfulCaptures = captureResults.filter(
     (result): result is { capture: RawGeometryCapture; frameIndex: number; completedAtMs: number; frameRevision: number | undefined } => Boolean(result),
   );
   const mainFrameResult = successfulCaptures.find((result) => result.frameIndex === 0);
   const mainFrameCapture = mainFrameResult?.capture;
   const expectedPageUrl = page.url();
+  const finalFrames = page.frames();
   const raw = mergeRawGeometryCaptures(successfulCaptures, expectedPageUrl, frameInput);
   const cookieNames = retainedCookieNames ?? raw.cookieNames;
   const cmp = buildCmpEvidence({ ...raw, cookieNames });
@@ -548,6 +568,15 @@ export async function captureConsentControlGeometry(
   if (hasUnresolvedConsentDecision({ candidates, controlInspection })) {
     summary.limitations = [UNRESOLVED_CONSENT_DECISION, ...summary.limitations].slice(0, 12);
   }
+  const drupalOverflowGeometry: DrupalOverflowGeometry | undefined = mainFrameResult &&
+    mainFrameCapture?.drupalNativeAccept && mainFrameCapture.documentReadyState === "complete" &&
+    !raw.inventoryLimited && !navigatedDuringCapture && initialPageUrl === expectedPageUrl && mainFrameCapture.pageUrl === expectedPageUrl &&
+    controlInspection.captureCoverage.mainFrameAvailable && options.documentIdentity?.source === "cdp_loader_id" &&
+    frameRevision !== undefined && frameRevision === mainFrameResult.frameRevision && frameRevision === options.readFrameRevision?.() &&
+    initialFrames.length === finalFrames.length && initialFrames.every(frame => finalFrames.includes(frame)) &&
+    successfulCaptures.length === CONSENT_GEOMETRY_FRAME_LIMIT && nonRenderedFrameCount === initialFrames.length - successfulCaptures.length
+    ? {version: "drupal_overflow_accept_geometry.v1", documentToken: options.documentIdentity.token,
+      capturedAt: new Date(mainFrameResult.completedAtMs).toISOString(), nonRenderedFrameCount} : undefined;
   const mainFrameUnavailable = !mainFrameCapture ||
     mainFrameCapture.pageUrl === "about:blank" ||
     mainFrameCapture.viewport.width <= 0 ||
@@ -590,6 +619,7 @@ export async function captureConsentControlGeometry(
     ...(mainFrameResult ? {captureTiming: {version: "consent_geometry_capture_timing.v1" as const,
       mainFrameCompletedAt: new Date(mainFrameResult.completedAtMs).toISOString(), completedAt: new Date().toISOString()}} : {}),
     ...(firstLayerOptOutGeometry ? {firstLayerOptOutGeometry} : {}),
+    ...(drupalOverflowGeometry ? {drupalOverflowGeometry} : {}),
     viewport: mainFrameCapture?.viewport ?? { width: 0, height: 0 },
     screenshotArtifactRef: options.screenshotArtifactRef,
     cmp,
@@ -598,6 +628,26 @@ export async function captureConsentControlGeometry(
     controlInspection,
     summary,
   };
+}
+
+// Owners are read in the already-open parent documents. A rendered, lost or
+// unreadable owner blocks recovery. Descendants of a non-rendered owner cannot
+// contribute a visible first-layer choice, so their documents are never read.
+async function verifyNonRenderedGeometryFrames(all: Frame[], captured: Frame[]): Promise<number | undefined> {
+  const omitted = new Set(all.filter(frame => !captured.includes(frame)));
+  const roots = [...omitted].filter(frame => !omitted.has(frame.parentFrame()!));
+  const verified = await Promise.all(roots.map(async frame => {
+    const owner = await frame.frameElement().catch(() => undefined);
+    if (!owner) return false;
+    try {
+      return await owner.evaluate(node => node.isConnected &&
+        (node instanceof HTMLIFrameElement || node instanceof HTMLFrameElement) &&
+        node.getClientRects().length === 0).catch(() => false);
+    } finally {
+      void owner.dispose().catch(() => undefined);
+    }
+  }));
+  return verified.every(Boolean) ? omitted.size : undefined;
 }
 
 function summarizeFirstLayerOptOutGeometry(
@@ -1522,6 +1572,7 @@ function collectConsentGeometryInPage(input: {
   initialOptionalOffCloseRecipes: NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["initialOptionalOffCloseObservation"]>[];
   nonFirstLayerSurfaceSelector: string;
   aemFooterLinkSelector: string;
+  drupalAcceptBannerSelector?: string;
   nonVisitorSurfaces: readonly { origin: string; selector: string }[];
 }, selectExactButton?: typeof exactNativeConsentButtonSelector): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
@@ -1762,6 +1813,8 @@ function collectConsentGeometryInPage(input: {
     }
   });
 
+  const drupalAccept = input.drupalAcceptBannerSelector && window === window.top
+    ? document.querySelector(input.drupalAcceptBannerSelector) : null;
   return {
     inventoryLimited: unboundedCandidates.slice(input.candidateLimit).some(candidate =>
         candidate.layer === "first_layer" && candidate.intersectsViewport && candidate.enabled &&
@@ -1773,6 +1826,11 @@ function collectConsentGeometryInPage(input: {
         !containers.some(container => container.element.contains(element))) ||
       documentControls.length >= 800 || containerControlInventories.some(controls => controls.slice(80).some(potentiallyVisibleFirstLayer)),
     documentReadyState: document.readyState,
+    ...(drupalAccept instanceof HTMLButtonElement && !drupalAccept.form && !drupalAccept.closest("form") &&
+      !drupalAccept.hasAttribute("form") && !drupalAccept.hasAttribute("formaction") &&
+      (drupalAccept.type === "button" || !drupalAccept.hasAttribute("type")) &&
+      document.querySelectorAll("#sliding-popup").length === 1 && document.querySelectorAll("button.agree-button").length === 1
+      ? { drupalNativeAccept: true } : {}),
     pageUrl: window.location.href,
     viewport,
     scripts: Array.from(document.scripts).map((script) => script.src).filter(Boolean).slice(0, 80),
