@@ -2493,6 +2493,7 @@ async function runCoordinatorFixture(input: {
       documentIdentity:{source:"cdp_loader_id",token:"fixture-loader"},
       candidates:[{
         candidateId:actionLane, actionType:`${actionLane}_all`, label:actionLane === "accept" ? "Accept all" : "Reject all",
+        classifierReasonCodes:[`matched_${actionLane}`],
         tagName:"button",selectorHint:input.enforcementGeometry === "ready" ? `#${actionLane}` : "#different",
         ...(actionLane === "accept" ? {exactNativeAcceptSelectorVerified:true} : {exactNativeRejectSelectorVerified:true}),
         layer:"first_layer",decisionStatus:"confirmed_visible",enabled:true,intersectsViewport:true,
