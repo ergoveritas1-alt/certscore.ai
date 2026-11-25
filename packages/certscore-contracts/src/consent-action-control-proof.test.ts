@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { consentActionControlProofSchema, CONSENT_ACTION_CONTROL_PROOF_VERSION,
-  isRegisteredContextualAcceptLabel } from "./consent-action-control-proof.js";
+  isRegisteredContextualAcceptLabel, ONETRUST_ITALIAN_ACCEPT_CONTROL } from "./consent-action-control-proof.js";
 import { classifyConsentControlLabel } from "./consent-control-label-classifier.js";
 
 const contextualProof = {
@@ -53,4 +53,23 @@ test("contextual proof cannot use legacy version, lose provenance or relax ordin
   const legacy = { ...contextualProof, contractVersion: "certscore.consent_action_control_proof.v1",
     actionSemantics: "direct_label", accessibleLabel: "Accept all", classifierConfidence: 1, matchStrength: "direct", contextualApproval: undefined };
   assert.equal(consentActionControlProofSchema.safeParse(legacy).success, true);
+});
+
+test("Italian OneTrust Accept proof binds the registered control and authorized main document", () => {
+  const scope = ONETRUST_ITALIAN_ACCEPT_CONTROL;
+  const label = { label: scope.label, hasConsentContext: true, classifierProfile: "multilingual_v1" } as const;
+  const observed = classifyConsentControlLabel(label);
+  assert.equal(observed.intent, "accept");
+  assert.equal(classifyConsentControlLabel({ ...label, usage: "action" }).intent, "unknown");
+
+  const proof = { ...contextualProof, contextualApproval: undefined, accessibleLabel: scope.label,
+    actionSemantics: "direct_label", classifierConfidence: observed.confidence, matchedLocale: "it", matchStrength: "direct",
+    recipeId: scope.recipeId, cmpId: scope.cmpId, selectorHint: scope.controlSelector,
+    frameIdentitySha256: contextualProof.authorizedTargetSha256, classifierReasonCodes: [scope.proofReason] };
+  assert.equal(consentActionControlProofSchema.safeParse(proof).success, true);
+  for (const change of [
+    { classifierReasonCodes: [] }, { accessibleLabel: "Accept all" }, { cmpId: undefined },
+    { recipeId: "canonical-control:accept:fixture" }, { selectorHint: "#different-button" },
+    { frameIdentitySha256: "a".repeat(64) }, { authorizedTargetSha256: undefined }, { labelSource: "title" },
+  ]) assert.equal(consentActionControlProofSchema.safeParse({ ...proof, ...change }).success, false, JSON.stringify(change));
 });

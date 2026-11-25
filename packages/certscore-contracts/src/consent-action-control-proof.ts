@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SUPPORTED_PRIVACY_EVIDENCE_LOCALES } from "./supported-languages";
-import { classifyConsentControlLabel, normalizeConsentControlText } from "./consent-control-label-classifier";
+import { classifyConsentControlLabel, normalizeConsentControlText, ONETRUST_ITALIAN_ACCEPT_LABEL } from "./consent-control-label-classifier";
 
 const consentActionControlLocaleSchema = z.enum(SUPPORTED_PRIVACY_EVIDENCE_LOCALES);
 const consentActionControlMatchStrengthSchema = z.enum([
@@ -14,6 +14,16 @@ export const CONSENT_ACTION_CONTROL_PROOF_VERSION =
   "certscore.consent_action_control_proof.v2" as const;
 
 export const REGISTERED_CONTEXTUAL_ACCEPT_POLICY = "registered_contextual_accept.v1" as const;
+
+export const ONETRUST_ITALIAN_ACCEPT_CONTROL = {
+  label: ONETRUST_ITALIAN_ACCEPT_LABEL,
+  bannerSelector: "#onetrust-banner-sdk",
+  groupSelector: "#onetrust-button-group",
+  controlSelector: "#onetrust-accept-btn-handler",
+  cmpId: "OneTrust",
+  recipeId: "canonical-cmp:OneTrust:accept:v1",
+  proofReason: "registered_onetrust_italian_accept.v1",
+} as const;
 
 /** Versioned activation vocabulary. Generic observation terms remain separate;
  * the named adapter must still prove the exact live banner/control binding. */
@@ -80,6 +90,20 @@ export const consentActionControlProofSchema = z.object({
   enabled: z.literal(true),
   uniquelyActionable: z.literal(true),
 }).strict().superRefine((proof, context) => {
+  const italianAccept = ONETRUST_ITALIAN_ACCEPT_CONTROL;
+  const hasItalianAcceptScope = proof.classifierReasonCodes.includes(italianAccept.proofReason);
+  if (hasItalianAcceptScope || (proof.contractVersion === CONSENT_ACTION_CONTROL_PROOF_VERSION &&
+    proof.action === "accept" && proof.accessibleLabel === italianAccept.label)) {
+    if (!hasItalianAcceptScope || proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION ||
+      proof.action !== "accept" || proof.actionSemantics !== "direct_label" || proof.accessibleLabel !== italianAccept.label ||
+      (proof.labelSource !== "visible_text" && proof.labelSource !== "aria_label") ||
+      proof.cmpId !== italianAccept.cmpId || proof.recipeId !== italianAccept.recipeId ||
+      proof.selectorHint !== italianAccept.controlSelector || proof.matchedLocale !== "it" || proof.matchStrength !== "direct" ||
+      !proof.authorizedTargetSha256 || proof.frameIdentitySha256 !== proof.authorizedTargetSha256) {
+      context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
+        message: "The registered Italian Accept label requires exact OneTrust control and document proof."});
+    }
+  }
   if (!proof.labelBoundNecessaryOnly && proof.classifierReasonCodes.some(code => Object.hasOwn(NAMED_NECESSARY_ONLY_REJECT_LABELS, code))) {
     context.addIssue({code: z.ZodIssueCode.custom, path: ["labelBoundNecessaryOnly"],
       message: "Reviewed necessary-only labels must retain their scoped instruction proof."});

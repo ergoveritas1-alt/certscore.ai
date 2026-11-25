@@ -6,6 +6,7 @@ import {
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
 export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v34";
+export const ONETRUST_ITALIAN_ACCEPT_LABEL = "Accetto i cookie";
 
 /** OneTrust's banner wrapper can repeat the labels of descendant controls. */
 export function isOneTrustConsentBannerWrapper(element: {
@@ -204,7 +205,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ["fr", "tout interdire", "reject"],
     ["es", "aceptar y leer gratis", "accept"],
     ["sv", "tillåt alla", "accept"],
-    ["it", "accetto i cookie", "accept"],
+    ["it", ONETRUST_ITALIAN_ACCEPT_LABEL.toLowerCase(), "accept"],
     ["pt", "recusar", "reject"],
     ["cs", "povolit všechny soubory cookie", "accept"],
     ["cs", "povolit vše", "accept"],

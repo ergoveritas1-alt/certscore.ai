@@ -6,6 +6,7 @@ import {
   hasConsentControlSemanticVeto,
   isRegisteredContextualAcceptLabel,
   normalizeConsentControlText,
+  ONETRUST_ITALIAN_ACCEPT_CONTROL,
   type ConsentActionControlProof,
   type PostRefusalInteractionDiagnostics,
 } from "@certscore/contracts";
@@ -310,6 +311,11 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       labelSources: labelEntries.map((entry) => entry[0]) },
   });
   guard.checkpoint();
+  const italianAccept = ONETRUST_ITALIAN_ACCEPT_CONTROL;
+  const oneTrustItalianAccept = input.action === "accept" && input.cmpId === italianAccept.cmpId &&
+    input.recipeId === italianAccept.recipeId && input.selectorHint === italianAccept.controlSelector &&
+    input.expectedNativeSelector === italianAccept.controlSelector && !!input.exactElement && !!input.authorizedTargetSha256 &&
+    !input.controlFrameUrl && !input.expectedAccessibleControl && hasExactOneTrustItalianAcceptLabel(bounded);
   const definition = getKnownCmpDefinitionByName(input.cmpId);
   const contextualApproval = definition?.acceptContextualApproval &&
     input.recipeId === `canonical-cmp:${definition.canonicalName}:accept:${definition.recipeVersion ?? "v1"}` &&
@@ -336,7 +342,8 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     const cached = classifications.get(label);
     if (cached) return cached;
     const result = classifyConsentControlLabel({
-      usage: labelBoundNecessaryOnly ? "observation" : "action", classifierProfile: "multilingual_v1", label,
+      usage: labelBoundNecessaryOnly || (oneTrustItalianAccept && label === italianAccept.label) ? "observation" : "action",
+      classifierProfile: "multilingual_v1", label,
       contextText: labelBoundNecessaryOnly?.contextText, hasConsentContext: true,
     });
     classifications.set(label, result);
@@ -416,7 +423,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     const roleButtonIds = input.cmpId === "CookieScript" && input.expectedNativeSelector === cookieScriptSelector
       ? (input.action === "accept" ? COOKIE_SCRIPT_ACCEPT_IDS : COOKIE_SCRIPT_REJECT_IDS) : undefined;
     const hubSpotAnchor = input.expectedNativeSelector === hubSpotHrefLessConsentSelector(input.action);
-    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor}) => {
+    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, italianAcceptScope}) => {
       if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
       if (passiveSelector) {
         const document = exact?.ownerDocument;
@@ -433,6 +440,15 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         if (roleButtonIds && document.querySelectorAll(roleButtonIds).length !== 2) return null;
         const matches = document.querySelectorAll(passiveSelector);
         if (matches.length !== 1 || matches[0] !== exact) return null;
+        if (italianAcceptScope) {
+          const group = exact.closest(italianAcceptScope.groupSelector);
+          const banner = group?.closest(italianAcceptScope.bannerSelector);
+          if (!(exact instanceof HTMLButtonElement) || !banner || !group || exact.form || exact.closest("form") ||
+              exact.hasAttribute("form") || exact.hasAttribute("formaction") ||
+              (exact.type !== "button" && exact.hasAttribute("type")) || exact.querySelector("a[href]") ||
+              document.querySelectorAll(italianAcceptScope.bannerSelector).length !== 1 ||
+              document.querySelectorAll(italianAcceptScope.groupSelector).length !== 1) return null;
+        }
       }
       const labels = elements.filter((element) => {
         const rect = element.getBoundingClientRect();
@@ -445,7 +461,8 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
       return { selectorMatchCount: elements.length, labels };
-    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor}).catch(() => null));
+    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor,
+      italianAcceptScope: oneTrustItalianAccept ? italianAccept : undefined}).catch(() => null));
     if (input.expectedNativeSelector && !liveSnapshot) {
       return {status: "label_unverifiable", reason: `passive_${input.action}_button_binding_unverified`};
     }
@@ -456,6 +473,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       const labels = boundFields(fields);
       const liveLabel = preferredLabel(labels);
       if (input.exactElement && (liveLabel?.source !== selected.source || liveLabel.value !== selected.value)) return false;
+      if (oneTrustItalianAccept && !hasExactOneTrustItalianAcceptLabel(labels)) return false;
       if (sourceIntentConflict(labels, classify)) return false;
       if (labelBoundNecessaryOnly) {
         const classified = classify(preferredLabel(labels)?.value);
@@ -521,6 +539,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         ...(necessaryOnlyLabelVerified ? ["canonical_necessary_only_recipe_verified"] : []),
         ...(labelBoundNecessaryOnly ? [labelBoundNecessaryOnly.policyVersion] : []),
         ...(contextualLabelVerified ? ["registered_contextual_accept_scope_verified"] : []),
+        ...(oneTrustItalianAccept ? [italianAccept.proofReason] : []),
       ].slice(0, 16),
       ...(input.cmpId ? { cmpId: bound(input.cmpId, 120) } : {}),
       recipeId: bound(input.recipeId, 160),
@@ -622,6 +641,11 @@ function preferredLabel(fields: ControlLabelFields): {
   if (fields.value) return { source: "value", value: fields.value };
   if (fields.title) return { source: "title", value: fields.title };
   return undefined;
+}
+
+function hasExactOneTrustItalianAcceptLabel(fields: ControlLabelFields): boolean {
+  const {label} = ONETRUST_ITALIAN_ACCEPT_CONTROL;
+  return fields.visibleText === label && [fields.ariaLabel, fields.value, fields.title].every(value => !value || value === label);
 }
 
 function sourceIntentConflict(

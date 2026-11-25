@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import type { CanonicalEvidenceBundle, ConsentActionControlProof, ConsentUiObservation } from "@certscore/contracts";
 import {
   classifyConsentControlLabel, consentSessionAccessLimited, hasConsentControlSemanticVeto,
-  isConsentControlInteractionEligible, verifyConsentControlInspection,
+  isConsentControlInteractionEligible, ONETRUST_ITALIAN_ACCEPT_CONTROL, verifyConsentControlInspection,
 } from "@certscore/contracts";
 import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 
@@ -169,15 +169,27 @@ function exactGeometryAccept(
     geometry.candidates.filter(row => row.selectorHint === candidate.selectorHint).length === 1 &&
     conflicts.every(conflict => isSeparateNonAcceptConflict(conflict, candidate, geometry.candidates))
     ? conflicts : undefined;
+  // The observation vocabulary stays generic. Only this checksum-bound OneTrust
+  // control may carry the exact Italian label to the authorized action worker.
+  const italianAccept = ONETRUST_ITALIAN_ACCEPT_CONTROL;
+  const oneTrustItalianAccept = requireExactSelector && candidate.tagName === "button" &&
+    candidate.selectorHint === italianAccept.controlSelector && candidate.label === italianAccept.label &&
+    [candidate.ariaLabel, candidate.title, candidate.value].every(label => !label || label === italianAccept.label) &&
+    candidate.containerSelectorHint === italianAccept.groupSelector &&
+    geometry.cmp?.detections?.some(detection => detection.canonicalName === italianAccept.cmpId) === true &&
+    Array.isArray(geometry.containers) && geometry.containers.some(container => container?.selectorHint === italianAccept.bannerSelector &&
+      container.layer === "first_layer" && container.intersectsViewport) &&
+    geometry.containers.some(container => container?.selectorHint === italianAccept.groupSelector &&
+      container.containerId === candidate.containerId && container.layer === "first_layer" && container.intersectsViewport);
   const binding = { cookieScriptRole,
     selector: cookieScriptRole ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : candidate.selectorHint, inventorySelector: candidate.selectorHint,
     sourceLabel: cookieScriptRole && !candidate.ariaLabel && candidate.cookieScriptUppercaseSourceLabel?.toUpperCase() === candidate.label
-      ? candidate.cookieScriptUppercaseSourceLabel : undefined, tagName: candidate.tagName, separateConflicts };
+      ? candidate.cookieScriptUppercaseSourceLabel : undefined, tagName: candidate.tagName, separateConflicts, oneTrustItalianAccept };
   if (candidate.ariaLabel) {
     // AX inventory can report the accessible name while geometry records the
     // rendered caption. Both must independently support Accept. The receipt
     // binds the exact ARIA label so a change of label source fails closed.
-    if (![candidate.label, candidate.ariaLabel, candidate.title, candidate.value]
+    if (!oneTrustItalianAccept && ![candidate.label, candidate.ariaLabel, candidate.title, candidate.value]
       .filter((label): label is string => typeof label === "string" && label.length > 0)
       .every(isActionableAcceptLabel)) return undefined;
     return { ...binding, sourceLabel: cookieInformationRenderedLabel(candidate, geometry.cmp),
@@ -301,7 +313,7 @@ export function deriveAcceptFirstLayerProof(input: {
         !(control.semanticallyInteractive === true || control.tagName === "button" || control.role === "button") ||
         (control.domBinding && (targetHash(control.domBinding.documentUrl) !== document ||
           control.domBinding.documentIdentity.token !== observation.documentIdentity.token))) return block("control_binding_unverified");
-      if (!isActionableAcceptLabel(control.label)) return block("control_binding_unverified");
+      if (!(handoff && nativeAccept.oneTrustItalianAccept) && !isActionableAcceptLabel(control.label)) return block("control_binding_unverified");
       if (matches.length !== previouslyMatched) return block("control_ambiguous");
       matches.push(handoff
         ? { document, label: hash(nativeAccept.label), selector: hash(nativeAccept.selector), labelSource: nativeAccept.labelSource, backendNodeId: control.domBinding?.backendNodeId,

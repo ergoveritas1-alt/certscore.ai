@@ -5,23 +5,35 @@ import { createServer } from "node:http";
 import test, { type TestContext } from "node:test";
 import { chromium, type Page } from "playwright";
 import {
-  postAcceptEvidencePacketSchema, projectPostAcceptEvidenceForReport, type CanonicalEvidenceBundle,
+  ONETRUST_ITALIAN_ACCEPT_CONTROL, postAcceptEvidencePacketSchema, projectPostAcceptEvidenceForReport, type CanonicalEvidenceBundle,
 } from "@certscore/contracts";
 import { deriveAcceptFirstLayerProof } from "./accept-first-layer-gate.js";
 import { capturePassiveConsentControlGeometry } from "./consent-control-geometry.js";
 import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
-import { readRapidFirstLayerConsentUiObservation } from "./scanners/pre-consent-runtime-scanner.js";
+import { readRapidFirstLayerConsentUiObservation, reconcileConsentUiObservationWithCompletedGeometry } from "./scanners/pre-consent-runtime-scanner.js";
 
 const sha = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 
 test("a retained exact OneTrust Accept selector resolves after a deferred localhost render", t =>
-  verifyDeferredAccept(t, false));
+  verifyDeferredAccept(t));
 
 test("a transient native actionability retry returns one exact Accept receipt", t =>
-  verifyDeferredAccept(t, true));
+  verifyDeferredAccept(t, {interruptClick:true}));
 
-async function verifyDeferredAccept(t: TestContext, interruptClick: boolean) {
+test("the registered Italian OneTrust button retains one Accept receipt with 200 ms to spare", t =>
+  verifyDeferredAccept(t, {italian:true}));
+
+for (const changedControl of ["moved", "form_bound", "conflicting_aria"] as const) {
+  test(`the Italian OneTrust worker withholds Accept when the live button is ${changedControl}`, t =>
+    verifyDeferredAccept(t, {italian:true, changedControl}));
+}
+
+async function verifyDeferredAccept(t: TestContext, options: {
+  interruptClick?: boolean; italian?: boolean; changedControl?: "moved" | "form_bound" | "conflicting_aria";
+} = {}) {
+  const {interruptClick, italian, changedControl} = options;
+  const scoped = ONETRUST_ITALIAN_ACCEPT_CONTROL;
   const flag="CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW";
   const previous=process.env[flag];
   process.env[flag]="1";
@@ -37,16 +49,24 @@ async function verifyDeferredAccept(t: TestContext, interruptClick: boolean) {
       response.writeHead(404).end();
       return;
     }
-    response.setHeader("content-type","text/html");
+    const changed = request.headers["x-fixture-passive"] === "1" ? undefined : changedControl;
+    const label = italian ? scoped.label : "Accept All Cookies";
+    const button = `<button id="onetrust-accept-btn-handler"${changed === "conflicting_aria" ? ' aria-label="Reject all"' : ""}>${label}</button>`;
+    const markup = `<section role="dialog" id="onetrust-banner-sdk"><p>We use cookies. Choose optional cookies.</p><div id="onetrust-button-group"><div>${
+      changed === "moved" ? "" : changed === "form_bound" ? `<form>${button}</form>` : button}</div></div>${
+      changed === "moved" ? button : ""}${italian ? '<button aria-label="Rifiuto tutti i cookie">Rifiuto tutti i cookie</button>' : ""}</section>`;
+    response.setHeader("content-type","text/html; charset=utf-8");
     response.end(`<main><h1>Fixture</h1></main><script>
       window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C0001',Status:'always active'},{CustomGroupId:'C0002',Status:'inactive'}]})};
       window.__tcfapi=()=>{};
       document.cookie='OptanonConsent=groups=C0001:1,C0002:0&receipt=before;path=/';
       setTimeout(()=>{
         const banner=document.createElement('div');
-        banner.innerHTML='<section role="dialog" id="onetrust-banner-sdk"><p>We use cookies. Choose optional cookies.</p><div id="onetrust-button-group"><div><button id="onetrust-accept-btn-handler">Accept All Cookies</button></div></div></section>';
+        banner.innerHTML=${JSON.stringify(markup)};
         document.body.append(banner);
-        banner.querySelector('button').onclick=()=>{
+        banner.querySelector('#onetrust-accept-btn-handler').onclick=(event)=>{
+          if (!event.isTrusted) return;
+          event.preventDefault();
           fetch('/clicked',{method:'POST'});
           document.cookie='OptanonConsent=groups=C0001:1,C0002:1&receipt=after;path=/';
           banner.hidden=true;
@@ -81,8 +101,13 @@ async function verifyDeferredAccept(t: TestContext, interruptClick: boolean) {
   const committedUrl=page.url();
   const cdp=await passive.newCDPSession(page);
   const documentIdentity={source:"cdp_loader_id" as const,token:(await cdp.send("Page.getFrameTree")).frameTree.frame.loaderId};
-  const inventory=await readRapidFirstLayerConsentUiObservation(page,Date.now(),1500);
+  const startedAtMs=Date.now();
+  const rawInventory=await readRapidFirstLayerConsentUiObservation(page,startedAtMs,1500);
   const geometry=await capturePassiveConsentControlGeometry(page,{documentIdentity,timeoutMs:1500});
+  const inventory=italian ? reconcileConsentUiObservationWithCompletedGeometry({
+    current:{...rawInventory,documentIdentity,documentUrl:committedUrl}, geometry, geometryAccessLoaded:true,
+    pageUrl:committedUrl, scanStartedAtMs:startedAtMs,
+  }) : rawInventory;
   await passive.close();
   const scanId="retained-onetrust-accept";
   const snapshot={url:committedUrl,consentStateAtTime:"pre_consent"};
@@ -90,7 +115,7 @@ async function verifyDeferredAccept(t: TestContext, interruptClick: boolean) {
     scanId,url,domSnapshots:[{...snapshot,documentIdentity,artifactId:"dom_text_pre_consent"},
       {...snapshot,artifactId:"dom_text_pre_consent_recovery"}],
     consentSurfaceInspection:{inspectedPreInteraction:true,actionableControlObserved:true},
-    consentUiObservations:[{...inventory,documentIdentity,documentUrl:committedUrl,captureDiagnostics:{
+    consentUiObservations:[italian ? inventory : {...inventory,documentIdentity,documentUrl:committedUrl,captureDiagnostics:{
       ...inventory.captureDiagnostics,completedChannels:[...inventory.captureDiagnostics!.completedChannels,"geometry"],
     }}],
   } as CanonicalEvidenceBundle;
@@ -124,6 +149,16 @@ async function verifyDeferredAccept(t: TestContext, interruptClick: boolean) {
     },
     onExactAcceptClickCompleted: receipt => verifiedClicks.push(receipt),
   });
+  const retainedAtMs=Date.now();
+  const retained=postAcceptEvidencePacketSchema.parse(packet);
+  const projection=projectPostAcceptEvidenceForReport({packet:retained,packetSha256:sha(JSON.stringify(retained))});
+  if (changedControl) {
+    assert.deepEqual(clicks,[]);
+    assert.deepEqual(verifiedClicks,[]);
+    assert.ok(!rechecks.includes("passed"));
+    assert.notEqual(projection.execution?.clickCompleted,true);
+    return;
+  }
   assert.deepEqual(rechecks,["passed"],JSON.stringify({resolver:packet.resolver,limitations:packet.limitations}));
   if (interruptClick) {
     assert.ok(interruption);
@@ -132,7 +167,11 @@ async function verifyDeferredAccept(t: TestContext, interruptClick: boolean) {
   assert.deepEqual(clicks,["POST"]);
   assert.equal(verifiedClicks.length,1);
   assert.ok(packet.interactionDiagnostics?.resolver?.snapshots.every(s => s.source !== "canonical_geometry"));
-  const retained=postAcceptEvidencePacketSchema.parse(packet);
-  const projection=projectPostAcceptEvidenceForReport({packet:retained,packetSha256:sha(JSON.stringify(retained))});
   assert.equal(projection.execution?.clickCompleted,true);
+  if (italian) {
+    assert.equal(retained.actionControlProof?.accessibleLabel,scoped.label);
+    assert.ok(retained.actionControlProof?.classifierReasonCodes.includes(scoped.proofReason));
+    assert.ok(proof.expiresAtMs-verifiedClicks[0]!.completedAtMs>=200);
+    assert.ok(proof.expiresAtMs-retainedAtMs>=200);
+  }
 }
