@@ -596,7 +596,7 @@ type RejectPacketReady = {
   packet: { uri: string; sha256: string; sizeBytes: number };
 };
 
-type RejectClickProgress = (completedAtMs: number) => void;
+type RejectClickProgress = (click: ExactClick) => void;
 
 type InlineConsentBrowser = {
   browser: Promise<Browser>;
@@ -2683,7 +2683,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
           const checkpoint = buildConsentClickCheckpoint({ action: "reject", proof: firstLayerProof }, click.control, {
             recheckedAtMs: gateRecheck.observedAtMs, dispatchedAtMs: click.dispatchedAtMs, completedAtMs: click.completedAtMs,
           });
-          if (checkpoint) options.onRejectClickProgress(click.completedAtMs);
+          if (checkpoint) options.onRejectClickProgress(click);
         },
         onExactRejectPacketSealed: (sealed: PostRefusalEvidencePacket) => {
           if (gateRecheck?.outcome !== "passed" || earlyArchive || options.signal?.aborted) return;
@@ -3175,7 +3175,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   let postRefusalWorkerPromise: Promise<void> | undefined;
   let earlyRejectPacket: ReturnType<typeof startRejectPacketVerification> | undefined;
   let verifiedInlineRejectClickAtMs: number | undefined;
-  let lateAriaRejectDispatched = false;
+  let inlineRejectContinuation: "aria_label" | "onetrust_native" | undefined;
   const postRefusalAbortController = new AbortController();
   postRefusalAbortController.signal.addEventListener("abort", () => {
     postRefusalState.error = postRefusalState.cancelledNoReject
@@ -3219,8 +3219,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           }
           if (preparationError) throw preparationError;
           postRefusalState.dispatchStartedAtMs = nowMs;
-          lateAriaRejectDispatched = !!options.inlineConsentBrowser && !preparationId &&
-            proof?.binding.labelSource === "aria_label" && payload.postRefusalObservation?.observationWindowMs === 8_000;
+          if (options.inlineConsentBrowser && !preparationId && proof && payload.postRefusalObservation?.observationWindowMs === 8_000) {
+            inlineRejectContinuation = proof.binding.labelSource === "aria_label" ? "aria_label" :
+              proof.exactSelector === "#onetrust-reject-all-handler" ? "onetrust_native" : undefined;
+          }
           if (preparationId && proof && prepared && sendRejectProof) {
             await sendRejectProof({
               scanId: payload.scanId, targetUrl: payload.targetUrl,
@@ -3235,8 +3237,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             signal: postRefusalWorkerSignal,
             ...(proof ? {rejectFirstLayerProof:proof} : {}),
             inlineConsentBrowser: options.inlineConsentBrowser,
-            ...(lateAriaRejectDispatched ? { onRejectClickProgress: (completedAtMs: number) => {
-              verifiedInlineRejectClickAtMs ??= completedAtMs;
+            ...(inlineRejectContinuation ? { onRejectClickProgress: (click: ExactClick) => {
+              if (inlineRejectContinuation === "aria_label" || click.control.cmpId === "OneTrust") {
+                verifiedInlineRejectClickAtMs ??= click.completedAtMs;
+              }
             } } : {}),
             ...(proof && useCloudConsentHandoff ? {
               onRejectPacketReady: (notice: RejectPacketReady, expected: LocalV2DagLambdaDispatchPayload) => {
@@ -3767,7 +3771,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     const remaining = await awaitRejectWorkerWithLateClickAllowance({
       abortController: postRefusalAbortController, passiveLaneBarrierCompletedAtMs,
       maxTailWaitMs: postRefusalMaxTailWaitMs, absoluteDeadlineAtMs: options.deadlineAtMs,
-      lateAriaDispatchAtMs: lateAriaRejectDispatched ? postRefusalState.dispatchStartedAtMs : undefined,
+      inlineDispatch: inlineRejectContinuation && postRefusalState.dispatchStartedAtMs !== undefined
+        ? { kind: inlineRejectContinuation, startedAtMs: postRefusalState.dispatchStartedAtMs } : undefined,
       verifiedClickAtMs: () => verifiedInlineRejectClickAtMs,
       workerPromise, workerAlreadySettled,
     });
@@ -4549,30 +4554,33 @@ async function waitForPostActionDispatchDelay(delayMs: number, signal?: AbortSig
   });
 }
 
-/** When an inline ARIA action was released immediately before the barrier,
- * allow its verified click to finish the existing observation and packet join.
- * Wait for either stage against the same absolute deadline. */
+/** Give a qualifying inline Reject click time to finish its existing eight-second
+ * observation and packet join. Both join stages share one absolute deadline. */
 export async function awaitRejectWorkerWithLateClickAllowance(input: {
   abortController: AbortController;
   passiveLaneBarrierCompletedAtMs: number;
   absoluteDeadlineAtMs?: number;
   maxTailWaitMs: number;
-  lateAriaDispatchAtMs?: number;
+  inlineDispatch?: { kind: "aria_label" | "onetrust_native"; startedAtMs: number };
   verifiedClickAtMs: () => number | undefined;
   workerPromise: Promise<void>;
   workerAlreadySettled?: boolean;
 }) {
   const base = POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
   const barrier = input.passiveLaneBarrierCompletedAtMs;
-  const dispatch = input.lateAriaDispatchAtMs;
+  const dispatch = input.inlineDispatch?.startedAtMs;
+  // The OneTrust worker can dispatch before the final passive evidence joins
+  // while its exact button is still rendering in the separate action context.
+  const dispatchLookbackMs = input.inlineDispatch?.kind === "onetrust_native" ? 3_000 : 750;
   const canExtend = input.maxTailWaitMs === base && dispatch !== undefined &&
-    dispatch <= barrier && barrier - dispatch <= 750 && !input.abortController.signal.aborted;
+    dispatch <= barrier && barrier - dispatch <= dispatchLookbackMs && !input.abortController.signal.aborted;
   let maxTailWaitMs = input.maxTailWaitMs;
   if (canExtend) {
     const completed = await awaitPostRefusalWorkerWithinTailBudget({ ...input, abortController: new AbortController() });
     if (completed) return { completed, maxTailWaitMs };
     const click = input.verifiedClickAtMs();
-    if (click !== undefined && click >= dispatch && click < barrier + base) {
+    if (click !== undefined && click >= dispatch && click < barrier + base &&
+        (input.inlineDispatch?.kind !== "onetrust_native" || click >= barrier)) {
       // Budget the existing eight-second observation plus up to one second for
       // confirmation and verification. Never add more than two seconds total.
       maxTailWaitMs = Math.max(base, Math.min(base + 2_000, click - barrier + 9_000,

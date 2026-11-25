@@ -731,7 +731,7 @@ test("a verified late ARIA click can finish the existing Reject window under one
   const barrier = Date.now() - 8_005;
   const worker = () => new Promise<void>(resolve => setTimeout(resolve, 15));
   const options = {
-    passiveLaneBarrierCompletedAtMs: barrier, maxTailWaitMs: 8_000, lateAriaDispatchAtMs: barrier - 320,
+    passiveLaneBarrierCompletedAtMs: barrier, maxTailWaitMs: 8_000, inlineDispatch: { kind: "aria_label" as const, startedAtMs: barrier - 320 },
     verifiedClickAtMs: () => barrier + 711,
   };
   const permitted = new AbortController();
@@ -743,13 +743,38 @@ test("a verified late ARIA click can finish the existing Reject window under one
   for (const unsafe of [
     { verifiedClickAtMs: () => undefined },
     { verifiedClickAtMs: () => barrier + 8_000 },
-    { lateAriaDispatchAtMs: barrier - 751 },
-    { lateAriaDispatchAtMs: barrier + 1 },
+    { inlineDispatch: { kind: "aria_label" as const, startedAtMs: barrier - 751 } },
+    { inlineDispatch: { kind: "aria_label" as const, startedAtMs: barrier + 1 } },
     { absoluteDeadlineAtMs: barrier + 8_000 },
   ]) {
     const abortController = new AbortController();
     const denied = await awaitRejectWorkerWithLateClickAllowance({ ...options, ...unsafe, abortController, workerPromise: worker() });
     assert.deepEqual(denied, { completed: false, maxTailWaitMs: 8_000 });
+    assert.equal(abortController.signal.aborted, true);
+  }
+});
+
+test("a verified native OneTrust click after the passive barrier can retain its full Reject observation", async () => {
+  // Reproduce the isolated timing: dispatch 2,061 ms before the barrier, then
+  // a verified click completes 239 ms after it.
+  const barrier = Date.now() - 8_005;
+  const input = {
+    passiveLaneBarrierCompletedAtMs: barrier, maxTailWaitMs: 8_000,
+    inlineDispatch: { kind: "onetrust_native" as const, startedAtMs: barrier - 2_061 },
+    verifiedClickAtMs: () => barrier + 239,
+    workerPromise: new Promise<void>(resolve => setTimeout(resolve, 15)),
+  };
+  assert.deepEqual(await awaitRejectWorkerWithLateClickAllowance({ ...input, abortController: new AbortController() }),
+    { completed: true, maxTailWaitMs: 9_239 });
+  for (const unsafe of [
+    { verifiedClickAtMs: () => undefined },
+    { verifiedClickAtMs: () => barrier - 1 },
+    { inlineDispatch: { kind: "onetrust_native" as const, startedAtMs: barrier - 3_001 } },
+    { absoluteDeadlineAtMs: barrier + 8_000 },
+  ]) {
+    const abortController = new AbortController();
+    assert.deepEqual(await awaitRejectWorkerWithLateClickAllowance({ ...input, ...unsafe, abortController }),
+      { completed: false, maxTailWaitMs: 8_000 });
     assert.equal(abortController.signal.aborted, true);
   }
 });
