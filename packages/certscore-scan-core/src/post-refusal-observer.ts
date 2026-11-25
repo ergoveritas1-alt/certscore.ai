@@ -41,6 +41,7 @@ import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtim
 import { finishAfterActionWindow } from "./after-action-capture.js";
 import {
   CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT,
+  DRUPAL_NO_THANKS_REJECT_CONTROL,
   consentReceiptChangeValue,
   postRefusalEvidencePacketSchema,
   type ConsentActionControlProof,
@@ -1225,6 +1226,15 @@ export async function runPostRefusalObserver(
     const initialActionSearchTimeoutMs = actionSearchTimeoutMs - adaptiveExtensionMs;
     const initialSearchDeadline = resolverStartedAtMs + initialActionSearchTimeoutMs;
     const passiveProof = firstLayerProof;
+    const drupalNoThanks = passiveProof?.binding.drupalNoThanks;
+    const controlProofDeadlineAtMs = drupalNoThanks
+      ? Math.min(passiveProof.expiresAtMs, resultBudgetDeadlineAtMs ?? Infinity) : resultBudgetDeadlineAtMs;
+    const drupalScope = DRUPAL_NO_THANKS_REJECT_CONTROL;
+    const drupalRecipe = drupalNoThanks && authorizedExactTargetUrl &&
+      passiveProof.binding.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
+      rejectFirstLayerProofMatches(passiveProof, input.parentScanId ?? input.scanId, input.url,
+        passiveProof.binding.parentDispatchSha256, resolverStartedAtMs)
+      ? actionRecipes.find(recipe => recipe.recipeId === drupalScope.recipeId && recipe.cmpId === drupalScope.cmpId) : undefined;
     const retainedNativeSelector = passiveProof && !passiveProof.binding.labelSource && authorizedExactTargetUrl &&
       passiveProof.binding.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
       ? { selector: passiveProof.exactSelector, labelSha256: passiveProof.binding.labelSha256, expiresAtMs: passiveProof.expiresAtMs }
@@ -1246,7 +1256,12 @@ export async function runPostRefusalObserver(
     };
     const focusedResolution = initialActionSearchTimeoutMs > 0 && exactCookieInformation
       ? await probeExactCookieInformation(250, effectiveSignal, true) : undefined;
-    const readiness = focusedResolution || initialActionSearchTimeoutMs === 0
+    const readiness = drupalNoThanks
+      ? {documentReady:true, resolution:drupalRecipe ? await waitForDeterministicRecipe(page,
+          [{...drupalRecipe, controlSelector:drupalScope.bannerSelector}],
+          initialActionSearchTimeoutMs === 0 ? 0 : Math.max(1, Math.min(initialSearchDeadline, controlProofDeadlineAtMs ?? Infinity) - Date.now()),
+          effectiveSignal, recordResolverSnapshot, actionDiscovery) : {status:"not_found" as const}}
+      : focusedResolution || initialActionSearchTimeoutMs === 0
       ? {documentReady:true,resolution:focusedResolution}
       : await waitForConsentDocumentOrNamedControl<DeterministicRecipeResolution>({
         page,deadlineAtMs:initialSearchDeadline,signal:effectiveSignal,discovery:actionDiscovery,
@@ -1283,7 +1298,7 @@ export async function runPostRefusalObserver(
         ));
     if (
       resolution.status === "not_found" &&
-      adaptiveExtensionMs > 0 &&
+      adaptiveExtensionMs > 0 && !drupalNoThanks &&
       await hasCredibleLateConsentSignal({
         context,
         diagnosticGeometry: resolution.diagnosticGeometry,
@@ -1424,7 +1439,8 @@ export async function runPostRefusalObserver(
     let useVerifiedGeometryDispatch = false;
     // One shared trial/recovery allowance also covers an opacity transition
     // discovered by final proof. Do not restart it after the search expires.
-    const actionReadinessDeadline = Date.now() + (input.allowCanonicalRejectDiscovery ? 3_000 : 2_500);
+    const actionReadinessDeadline = Math.min(Date.now() + (input.allowCanonicalRejectDiscovery ? 3_000 : 2_500),
+      drupalNoThanks ? controlProofDeadlineAtMs ?? Infinity : Infinity);
     try {
       // The bounded exact probe already tested the same scoped control's
       // actionability. The dispatch still rebinds the actual element, checks
@@ -1452,7 +1468,7 @@ export async function runPostRefusalObserver(
         Math.min(500, actionabilityRecoveryRemaining()),
         effectiveSignal,
       ) : { status: "not_found" };
-      if (reResolution.status === "not_found" && input.allowCanonicalRejectDiscovery && actionabilityRecoveryRemaining() > 0) {
+      if (reResolution.status === "not_found" && !drupalNoThanks && input.allowCanonicalRejectDiscovery && actionabilityRecoveryRemaining() > 0) {
         reResolution = await waitForCanonicalRejectControlRecipe(
           page,
           Math.min(500, actionabilityRecoveryRemaining()),
@@ -1588,7 +1604,8 @@ export async function runPostRefusalObserver(
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
       expectedNativeSelector: firstLayerProof?.exactSelector,
-      deadlineAtMs: resultBudgetDeadlineAtMs,
+      requireDrupalBanner: drupalNoThanks,
+      deadlineAtMs: controlProofDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
       action: "reject",
@@ -1617,7 +1634,7 @@ export async function runPostRefusalObserver(
       selectorHint: selectedRecipe.controlSelector,
     });
     if (
-      proofResolution.status !== "verified" &&
+      proofResolution.status !== "verified" && !drupalNoThanks &&
       (proofResolution.reason === "resolved_control_no_longer_actionable" ||
         proofResolution.reason === "resolved_control_scope_not_interactive" ||
         (input.allowCanonicalRejectDiscovery && consentActionLabelNeedsRediscovery(proofResolution))) &&
@@ -1802,7 +1819,7 @@ export async function runPostRefusalObserver(
                 (resultBudgetDeadlineAtMs ?? Infinity) - 250), baseSignal);
           }
         },
-        { ...actionabilityReadOptions(), deadlineAtMs: resultBudgetDeadlineAtMs, boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
+        { ...actionabilityReadOptions(), deadlineAtMs: controlProofDeadlineAtMs, boundElement: boundControlElement, bindClosedShadowTarget: boundControlDispatch },
         () => {
           try { input.onLifecycleEvent?.({type: "action_dispatched", atMs: elapsed(parentScanStartedAtMs)}); }
           catch { limitations.push("lifecycle_listener_failed"); }
@@ -3006,6 +3023,7 @@ async function dispatchRejectControl(
     const current = await buildConsentActionControlProof({
       action: "reject", control: element, exactElement: element, requireUniqueSelector: true,
       expectedNativeSelector: exactSelector,
+      requireDrupalBanner: proof.classifierReasonCodes.includes(DRUPAL_NO_THANKS_REJECT_CONTROL.proofReason) ? true : undefined,
       page, recipeId: recipe.recipeId, selectorHint: exactSelector ?? recipe.controlSelector, cmpId: recipe.cmpId,
       controlFrameUrl: recipe.controlFrameUrl, authorizedTargetSha256: proof.authorizedTargetSha256,
       observedAtMs: proof.observedAtMs, signal, deadlineAtMs,

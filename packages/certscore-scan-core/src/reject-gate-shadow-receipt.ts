@@ -3,8 +3,9 @@ import { consentGateDocument } from "./consent-gate-document.js";
 import { STALE_CONSENT_GEOMETRY_BASIS } from "./consent-geometry-inventory-coverage.js";
 import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
+import { drupalOverflowObservationMatches, drupalScopedCandidate, hasVerifiedDrupalOverflowGeometry } from "./drupal-consent-overflow-geometry.js";
 import { createHash } from "node:crypto";
-import { classifyConsentControlLabel, consentSessionAccessLimited, hasConsentControlSemanticVeto, isConsentControlInteractionEligible, normalizeConsentControlText, verifyConsentControlInspection,
+import { classifyConsentControlLabel, consentSessionAccessLimited, DRUPAL_NO_THANKS_REJECT_CONTROL, hasConsentControlSemanticVeto, isConsentControlInteractionEligible, normalizeConsentControlText, verifyConsentControlInspection,
   type CanonicalEvidenceBundle, type ConsentActionControlProof } from "@certscore/contracts";
 import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 import type { AcceptFirstLayerGeometrySource } from "./accept-first-layer-gate.js";
@@ -36,6 +37,7 @@ type RejectBinding = {
   requestedTargetSha256: string; documentSha256: string; documentTokenSha256: string;
   selectorSha256: string; selectorEvidence: "verified_geometry"; labelSha256: string;
   labelMatch: "exact"; labelSource?: "aria_label";
+  drupalNoThanks?: true;
 };
 export type RejectGateDecision =
   | {outcome:"blocked"; reason:RejectGateBlockReason; evaluatedAtMs:number}
@@ -58,8 +60,10 @@ export function readRejectFirstLayerProof(value: unknown): RejectFirstLayerProof
       issuedAtMs < 0 || expiresAtMs <= issuedAtMs || expiresAtMs - issuedAtMs > proofLifetimeMs ||
       !binding || typeof binding !== "object" || Array.isArray(binding) ||
       !validExactSelector(proof.exactSelector) || sha(proof.exactSelector) !== binding.selectorSha256 ||
-      Object.keys(binding).length !== 10 + Number(Object.hasOwn(binding, "labelSource")) ||
+      Object.keys(binding).length !== 10 + Number(Object.hasOwn(binding, "labelSource")) + Number(Object.hasOwn(binding, "drupalNoThanks")) ||
       (Object.hasOwn(binding, "labelSource") && binding.labelSource !== "aria_label") ||
+      (Object.hasOwn(binding, "drupalNoThanks") && (binding.drupalNoThanks !== true || binding.labelSource ||
+        proof.exactSelector !== DRUPAL_NO_THANKS_REJECT_CONTROL.controlSelector || binding.labelSha256 !== sha(DRUPAL_NO_THANKS_REJECT_CONTROL.label))) ||
       binding.selectorEvidence !== "verified_geometry" || binding.labelMatch !== "exact" ||
       ![binding.parentDispatchSha256, binding.sourceSha256, binding.geometrySha256, binding.requestedTargetSha256,
         binding.documentSha256, binding.documentTokenSha256, binding.selectorSha256, binding.labelSha256]
@@ -75,7 +79,10 @@ export function rejectFirstLayerProofMatches(value: unknown, scanId: string, tar
 }
 
 export function rejectGateControlMatches(binding: RejectBinding, proof: ConsentActionControlProof) {
+  const drupal = DRUPAL_NO_THANKS_REJECT_CONTROL;
   return proof.action === "reject" && proof.actionSemantics === "direct_label" &&
+    Boolean(binding.drupalNoThanks) === Boolean(proof.classifierReasonCodes?.includes(drupal.proofReason)) &&
+    (!binding.drupalNoThanks || (proof.cmpId === drupal.cmpId && proof.recipeId === drupal.recipeId)) &&
     proof.authorizedTargetSha256 === binding.documentSha256 && proof.frameIdentitySha256 === binding.documentSha256 &&
     sha(proof.selectorHint) === binding.selectorSha256 && sha(proof.accessibleLabel) === binding.labelSha256 &&
     proof.labelSource === (binding.labelSource ?? "visible_text");
@@ -109,20 +116,26 @@ export function evaluateRejectGate(input: {
       artifact.documentIdentity?.source !== "cdp_loader_id" || artifact.documentIdentity.token !== identity.token ||
       !Array.isArray(artifact.candidates)) return block("source_binding_invalid");
   const inspection = verifyConsentControlInspection(artifact.controlInspection, artifact.candidates);
-  if (consentSessionAccessLimited(bundle,artifact) || !inspection || inspection.structuralCoverage !== "complete" ||
+  const drupalOverflow = hasVerifiedDrupalOverflowGeometry(artifact, "reject") &&
+    Date.parse(artifact.captureTiming?.completedAt ?? "") <= nowMs;
+  if (consentSessionAccessLimited(bundle,artifact) || !inspection || (!drupalOverflow && inspection.structuralCoverage !== "complete") ||
       inspection.captureCoverage.inventoryTruncated || !inspection.captureCoverage.mainFrameAvailable ||
-      !inspection.captureCoverage.documentAndFramesStable) return block("passive_capture_incomplete");
+      (!drupalOverflow && !inspection.captureCoverage.documentAndFramesStable)) return block("passive_capture_incomplete");
 
   const geometryCapturedAt = Date.parse(artifact.capturedAt);
   const scanStartedAt = Date.parse(bundle.startedAt);
+  const drupalGeometryMatches = (row: CanonicalEvidenceBundle["consentUiObservations"][number]) =>
+    Number.isSafeInteger(row.observedAtMs) && row.observedAtMs >= 0 &&
+    geometryCapturedAt >= scanStartedAt + row.observedAtMs && geometryCapturedAt <= nowMs &&
+    drupalOverflowObservationMatches(row, artifact, "reject");
   const geometryCompletesObservation = (row: CanonicalEvidenceBundle["consentUiObservations"][number]) =>
-    row.captureDiagnostics?.completedChannels.includes("geometry") ||
+    (drupalOverflow ? drupalGeometryMatches(row) : row.captureDiagnostics?.completedChannels.includes("geometry") ||
     // A separately retained, complete and current artifact can corroborate
     // finished DOM and AX reads when the aggregate omitted the geometry flag.
     (row.captureDiagnostics?.completedChannels.includes("accessibility_tree") &&
       row.inventoryOutcome === "complete_with_controls" && !row.basis.includes(STALE_CONSENT_GEOMETRY_BASIS) &&
       Number.isSafeInteger(row.observedAtMs) && row.observedAtMs >= 0 &&
-      geometryCapturedAt >= scanStartedAt + row.observedAtMs && geometryCapturedAt <= nowMs);
+      geometryCapturedAt >= scanStartedAt + row.observedAtMs && geometryCapturedAt <= nowMs));
   const coveredObservations = bundle.consentUiObservations.filter(row => row.layerInspected === "first_layer" &&
     row.documentUrl === document.url && row.documentIdentity?.source === "cdp_loader_id" &&
     row.documentIdentity.token === identity.token &&
@@ -153,6 +166,12 @@ export function evaluateRejectGate(input: {
       c.classifierReasonCodes?.includes("visible_accessible_intent_conflict") &&
       [c.label,c.ariaLabel,c.title,c.value].some(label => label && directReject(label)))) return block("label_conflict_unresolved");
   const control = controls[0], candidate = candidates[0];
+  const drupal = DRUPAL_NO_THANKS_REJECT_CONTROL;
+  const drupalNoThanks = candidate?.label === drupal.label && candidate === drupalScopedCandidate(artifact, "reject") &&
+    control?.label === drupal.label && observations.some(drupalGeometryMatches);
+  if (drupalOverflow && !drupalNoThanks) return block("control_binding_unverified");
+  if (drupalNoThanks && firstLayer.some(c => c.classifierReasonCodes?.includes("visible_accessible_intent_conflict") &&
+    [c.label, c.ariaLabel, c.title, c.value].includes(drupal.label))) return block("label_conflict_unresolved");
   const cookieScriptRole = candidate?.exactCookieScriptRejectVerified === true &&
     candidate.selectorHint === "#cookiescript_reject" && candidate.tagName === "div" && candidate.role === "button" &&
     control?.tagName === "div" && control.role === "button" &&
@@ -173,8 +192,8 @@ export function evaluateRejectGate(input: {
         !row.unresolvedIntents.includes("reject")) ||
       !passiveButtonSelectorMatches(control, candidate.selectorHint, "reject", document.url, identity.token) ||
       (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label) && control.label !== cookieInformationLabel) ||
-      !candidate.label || ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
-        label === undefined || (typeof label === "string" && (!label || directReject(label))))) {
+      !candidate.label || (!drupalNoThanks && ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
+        label === undefined || (typeof label === "string" && (!label || directReject(label)))))) {
     return block("control_binding_unverified");
   }
   if (controls.length > 1 && !controls.every(other => other.tagName === control.tagName &&
@@ -192,6 +211,7 @@ export function evaluateRejectGate(input: {
     requestedTargetSha256:target,documentSha256,documentTokenSha256:sha(identity.token),selectorSha256:sha(exactSelector),
     selectorEvidence:"verified_geometry",labelSha256:sha(candidate.ariaLabel ?? (exactUppercaseLabel ? candidate.label : control.label)),labelMatch:"exact",
     ...(candidate.ariaLabel ? {labelSource:"aria_label" as const} : {}),
+    ...(drupalNoThanks ? {drupalNoThanks:true as const} : {}),
   }};
 }
 

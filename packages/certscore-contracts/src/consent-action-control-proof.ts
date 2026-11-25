@@ -25,6 +25,15 @@ export const ONETRUST_ITALIAN_ACCEPT_CONTROL = {
   proofReason: "registered_onetrust_italian_accept.v1",
 } as const;
 
+export const DRUPAL_NO_THANKS_REJECT_CONTROL = {
+  label: "No, thanks",
+  cmpId: "Drupal EU Cookie Compliance module, non-TCF",
+  recipeId: "canonical-cmp:Drupal EU Cookie Compliance module, non-TCF:reject:v2",
+  controlSelector: "button.decline-button",
+  bannerSelector: "#sliding-popup .eu-cookie-compliance-banner #popup-buttons button.decline-button",
+  proofReason: "registered_drupal_no_thanks_reject.v1",
+} as const;
+
 /** Versioned activation vocabulary. Generic observation terms remain separate;
  * the named adapter must still prove the exact live banner/control binding. */
 export const NAMED_NECESSARY_ONLY_REJECT_LABELS = {
@@ -90,6 +99,21 @@ export const consentActionControlProofSchema = z.object({
   enabled: z.literal(true),
   uniquelyActionable: z.literal(true),
 }).strict().superRefine((proof, context) => {
+  const drupal = DRUPAL_NO_THANKS_REJECT_CONTROL;
+  const drupalScope = proof.classifierReasonCodes.includes(drupal.proofReason);
+  if (drupalScope || (proof.contractVersion === CONSENT_ACTION_CONTROL_PROOF_VERSION &&
+    proof.action === "reject" && proof.accessibleLabel === drupal.label)) {
+    const classification = classifyConsentControlLabel({label: drupal.label, usage: "action", classifierProfile: "multilingual_v1", hasConsentContext: true});
+    if (!drupalScope || proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION ||
+      proof.action !== "reject" || proof.actionSemantics !== "direct_label" || proof.accessibleLabel !== drupal.label ||
+      proof.labelSource !== "visible_text" || proof.cmpId !== drupal.cmpId || proof.recipeId !== drupal.recipeId ||
+      proof.selectorHint !== drupal.controlSelector || proof.matchStrength !== "weak" || proof.matchedLocale !== "en" ||
+      proof.classifierConfidence !== classification.confidence || !proof.authorizedTargetSha256 ||
+      proof.frameIdentitySha256 !== proof.authorizedTargetSha256) {
+      context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
+        message: "The registered Drupal refusal label requires exact decline-button and document proof."});
+    }
+  }
   const italianAccept = ONETRUST_ITALIAN_ACCEPT_CONTROL;
   const hasItalianAcceptScope = proof.classifierReasonCodes.includes(italianAccept.proofReason);
   if (hasItalianAcceptScope || (proof.contractVersion === CONSENT_ACTION_CONTROL_PROOF_VERSION &&
@@ -149,7 +173,7 @@ export const consentActionControlProofSchema = z.object({
   }
   if (
     proof.actionSemantics === "direct_label" &&
-    (proof.classifierIntent !== proof.action || proof.classifierConfidence < 0.8)
+    (proof.classifierIntent !== proof.action || (!drupalScope && proof.classifierConfidence < 0.8))
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

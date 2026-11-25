@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
-import { CONSENT_ACTION_CONTROL_PROOF_VERSION, type ConsentActionControlProof } from "@certscore/contracts";
-import { buildRejectGateShadowReceipt, readRejectFirstLayerProof, readRejectGateWorkerRecheck, type RejectGateDecision } from "./reject-gate-shadow-receipt.js";
+import { CONSENT_ACTION_CONTROL_PROOF_VERSION, DRUPAL_NO_THANKS_REJECT_CONTROL, type ConsentActionControlProof } from "@certscore/contracts";
+import { buildRejectGateShadowReceipt, readRejectFirstLayerProof, readRejectGateWorkerRecheck, rejectGateControlMatches, type RejectGateDecision } from "./reject-gate-shadow-receipt.js";
 
 const sha = (value:string) => createHash("sha256").update(value).digest("hex");
 const target = sha("http://127.0.0.1:12345/");
@@ -53,4 +53,20 @@ test("Reject final recheck requires the exact selector and label in the verified
   ]) assert.deepEqual(build(observed,candidate),{outcome:"unavailable",reason:"worker_proof_binding_invalid"});
   assert.deepEqual(buildRejectGateShadowReceipt({...established,enforcementActive:false,worker:observed}).finalRecheck,
     {outcome:"not_run",reason:"shadow_only"});
+});
+
+test("Drupal refusal keeps the registered scope from dispatch proof through receipt verification", () => {
+  const scope = DRUPAL_NO_THANKS_REJECT_CONTROL;
+  const dispatch = {...learned, scanId:"scan", exactSelector:scope.controlSelector, binding:{...learned.binding,
+    selectorSha256:sha(scope.controlSelector), labelSha256:sha(scope.label), drupalNoThanks:true as const}};
+  const worker = {...proof, accessibleLabel:scope.label, selectorHint:scope.controlSelector, cmpId:scope.cmpId,
+    recipeId:scope.recipeId, classifierReasonCodes:[scope.proofReason]};
+  assert.deepEqual(readRejectFirstLayerProof(dispatch),dispatch);
+  assert.equal(readRejectFirstLayerProof({...dispatch,binding:{...dispatch.binding,labelSource:"aria_label"}}),undefined);
+  assert.equal(readRejectFirstLayerProof({...dispatch,binding:{...dispatch.binding,labelSha256:sha("Reject all")}}),undefined);
+  assert.equal(rejectGateControlMatches(dispatch.binding,worker),true);
+  assert.equal(rejectGateControlMatches(dispatch.binding,{...worker,classifierReasonCodes:[]}),false);
+  assert.equal(rejectGateControlMatches(dispatch.binding,{...worker,recipeId:"unregistered"}),false);
+  const {drupalNoThanks,...unscoped} = dispatch.binding;
+  assert.equal(rejectGateControlMatches(unscoped,worker),false);
 });

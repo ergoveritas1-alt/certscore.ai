@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { consentActionControlProofSchema, CONSENT_ACTION_CONTROL_PROOF_VERSION,
-  isRegisteredContextualAcceptLabel, ONETRUST_ITALIAN_ACCEPT_CONTROL } from "./consent-action-control-proof.js";
+  DRUPAL_NO_THANKS_REJECT_CONTROL, isRegisteredContextualAcceptLabel, ONETRUST_ITALIAN_ACCEPT_CONTROL } from "./consent-action-control-proof.js";
 import { classifyConsentControlLabel } from "./consent-control-label-classifier.js";
 
 const contextualProof = {
@@ -72,4 +72,21 @@ test("Italian OneTrust Accept proof binds the registered control and authorized 
     { recipeId: "canonical-control:accept:fixture" }, { selectorHint: "#different-button" },
     { frameIdentitySha256: "a".repeat(64) }, { authorizedTargetSha256: undefined }, { labelSource: "title" },
   ]) assert.equal(consentActionControlProofSchema.safeParse({ ...proof, ...change }).success, false, JSON.stringify(change));
+});
+
+test("Drupal weak refusal proof can certify only the registered decline button", () => {
+  const scope = DRUPAL_NO_THANKS_REJECT_CONTROL;
+  const classification = classifyConsentControlLabel({label:scope.label, usage:"action", classifierProfile:"multilingual_v1", hasConsentContext:true});
+  assert.equal(classification.matchStrength,"weak");
+  assert.ok(classification.confidence < 0.8);
+  const proof = {...contextualProof, contextualApproval:undefined, action:"reject", actionSemantics:"direct_label",
+    accessibleLabel:scope.label, classifierIntent:"reject", classifierConfidence:classification.confidence, matchStrength:"weak", matchedLocale:"en",
+    cmpId:scope.cmpId, recipeId:scope.recipeId, selectorHint:scope.controlSelector,
+    frameIdentitySha256:contextualProof.authorizedTargetSha256, classifierReasonCodes:[scope.proofReason]};
+  assert.equal(consentActionControlProofSchema.safeParse(proof).success,true);
+  for (const change of [
+    {classifierReasonCodes:[]}, {accessibleLabel:"No thanks"}, {labelSource:"aria_label"}, {action:"accept"},
+    {selectorHint:"#generic-decline"}, {cmpId:"Generic"}, {recipeId:"unregistered"}, {classifierConfidence:0.9},
+    {authorizedTargetSha256:undefined}, {frameIdentitySha256:"a".repeat(64)},
+  ]) assert.equal(consentActionControlProofSchema.safeParse({...proof,...change}).success,false,JSON.stringify(change));
 });

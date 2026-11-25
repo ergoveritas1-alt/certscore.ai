@@ -4,6 +4,7 @@ import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SC
 import {
   CONSENT_ACTION_CONTROL_PROOF_VERSION,
   classifyConsentControlLabel,
+  DRUPAL_NO_THANKS_REJECT_CONTROL,
   hasConsentControlSemanticVeto,
   isRegisteredContextualAcceptLabel,
   normalizeConsentControlText,
@@ -318,11 +319,17 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     input.recipeId === italianAccept.recipeId && input.selectorHint === italianAccept.controlSelector &&
     input.expectedNativeSelector === italianAccept.controlSelector && !!input.exactElement && !!input.authorizedTargetSha256 &&
     !input.controlFrameUrl && !input.expectedAccessibleControl && hasExactOneTrustItalianAcceptLabel(bounded);
-  if (input.requireDrupalBanner && (input.action !== "accept" || input.cmpId !== DRUPAL_CMP ||
-    input.recipeId !== DRUPAL_ACCEPT_RECIPE || input.expectedNativeSelector !== DRUPAL_ACCEPT_SELECTOR ||
+  const drupalReject = input.requireDrupalBanner && input.action === "reject";
+  const drupalScope = input.requireDrupalBanner ? (drupalReject ? DRUPAL_NO_THANKS_REJECT_CONTROL : {
+    cmpId: DRUPAL_CMP, recipeId: DRUPAL_ACCEPT_RECIPE, controlSelector: DRUPAL_ACCEPT_SELECTOR,
+    bannerSelector: DRUPAL_ACCEPT_BANNER_SELECTOR, label: "Accept",
+  }) : undefined;
+  if (drupalScope && (input.cmpId !== drupalScope.cmpId ||
+    input.recipeId !== drupalScope.recipeId || input.expectedNativeSelector !== drupalScope.controlSelector ||
     !input.exactElement || !input.authorizedTargetSha256 || input.controlFrameUrl || input.expectedAccessibleControl ||
-    bounded.visibleText !== "Accept" || preferredLabel(bounded)?.source !== "visible_text")) {
-    return {status: "label_unverifiable", reason: "drupal_overflow_control_binding_unverified"};
+    bounded.visibleText !== drupalScope.label || preferredLabel(bounded)?.source !== "visible_text" ||
+    (drupalReject && (bounded.title || bounded.value)))) {
+    return {status: "label_unverifiable", reason: "registered_drupal_control_binding_unverified"};
   }
   const definition = getKnownCmpDefinitionByName(input.cmpId);
   const contextualApproval = definition?.acceptContextualApproval &&
@@ -403,7 +410,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
           reason: `resolved_control_intent_${classification.intent}`,
         };
   }
-  if (!necessaryOnlyLabelVerified && classification.confidence < 0.8 && !contextualLabelVerified) {
+  if (!necessaryOnlyLabelVerified && classification.confidence < 0.8 && !contextualLabelVerified && !drupalReject) {
     return {
       status: "label_unverifiable",
       reason: "resolved_control_label_below_confidence_threshold",
@@ -460,7 +467,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         if (drupalBannerSelector && (!(exact instanceof HTMLButtonElement) || !exact.matches(drupalBannerSelector) ||
             document.querySelectorAll("#sliding-popup").length !== 1 || exact.form || exact.closest("form") ||
             exact.hasAttribute("form") || exact.hasAttribute("formaction") ||
-            (exact.type !== "button" && exact.hasAttribute("type")))) return null;
+            exact.querySelector("a[href]") || (exact.type !== "button" && exact.hasAttribute("type")))) return null;
       }
       const labels = elements.filter((element) => {
         const rect = element.getBoundingClientRect();
@@ -475,7 +482,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       return { selectorMatchCount: elements.length, labels };
     }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor,
       italianAcceptScope: oneTrustItalianAccept ? italianAccept : undefined,
-      drupalBannerSelector: input.requireDrupalBanner ? DRUPAL_ACCEPT_BANNER_SELECTOR : undefined}).catch(() => null));
+      drupalBannerSelector: drupalScope?.bannerSelector}).catch(() => null));
     if (input.expectedNativeSelector && !liveSnapshot) {
       return {status: "label_unverifiable", reason: `passive_${input.action}_button_binding_unverified`};
     }
@@ -488,6 +495,8 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       if (input.exactElement && (liveLabel?.source !== selected.source || liveLabel.value !== selected.value)) return false;
       if (oneTrustItalianAccept && !hasExactOneTrustItalianAcceptLabel(labels)) return false;
       if (sourceIntentConflict(labels, classify)) return false;
+      if (drupalReject) return liveLabel?.source === "visible_text" &&
+        liveLabel.value === DRUPAL_NO_THANKS_REJECT_CONTROL.label && !labels.title && !labels.value;
       if (labelBoundNecessaryOnly) {
         const classified = classify(preferredLabel(labels)?.value);
         return necessaryOnlyRecipe!.expectedNormalizedLabels.includes(normalizeConsentControlText(preferredLabel(labels)?.value)) &&
@@ -553,6 +562,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         ...(labelBoundNecessaryOnly ? [labelBoundNecessaryOnly.policyVersion] : []),
         ...(contextualLabelVerified ? ["registered_contextual_accept_scope_verified"] : []),
         ...(oneTrustItalianAccept ? [italianAccept.proofReason] : []),
+        ...(drupalReject ? [DRUPAL_NO_THANKS_REJECT_CONTROL.proofReason] : []),
       ].slice(0, 16),
       ...(input.cmpId ? { cmpId: bound(input.cmpId, 120) } : {}),
       recipeId: bound(input.recipeId, 160),

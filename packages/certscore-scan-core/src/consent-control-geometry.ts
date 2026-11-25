@@ -16,6 +16,7 @@ import {
   type SettingsEntranceNotice,
   isRelevantConsentInspectionCandidate,
   CONTROL_INSPECTION_POLICY,
+  DRUPAL_NO_THANKS_REJECT_CONTROL,
   FIRST_LAYER_OPT_OUT_GEOMETRY_SAMPLE_LIMIT,
   firstLayerOptOutGeometryDiagnosticSchema,
   type FirstLayerOptOutGeometryDiagnostic,
@@ -238,6 +239,7 @@ export interface ConsentControlGeometryArtifact {
   firstLayerOptOutGeometry?: FirstLayerOptOutGeometryDiagnostic;
   mainFrameVisualCapture?: ConsentMainFrameVisualCapture;
   drupalOverflowGeometry?: DrupalOverflowGeometry;
+  drupalOverflowRejectGeometry?: DrupalOverflowGeometry<"reject">;
   viewport: {
     width: number;
     height: number;
@@ -336,6 +338,7 @@ interface RawGeometryCandidate {
 interface RawGeometryCapture {
   inventoryLimited: boolean;
   drupalNativeAccept?: boolean;
+  drupalNativeReject?: boolean;
   documentReadyState: string;
   pageUrl: string;
   viewport: {
@@ -435,6 +438,7 @@ export async function captureConsentControlGeometry(
     nonFirstLayerSurfaceSelector: KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(","),
     aemFooterLinkSelector: AEM_LEGAL_FOOTER_LINK_SELECTOR,
     drupalAcceptBannerSelector: options.verifyDrupalOverflow ? DRUPAL_ACCEPT_BANNER_SELECTOR : undefined,
+    drupalRejectScope: options.verifyDrupalOverflow ? DRUPAL_NO_THANKS_REJECT_CONTROL : undefined,
   };
   const exactSelectorCapture = exactAcceptSelectorCapture || exactRejectSelectorCapture;
   const geometrySource = exactSelectorCapture
@@ -568,14 +572,13 @@ export async function captureConsentControlGeometry(
   if (hasUnresolvedConsentDecision({ candidates, controlInspection })) {
     summary.limitations = [UNRESOLVED_CONSENT_DECISION, ...summary.limitations].slice(0, 12);
   }
-  const drupalOverflowGeometry: DrupalOverflowGeometry | undefined = mainFrameResult &&
-    mainFrameCapture?.drupalNativeAccept && mainFrameCapture.documentReadyState === "complete" &&
+  const drupalOverflowCoverage = mainFrameResult && mainFrameCapture?.documentReadyState === "complete" &&
     !raw.inventoryLimited && !navigatedDuringCapture && initialPageUrl === expectedPageUrl && mainFrameCapture.pageUrl === expectedPageUrl &&
     controlInspection.captureCoverage.mainFrameAvailable && options.documentIdentity?.source === "cdp_loader_id" &&
     frameRevision !== undefined && frameRevision === mainFrameResult.frameRevision && frameRevision === options.readFrameRevision?.() &&
     initialFrames.length === finalFrames.length && initialFrames.every(frame => finalFrames.includes(frame)) &&
     successfulCaptures.length === CONSENT_GEOMETRY_FRAME_LIMIT && nonRenderedFrameCount === initialFrames.length - successfulCaptures.length
-    ? {version: "drupal_overflow_accept_geometry.v1", documentToken: options.documentIdentity.token,
+    ? {documentToken: options.documentIdentity.token,
       capturedAt: new Date(mainFrameResult.completedAtMs).toISOString(), nonRenderedFrameCount} : undefined;
   const mainFrameUnavailable = !mainFrameCapture ||
     mainFrameCapture.pageUrl === "about:blank" ||
@@ -619,7 +622,10 @@ export async function captureConsentControlGeometry(
     ...(mainFrameResult ? {captureTiming: {version: "consent_geometry_capture_timing.v1" as const,
       mainFrameCompletedAt: new Date(mainFrameResult.completedAtMs).toISOString(), completedAt: new Date().toISOString()}} : {}),
     ...(firstLayerOptOutGeometry ? {firstLayerOptOutGeometry} : {}),
-    ...(drupalOverflowGeometry ? {drupalOverflowGeometry} : {}),
+    ...(drupalOverflowCoverage && mainFrameCapture?.drupalNativeAccept
+      ? {drupalOverflowGeometry: {version: "drupal_overflow_accept_geometry.v1", ...drupalOverflowCoverage}} : {}),
+    ...(drupalOverflowCoverage && mainFrameCapture?.drupalNativeReject
+      ? {drupalOverflowRejectGeometry: {version: "drupal_overflow_reject_geometry.v1", ...drupalOverflowCoverage}} : {}),
     viewport: mainFrameCapture?.viewport ?? { width: 0, height: 0 },
     screenshotArtifactRef: options.screenshotArtifactRef,
     cmp,
@@ -1573,6 +1579,7 @@ function collectConsentGeometryInPage(input: {
   nonFirstLayerSurfaceSelector: string;
   aemFooterLinkSelector: string;
   drupalAcceptBannerSelector?: string;
+  drupalRejectScope?: {bannerSelector: string; controlSelector: string};
   nonVisitorSurfaces: readonly { origin: string; selector: string }[];
 }, selectExactButton?: typeof exactNativeConsentButtonSelector): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
@@ -1813,8 +1820,14 @@ function collectConsentGeometryInPage(input: {
     }
   });
 
-  const drupalAccept = input.drupalAcceptBannerSelector && window === window.top
-    ? document.querySelector(input.drupalAcceptBannerSelector) : null;
+  const hasDrupalButtonScope = (bannerSelector: string | undefined, controlSelector: string) => {
+    const button = bannerSelector && window === window.top ? document.querySelector(bannerSelector) : null;
+    return button instanceof HTMLButtonElement && !button.form && !button.closest("form") &&
+      !button.hasAttribute("form") && !button.hasAttribute("formaction") &&
+      (button.type === "button" || !button.hasAttribute("type")) &&
+      !button.querySelector("a[href]") && document.querySelectorAll("#sliding-popup").length === 1 &&
+      document.querySelectorAll(controlSelector).length === 1;
+  };
   return {
     inventoryLimited: unboundedCandidates.slice(input.candidateLimit).some(candidate =>
         candidate.layer === "first_layer" && candidate.intersectsViewport && candidate.enabled &&
@@ -1826,11 +1839,10 @@ function collectConsentGeometryInPage(input: {
         !containers.some(container => container.element.contains(element))) ||
       documentControls.length >= 800 || containerControlInventories.some(controls => controls.slice(80).some(potentiallyVisibleFirstLayer)),
     documentReadyState: document.readyState,
-    ...(drupalAccept instanceof HTMLButtonElement && !drupalAccept.form && !drupalAccept.closest("form") &&
-      !drupalAccept.hasAttribute("form") && !drupalAccept.hasAttribute("formaction") &&
-      (drupalAccept.type === "button" || !drupalAccept.hasAttribute("type")) &&
-      document.querySelectorAll("#sliding-popup").length === 1 && document.querySelectorAll("button.agree-button").length === 1
+    ...(hasDrupalButtonScope(input.drupalAcceptBannerSelector, "button.agree-button")
       ? { drupalNativeAccept: true } : {}),
+    ...(input.drupalRejectScope && hasDrupalButtonScope(input.drupalRejectScope.bannerSelector, input.drupalRejectScope.controlSelector)
+      ? { drupalNativeReject: true } : {}),
     pageUrl: window.location.href,
     viewport,
     scripts: Array.from(document.scripts).map((script) => script.src).filter(Boolean).slice(0, 80),

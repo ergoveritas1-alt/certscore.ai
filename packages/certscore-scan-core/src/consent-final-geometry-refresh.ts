@@ -93,7 +93,7 @@ export function evaluateFinalConsentGeometryEligibility(input: RefreshInput): El
     return c.frameCount <= DRUPAL_OVERFLOW_FRAME_LIMIT && c.mainFrameAvailable && !c.inventoryTruncated &&
       c.documentReadyState !== "loading" && c.capturedFrameCount > 0 &&
       capturedAt >= input.scanStartedAtMs && capturedAt < input.scanStartedAtMs + o.observedAtMs &&
-      drupalOverflowObservationMatches(o, g)
+      (drupalOverflowObservationMatches(o, g) || drupalOverflowObservationMatches(o, g, "reject"))
       ? {reason: "stale_drupal_overflow_geometry"} : {blocker: "geometry_frame_cap_exceeded"};
   }
   if (c.inventoryTruncated || !c.mainFrameAvailable || c.frameCount < 1 ||
@@ -261,7 +261,8 @@ export function createFinalConsentGeometryRefresh(dependencies: {
         if (!geometry.summary.firstLayerAccept && !geometry.summary.firstLayerReject && !geometry.summary.firstLayerOptions)
           return result("no_positive_control", true);
       } else if (inspection.structuralCoverage !== "complete" &&
-          !(drupalOverflowRefresh && hasVerifiedDrupalOverflowGeometry(geometry) && drupalOverflowObservationMatches(o, geometry))) {
+          !(drupalOverflowRefresh && (["accept", "reject"] as const).some(action =>
+            hasVerifiedDrupalOverflowGeometry(geometry, action) && drupalOverflowObservationMatches(o, geometry, action)))) {
         return result("invalid_capture", true);
       }
       const staging = dependencies.prepare(geometry);
