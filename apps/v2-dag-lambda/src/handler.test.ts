@@ -779,6 +779,60 @@ test("a verified native OneTrust click after the passive barrier can retain its 
   }
 });
 
+test("dedicated Reject shares one deadline for a retained click's worker return and packet verification", async t => {
+  const barrier = Date.now();
+  t.mock.timers.enable({ apis: ["Date"], now: barrier + 8_001 });
+  const checkpoint = {
+    version: "certscore.reject-click-checkpoint.v1" as const,
+    scanId: "retained-reject",
+    gateProofSha256: "a".repeat(64),
+    receiptSha256: "b".repeat(64),
+    recheckedAtMs: barrier + 3_100,
+    dispatchedAtMs: barrier + 3_200,
+    completedAtMs: barrier + 3_300,
+    verifiedAtMs: barrier + 7_400,
+  };
+  const input = {
+    abortController: new AbortController(),
+    passiveLaneBarrierCompletedAtMs: barrier,
+    maxTailWaitMs: 8_000,
+    verifiedClickAtMs: () => undefined,
+    readDedicatedRejectCheckpoint: () => checkpoint,
+    workerPromise: Promise.resolve(),
+  };
+  const worker = await awaitRejectWorkerWithLateClickAllowance(input);
+  assert.deepEqual(worker, { completed: true, maxTailWaitMs: 14_200 });
+  t.mock.timers.setTime(barrier + 14_000);
+  assert.deepEqual(await awaitRejectWorkerWithLateClickAllowance({ ...input, ...worker }), worker);
+  t.mock.timers.setTime(barrier + 14_200);
+  assert.deepEqual(await awaitRejectWorkerWithLateClickAllowance({ ...input, ...worker }),
+    { completed: false, maxTailWaitMs: 14_200 });
+  assert.equal(input.abortController.signal.aborted, true);
+
+  t.mock.timers.setTime(barrier + 8_001);
+  const joinWith = (overrides: Partial<Parameters<typeof awaitRejectWorkerWithLateClickAllowance>[0]>) =>
+    awaitRejectWorkerWithLateClickAllowance({ ...input, abortController: new AbortController(), ...overrides });
+  const lateClick = { ...checkpoint, dispatchedAtMs: barrier + 6_900, completedAtMs: barrier + 7_000 };
+  assert.deepEqual(await joinWith({ readDedicatedRejectCheckpoint: () => lateClick }),
+    { completed: true, maxTailWaitMs: 16_000 });
+  assert.deepEqual(await joinWith({ absoluteDeadlineAtMs: barrier + 10_000 }),
+    { completed: true, maxTailWaitMs: 10_000 });
+  assert.deepEqual(await joinWith({ absoluteDeadlineAtMs: barrier + 7_999 }),
+    { completed: false, maxTailWaitMs: 7_999 });
+  for (const denied of [
+    undefined,
+    { ...checkpoint, verifiedAtMs: barrier + 8_000 },
+    { ...checkpoint, version: "certscore.accept-click-checkpoint.v1" as const },
+  ]) {
+    assert.deepEqual(await joinWith({ readDedicatedRejectCheckpoint: () => denied }),
+      { completed: false, maxTailWaitMs: 8_000 });
+  }
+  t.mock.timers.setTime(barrier + 7_900);
+  assert.deepEqual(await joinWith({
+    readDedicatedRejectCheckpoint: () => assert.fail("A timely result needs no extension"),
+  }), { completed: true, maxTailWaitMs: 8_000 });
+});
+
 test("Reject Path worker return and packet verification share one absolute tail deadline", async () => {
   const controller = new AbortController();
   const passiveLaneBarrierCompletedAtMs = Date.now();

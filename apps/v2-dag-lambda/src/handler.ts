@@ -133,6 +133,9 @@ export const POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS = 6_000;
 export const POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS = 12_000;
 export const POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS =
   POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS;
+const DEDICATED_REJECT_OBSERVATION_WINDOW_MS = 8_000;
+const DEDICATED_REJECT_MAX_EXTRA_JOIN_WAIT_MS = 8_000;
+const DEDICATED_REJECT_PACKET_COMPLETION_BUDGET_MS = 3_000;
 export const POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS = 20_000;
 export const LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION =
   "certscore.v2.lambda-lane-timing.v1" as const;
@@ -3287,6 +3290,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     void earlyRejectPacket?.verified.catch(() => undefined);
   };
   let rejectContinuation: "aria_label" | "onetrust_native" | undefined;
+  let dedicatedRejectReleased = false;
   const postRefusalAbortController = new AbortController();
   postRefusalAbortController.signal.addEventListener("abort", () => {
     postRefusalState.error = postRefusalState.cancelledNoReject
@@ -3331,17 +3335,20 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             return undefined;
           }
           if (preparationError) throw preparationError;
-          if (proof && !preparationId && payload.postRefusalObservation?.observationWindowMs === 8_000) {
-            rejectContinuation = proof.binding.labelSource === "aria_label" ? "aria_label" :
-              proof.exactSelector === "#onetrust-reject-all-handler" ? "onetrust_native" : undefined;
-          }
           if (preparedLane && proof) {
             const released = await preparedLane.release(proof, () => consentGateDispatchDeadlineMs.reject, renewed => {
               dispatchedProofs.reject = renewed;
               postRefusalState.dispatchStartedAtMs = renewed.issuedAtMs;
             });
-            if (released) return preparedLane.result;
+            if (released) {
+              dedicatedRejectReleased = true;
+              return preparedLane.result;
+            }
             if (Date.now() >= Math.min(proof.expiresAtMs, consentGateDispatchDeadlineMs.reject)) throw new Error("action_release_expired");
+          }
+          if (proof && !preparationId && payload.postRefusalObservation?.observationWindowMs === DEDICATED_REJECT_OBSERVATION_WINDOW_MS) {
+            rejectContinuation = proof.binding.labelSource === "aria_label" ? "aria_label" :
+              proof.exactSelector === "#onetrust-reject-all-handler" ? "onetrust_native" : undefined;
           }
           postRefusalState.dispatchStartedAtMs = Date.now();
           if (preparationId && proof && prepared && sendRejectProof) {
@@ -3863,8 +3870,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   // Accept and Reject have independent absolute post-passive deadlines and
   // are joined concurrently, including packet verification. This prevents
   // either lane from consuming the other's bounded chance to retain an
-  // already-terminal result. Accept extends its six-second tail only with a
-  // scan-bound late-form progress marker; Reject retains its eight-second cap.
+  // already-terminal result. A dedicated Reject lane can finish retaining its
+  // packet after the normal cutoff when an exact-click checkpoint has verified.
   let joinedPostRefusalPacket: PostRefusalEvidencePacket | undefined;
   let joinedPostAcceptPacket: PostAcceptEvidencePacket | undefined;
   let postAcceptMaxTailWaitMs = POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS;
@@ -3894,6 +3901,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     });
   };
   let postRefusalMaxTailWaitMs = POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+  const readDedicatedRejectCheckpoint = enforced.reject && consentClickCheckpointEnabled(payload, "reject") &&
+    payload.postRefusalObservation?.observationWindowMs === DEDICATED_REJECT_OBSERVATION_WINDOW_MS
+    ? () => (dedicatedRejectReleased && !options.signal?.aborted ? verifiedClicks.reject?.checkpoint : undefined)
+    : undefined;
   const awaitRejectWithinBarrier = async (workerPromise: Promise<void>, workerAlreadySettled?: boolean) => {
     const remaining = await awaitRejectWorkerWithLateClickAllowance({
       abortController: postRefusalAbortController, passiveLaneBarrierCompletedAtMs,
@@ -3901,6 +3912,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       inlineDispatch: rejectContinuation && postRefusalState.dispatchStartedAtMs !== undefined
         ? { kind: rejectContinuation, startedAtMs: postRefusalState.dispatchStartedAtMs } : undefined,
       verifiedClickAtMs: () => verifiedClicks.reject?.checkpoint.completedAtMs,
+      readDedicatedRejectCheckpoint,
       workerPromise, workerAlreadySettled,
     });
     postRefusalMaxTailWaitMs = remaining.maxTailWaitMs;
@@ -4782,7 +4794,7 @@ async function waitForPostActionDispatchDelay(delayMs: number, signal?: AbortSig
   });
 }
 
-/** Give a qualifying inline Reject click time to finish its existing eight-second
+/** Give a qualifying Reject click time to finish its existing eight-second
  * observation and packet join. Both join stages share one absolute deadline. */
 export async function awaitRejectWorkerWithLateClickAllowance(input: {
   abortController: AbortController;
@@ -4791,6 +4803,7 @@ export async function awaitRejectWorkerWithLateClickAllowance(input: {
   maxTailWaitMs: number;
   inlineDispatch?: { kind: "aria_label" | "onetrust_native"; startedAtMs: number };
   verifiedClickAtMs: () => number | undefined;
+  readDedicatedRejectCheckpoint?: () => VerifiedConsentClickCheckpoint | undefined;
   workerPromise: Promise<void>;
   workerAlreadySettled?: boolean;
 }) {
@@ -4800,19 +4813,32 @@ export async function awaitRejectWorkerWithLateClickAllowance(input: {
   // The OneTrust worker can dispatch before the final passive evidence joins
   // while its exact button is still rendering in the separate action context.
   const dispatchLookbackMs = input.inlineDispatch?.kind === "onetrust_native" ? 3_000 : 750;
-  const canExtend = input.maxTailWaitMs === base && dispatch !== undefined &&
-    dispatch <= barrier && barrier - dispatch <= dispatchLookbackMs && !input.abortController.signal.aborted;
-  let maxTailWaitMs = input.maxTailWaitMs;
-  if (canExtend) {
-    const completed = await awaitPostRefusalWorkerWithinTailBudget({ ...input, abortController: new AbortController() });
+  const canExtendInline = dispatch !== undefined && dispatch <= barrier && barrier - dispatch <= dispatchLookbackMs;
+  const outerTailMs = (input.absoluteDeadlineAtMs ?? Infinity) - barrier;
+  let maxTailWaitMs = input.readDedicatedRejectCheckpoint
+    ? Math.max(0, Math.min(input.maxTailWaitMs, outerTailMs))
+    : input.maxTailWaitMs;
+  if (maxTailWaitMs === base && (canExtendInline || input.readDedicatedRejectCheckpoint) &&
+      !input.abortController.signal.aborted) {
+    const completed = await awaitPostRefusalWorkerWithinTailBudget({
+      ...input, maxTailWaitMs, abortController: new AbortController(),
+    });
     if (completed) return { completed, maxTailWaitMs };
-    const click = input.verifiedClickAtMs();
-    if (click !== undefined && click >= dispatch && click < barrier + base &&
-        (input.inlineDispatch?.kind !== "onetrust_native" || click >= barrier)) {
-      // Budget the existing eight-second observation plus up to one second for
-      // confirmation and verification. Never add more than two seconds total.
-      maxTailWaitMs = Math.max(base, Math.min(base + 2_000, click - barrier + 9_000,
-        (input.absoluteDeadlineAtMs ?? Infinity) - barrier));
+    const checkpoint = input.readDedicatedRejectCheckpoint?.();
+    if (checkpoint?.version === "certscore.reject-click-checkpoint.v1" && checkpoint.verifiedAtMs < barrier + base) {
+      maxTailWaitMs = Math.max(base, Math.min(
+        base + DEDICATED_REJECT_MAX_EXTRA_JOIN_WAIT_MS,
+        checkpoint.dispatchedAtMs - barrier + DEDICATED_REJECT_OBSERVATION_WINDOW_MS +
+          DEDICATED_REJECT_PACKET_COMPLETION_BUDGET_MS,
+        outerTailMs,
+      ));
+    } else if (canExtendInline) {
+      const click = input.verifiedClickAtMs();
+      if (click !== undefined && click >= dispatch && click < barrier + base &&
+          (input.inlineDispatch?.kind !== "onetrust_native" || click >= barrier)) {
+        // The legacy inline path keeps its existing two-second allowance.
+        maxTailWaitMs = Math.max(base, Math.min(base + 2_000, click - barrier + 9_000, outerTailMs));
+      }
     }
   }
   const completed = await awaitPostRefusalWorkerWithinTailBudget({ ...input, maxTailWaitMs });
