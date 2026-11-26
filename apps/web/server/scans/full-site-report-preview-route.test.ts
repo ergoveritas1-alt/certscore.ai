@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 
 test("compact report requires the existing rollout, access and rate gates before reading prepared data", async () => {
   const directory=await mkdtemp(resolve("apps/web/.preview-route-"));
-  const fixture={allowed:true,access:true,throttle:false,reads:0};
+  const fixture={signedIn:true,allowed:true,access:true,throttle:false,reads:0};
   const globals=globalThis as typeof globalThis & {previewRouteFixture?:typeof fixture};
   globals.previewRouteFixture=fixture;
   try {
@@ -22,14 +22,30 @@ test("compact report requires the existing rollout, access and rate gates before
         "full-site-report-stream":`export function streamFullSiteReport(){throw new Error('Stream on overview path');}`,
         "full-site-forms":`export function loadFullSiteFormSnapshot(){throw new Error('Form on overview path');}`,
         "full-site-graph":`export function loadFullSiteGraph(){throw new Error('Graph on overview path');}`,
-        "@website-signal-risk-scanner/db":`export async function loadFullSiteCrawl(){return {status:'completed'};}`,
+        "report-user":`export async function getFreshCurrentUser(){return globalThis.previewRouteFixture.signedIn ? {id:"preview-test-user"} : null;}`,
+        "@website-signal-risk-scanner/db":`
+          function unexpectedDatabaseCall(){throw new Error("Unexpected database call on preview path");}
+          export const query = unexpectedDatabaseCall;
+          export const queryOne = unexpectedDatabaseCall;
+          export const withWriteTransaction = unexpectedDatabaseCall;
+          export const getWritePool = unexpectedDatabaseCall;
+          export async function loadFullSiteCrawl(){return {status:"completed"};}
+        `,
       };
-      builder.onResolve({filter:/.*/},args=>{const key=args.path in fixtures?args.path:args.path.split('/').at(-1)!;return key in fixtures?{path:key,namespace:"fixture"}:undefined;});
+      builder.onResolve({filter:/.*/},args=>{
+        if (args.path === "../auth" && args.importer === resolve("apps/web/server/scans/report-access.ts")) {
+          return {path:"report-user",namespace:"fixture"};
+        }
+        const key=args.path in fixtures?args.path:args.path.split('/').at(-1)!;
+        return key in fixtures?{path:key,namespace:"fixture"}:undefined;
+      });
       builder.onLoad({filter:/.*/,namespace:"fixture"},args=>({contents:fixtures[args.path]!,loader:"js"}));
     }}]});
     const {GET}=createRequire(import.meta.url)(output);
     const id="10000000-0000-4000-8000-000000000001";
     const read=()=>GET(new Request(`http://localhost:3000/api/scans/${id}/full-site?view=overview`),{params:Promise.resolve({scanId:id})});
+    fixture.signedIn=false;assert.equal((await read()).status,401);
+    fixture.signedIn=true;
     fixture.allowed=false;assert.equal((await read()).status,404);
     fixture.allowed=true;fixture.access=false;assert.equal((await read()).status,404);
     fixture.access=true;fixture.throttle=true;assert.equal((await read()).status,429);

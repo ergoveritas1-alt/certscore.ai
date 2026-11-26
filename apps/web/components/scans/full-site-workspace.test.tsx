@@ -5,9 +5,15 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {FullSiteWorkspace} from "./full-site-workspace";
 
 test("a completed report awaiting its first sitewide response does not claim an active scan or zero forms", () => {
- const html=renderToStaticMarkup(<FullSiteWorkspace scanId="loading" requested={{maxPages:20,concurrency:4,waitSeconds:5}}><p>Homepage report content</p></FullSiteWorkspace>);
+ const html=renderToStaticMarkup(<FullSiteWorkspace scanId="loading" requested={{maxPages:20,concurrency:4,waitSeconds:5}} evidenceDirectory={<section id="evidence"><h2>Detailed evidence</h2><details><summary>Consent evidence</summary><p>Retained control</p></details></section>}><p>Homepage report content</p></FullSiteWorkspace>);
  assert.match(html,/Loading report…/);
  assert.match(html,/Loading saved assessment/);
+ assert.match(html,/Supporting details/);
+ assert.match(html,/Loading services, resources &amp; evidence…/);
+ assert.match(html,/scan-hourglass-flip/);
+ assert.match(html,/<section id="evidence"><h2>Detailed evidence<\/h2>/);
+ assert.match(html,/<summary>Consent evidence<\/summary><p>Retained control<\/p>/);
+ assert.doesNotMatch(html,/View services, resources &amp; evidence/);
  assert.doesNotMatch(html,/data-full-site-progress|0 forms|0s elapsed|Pages scanned|Across scanned pages/);
 });
 

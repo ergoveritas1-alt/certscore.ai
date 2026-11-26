@@ -74,13 +74,12 @@ for (const state of ["loading", "unsettled", "unverifiable", "missing", "complet
           </PathnameContext.Provider>
         </AppRouterContext.Provider>,
       );
-      const section = html.match(/<section id="report-forms"[\s\S]*?<\/section>/)?.[0];
-      assert.ok(section, "rendered report includes its forms section");
-      if (state === "complete_empty") assert.match(section, /no forms observed on the scanned pages/);
-      else {
-        assert.match(section, /form coverage is incomplete/);
-        assert.doesNotMatch(section, /no forms observed|No forms were observed/);
-      }
+      const formsTile = html.match(/<(div|button) id="[^"]+-forms"[^>]*>[\s\S]*?<\/\1>/)?.[0];
+      assert.ok(formsTile, "rendered overview includes the Forms tile");
+      assert.match(formsTile, /<span>Forms<\/span>/);
+      if (state === "complete_empty") assert.match(formsTile, /title="0">0<\/span>/);
+      else assert.match(formsTile, /<abbr title="No verified count"[^>]*>NA<\/abbr>/);
+      assert.doesNotMatch(html, /id="report-forms"|no forms observed|No forms were observed/);
     }
   });
 }

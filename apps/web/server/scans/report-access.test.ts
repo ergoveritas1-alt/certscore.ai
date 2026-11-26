@@ -185,7 +185,10 @@ test("shared report enables its PDF menu item only for viewers eligible for work
     const failed = await render();
     const failureContent = failed.props.children[1].props.children.props.children;
     assert.equal(failureContent[1].props.children, "Scan ended without a report");
-    assert.equal(failureContent[2].props.href, "/#homepage-scan");
+    const restartLink = failureContent.find((child: { component: unknown; props: { children?: unknown } }) =>
+      typeof child.component === "function" && child.component.name === "Link" && child.props.children === "Start another scan",
+    );
+    assert.equal(restartLink?.props.href, "/#homepage-scan");
   }
 });
 

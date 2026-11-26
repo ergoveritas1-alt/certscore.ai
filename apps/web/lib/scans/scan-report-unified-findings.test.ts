@@ -3419,10 +3419,8 @@ test("runtime vendor disclosure evidence surfaces through canonical policy/runti
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "policy_behavior_conflict");
 
   assert.equal(packet?.presentationDecision.status, "surface");
-  assert.deepEqual(packet?.evidence?.entities?.findingSubtype, [
-    "runtime_vendor_not_disclosed",
-    "consent_governance_disclosure_gap"
-  ]);
+  assert.deepEqual(packet?.evidence?.entities?.findingSubtype, ["runtime_vendor_not_disclosed"]);
+  assert.equal(state.globalUnifiedFindings.some(finding => finding.unifiedFindingId === "consent_governance_disclosure_gap"), false);
   assert.deepEqual(packet?.evidence?.entities?.unmatchedRuntimeVendors, ["Microsoft Clarity"]);
 });
 

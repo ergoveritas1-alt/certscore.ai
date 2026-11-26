@@ -40,6 +40,7 @@ import {
 import { API_READ_RATE_POLICY } from "@website-signal-risk-scanner/shared/api-read-rate-policy";
 import { ScanLiveValue } from "./scan-live-value";
 import { ScanProgressSpinner } from "./scan-progress-spinner";
+import { ScanUpdatingIndicator } from "../scanso2/scan-updating-indicator";
 import { SitewideInventorySummary } from "./sitewide-inventory-summary";
 import { InventoryPriorityHelp } from "./inventory-priority-help";
 import { InventoryResourceProvider, InventoryResourceMobile, type InventoryGraphSource } from "./inventory-resource-details";
@@ -205,6 +206,10 @@ export function FullSiteWorkspace({
   const [reportPauseUntil, setReportPauseUntil] = useState(0);
   const reportPauseRef = useRef(0);
   const reportPauseScanRef = useRef(scanId);
+  // Preserve the lightweight first response. Completed reports then fetch
+  // supporting details through the same stream as an explicit evidence link.
+  const loadDetails = detailsRequested || Boolean(preview &&
+    !["waiting_homepage", "running"].includes(preview.summary.state.status) && preview.summary.counts.active === 0);
   const overview = data ?? partialOverview ?? preview;
   const inventoryOverview = data?.networkOverview ?? preview?.networkOverview;
   const [detailPage, setDetailPage] = useState(""),
@@ -232,7 +237,7 @@ export function FullSiteWorkspace({
     }
   }, [scanId, retainedReport]);
   useEffect(() => {
-    if (!detailsRequested && !initialPending && !refreshVersion && retainedReport?.preview && isCompletedFullSitePreview(retainedReport.preview)) {
+    if (!loadDetails && !initialPending && !refreshVersion && retainedReport?.preview && isCompletedFullSitePreview(retainedReport.preview)) {
       setPreview(retainedReport.preview); setIsFetching(false); setError(null); terminal.current = true;
       return;
     }
@@ -296,7 +301,7 @@ export function FullSiteWorkspace({
         });
         for (const [key, value] of [...params]) if (!value) params.delete(key);
         const response = await fetch(
-          `/api/scans/${scanId}/full-site?${detailsRequested ? params : "view=overview"}`,
+          `/api/scans/${scanId}/full-site?${loadDetails ? params : "view=overview"}`,
           { cache: "no-store", signal: requestSignal },
         );
         if (!response.ok) {
@@ -310,7 +315,7 @@ export function FullSiteWorkspace({
             response.status === 429 ? "Report read cooldown" : "Inventory updates are temporarily unavailable.",
           );
         }
-        if (!detailsRequested) {
+        if (!loadDetails) {
           const next = await response.json() as FullSiteReportPreview;
           if (controller.signal.aborted) return;
           setPreview(next);
@@ -386,7 +391,7 @@ export function FullSiteWorkspace({
       window.removeEventListener("pageshow", resume);
       if (timer) clearTimeout(timer);
     };
-  }, [scanId, detailsRequested, filters, offset, detailPage, resource, detailOffset, refreshVersion, retainedReport, initialPending]);
+  }, [scanId, loadDetails, filters, offset, detailPage, resource, detailOffset, refreshVersion, retainedReport, initialPending]);
   async function stopCrawl() {
     if (stopInFlight.current) return;
     stopInFlight.current = true;
@@ -443,6 +448,11 @@ export function FullSiteWorkspace({
     (counts?.active ?? 0) > 0
   ));
   const valuesUpdating = awaitingActiveReport || Boolean(state && ["waiting_homepage", "running"].includes(state.status));
+  const reportReadStatus = reportPauseUntil > Date.now()
+    ? <p role="status" className="text-sm text-slate-600">Report updates are paused by a temporary read limit and will resume automatically.{running ? " The scan itself continues." : ""}</p>
+    : error ? <p role="status" className="text-sm text-amber-800">
+      {error} <button type="button" className="ml-2 underline" onClick={() => setRefreshVersion(version => version + 1)} disabled={isFetching}>Retry report</button>{" "} {overview?.score ? "Showing the last loaded sitewide results." : "The sitewide score and inventory will appear when report access resumes."}
+    </p> : null;
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     if (!running) return;
@@ -546,7 +556,7 @@ export function FullSiteWorkspace({
         ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? inventoryOverview : undefined }));
   const formCount = data?.collectionSurfaces?.rows.length ?? preview?.forms.count;
   const formsLimited = data ? Boolean(data.collectionSurfaces.limitedPages || data.collectionSurfaces.pagesWithoutInventory) : preview?.forms.limited ?? true;
-  const inventorySummary = <ReportInventorySummary formCountStatus={formCountStatus((formCount ?? 0) + afterAcceptForms.length, formsLimited || afterAcceptFormsLimited)} forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onLoadDetails={() => requestDetails()} detailsLoading={!data && detailsRequested} onViewEvidence={anchor => { flushSync(() => { setTab("resources"); requestDetails(anchor ?? "report-forms"); }); }} formCount={formCount} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} hiddenLinkSummary={preview?.hiddenLinks} hiddenLinkDestinations={preview?.hiddenLinkDestinations} />;
+  const inventorySummary = <ReportInventorySummary formCountStatus={formCountStatus((formCount ?? 0) + afterAcceptForms.length, formsLimited || afterAcceptFormsLimited)} forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onLoadDetails={() => requestDetails()} detailsLoading={!data && loadDetails} onViewEvidence={anchor => { flushSync(() => { setTab("resources"); requestDetails(anchor ?? "report-forms"); }); }} formCount={formCount} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} hiddenLinkSummary={preview?.hiddenLinks} hiddenLinkDestinations={preview?.hiddenLinkDestinations} />;
   const homePriorities = homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }));
   const cachedPriorities = overview?.score?.priorityReview;
   const priorityFindings = mergeHomepagePriorityFindings(cachedPriorities, homePriorities);
@@ -626,13 +636,7 @@ export function FullSiteWorkspace({
             </p>
           </div>
         ) : null}
-        {detailsRequested && overview && !data && !error ? <p role="status" className="text-sm text-slate-600">Loading supporting details…</p> : null}
-        {reportPauseUntil > Date.now() ? <p role="status" className="text-sm text-slate-600">Report updates are paused by a temporary read limit and will resume automatically.{running ? " The scan itself continues." : ""}</p> : null}
-        {error ? (
-          <p role="status" className="text-sm text-amber-800">
-            {error} <button type="button" className="ml-2 underline" onClick={() => setRefreshVersion(version => version + 1)} disabled={isFetching}>Retry report</button>{" "} {overview?.score ? "Showing the last loaded sitewide results." : "The sitewide score and inventory will appear when report access resumes."}
-          </p>
-        ) : null}
+        {(data || partialSupporting || tab === "homepage") && reportReadStatus}
       </header>
       {tab !== "homepage" ? (
         <>
@@ -641,9 +645,14 @@ export function FullSiteWorkspace({
           {!(initialPending && !overview?.score) ? <SitePriorityReview reportIdentity={homepageUrl ? {scanId, documentUrl: homepageUrl, sourceHash: californiaAssessment?.sourceHash} : undefined} californiaAssessment={californiaAssessment} reviewFocus={reviewFocus} scannedPages={scannedPages} findings={priorityFindings} pending={!overview || valuesUpdating} sitewideAvailable={Boolean(overview?.score)} /> : null}
           {homepageTimeline}
           </> : null}
-          {!detailsRequested && !data ? <section id="site-resource-inventory" className="my-5 rounded-xl border border-zinc-200 bg-white p-5">
+          {!data && !partialSupporting ? <section id="site-resource-inventory" className="my-5 rounded-xl border border-zinc-200 bg-white p-5">
             <h2 className="text-xl font-semibold">Supporting details</h2>
-            <button type="button" className={`${button} mt-3`} onClick={() => requestDetails()}>View services, resources & evidence</button>
+            <div className="mt-3">
+              {reportReadStatus ?? <p role="status" className="flex items-center gap-2 text-sm text-slate-600">
+                <ScanUpdatingIndicator active decorative />
+                {running && !loadDetails ? "Supporting details will load when the scan finishes." : "Loading services, resources & evidence…"}
+              </p>}
+            </div>
           </section> : <>
           <section id="site-resource-inventory" className="my-5 min-w-0 rounded-xl border border-zinc-200 bg-white p-4 lg:p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div>{tab !== "pages" ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Pre-consent supporting evidence</p> : null}<h2 className="text-xl font-semibold tracking-tight text-zinc-950">{tab === "pages" ? "Page observations and coverage" : "Services & Resources"}</h2></div>{tab !== "pages" ? <div className="flex shrink-0 gap-1" role="group" aria-label="Inventory view">{(["services", "resources"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${inventoryView === view ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`} onClick={() => { setInventoryView(view); setOffset(0); }}>{view}</button>)}</div> : null}</div>
@@ -768,8 +777,8 @@ export function FullSiteWorkspace({
           </section>
           {tab === "resources" ? <CollectionSurfacesTable afterAcceptLimited={afterAcceptFormsLimited} rows={[...(data?.collectionSurfaces?.rows ?? partialSupporting?.collectionSurfaces.rows ?? []), ...afterAcceptForms]} loading={!data && !partialSupporting} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory ?? partialSupporting?.collectionSurfaces.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages ?? partialSupporting?.collectionSurfaces.limitedPages} /> : null}
           {tab === "resources" ? formDestinationEvidence : null}
-          {tab === "resources" ? <SitewideEvidenceContext.Provider value={overview?.score?.evidencePages ? { pages: overview.score.evidencePages, limitedPages: overview.score.limitedPages } : null}><SiteIntegritySiteContext.Provider value={overview?.score?.siteIntegrity ?? null}>{evidenceDirectory}</SiteIntegritySiteContext.Provider></SitewideEvidenceContext.Provider> : null}
           </>}
+          {tab === "resources" ? <SitewideEvidenceContext.Provider value={overview?.score?.evidencePages ? { pages: overview.score.evidencePages, limitedPages: overview.score.limitedPages } : null}><SiteIntegritySiteContext.Provider value={overview?.score?.siteIntegrity ?? null}>{evidenceDirectory}</SiteIntegritySiteContext.Provider></SitewideEvidenceContext.Provider> : null}
           {detailPage ? (
             <section
               ref={detailRef}
