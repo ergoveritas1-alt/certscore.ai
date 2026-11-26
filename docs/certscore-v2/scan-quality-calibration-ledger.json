@@ -1,5 +1,51 @@
 {
   "entries": {
+    "https://adikteev.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-24T02:25:28.184Z",
+      "lastContactAt": "2026-11-26T02:25:28.184Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://adikteev.com/",
+      "note": "Owner-requested one-off passive consent-control capture. No privacy clicks or form submissions. Cooldown exception recorded in the run selection."
+    },
+    "https://iobit.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-12-24T02:26:06.499Z",
+      "lastContactAt": "2026-11-26T02:26:06.499Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "browser_error_document"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://iobit.com/",
+      "note": "Owner-requested one-off passive consent-control capture. No privacy clicks or form submissions. Cooldown exception recorded in the run selection."
+    },
+    "https://ivanti.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-24T02:25:47.355Z",
+      "lastContactAt": "2026-11-26T02:25:47.355Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ivanti.com/",
+      "note": "Owner-requested one-off passive consent-control capture. No privacy clicks or form submissions. Cooldown exception recorded in the run selection."
+    },
+    "https://navigraph.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-12-24T02:25:08.901Z",
+      "lastContactAt": "2026-11-26T02:25:08.901Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://navigraph.com/",
+      "note": "Owner-requested one-off passive consent-control capture. No privacy clicks or form submissions. Cooldown exception recorded in the run selection."
+    },
     "https://capitalone.com": {
       "consecutiveNoGoCount": 0,
       "cooldownUntil": "2026-12-15T18:54:25.399Z",
@@ -3413,8 +3459,12 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-11-17T19:17:41.896Z",
+  "updatedAt": "2026-11-26T02:29:16.253Z",
   "contactOnlyUrls": [
+    "https://adikteev.com/",
+    "https://iobit.com/",
+    "https://ivanti.com/",
+    "https://navigraph.com/",
     "https://10tv.com/",
     "https://aacsb.edu/",
     "https://abc.xyz/",
