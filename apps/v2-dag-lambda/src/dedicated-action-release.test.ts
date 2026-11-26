@@ -147,3 +147,37 @@ test("readiness issues one bound dispatch proof and never revives expired qualif
   assert.deepEqual(await store.take(get, binding, signal), released);
   await assert.rejects(store.take(get, binding, signal), /unavailable/);
 });
+
+test("reviewed late Reject controls receive time for a fresh recheck without broadening eligibility", () => {
+  const now = 10_000;
+  const original = proof(now);
+  const selector = "button.banner-close-button";
+  const requested = "https://bendingspoons.com/";
+  const retained = {
+    ...original,
+    exactSelector: selector,
+    binding: {
+      ...original.binding,
+      requestedTargetSha256: sha(requested),
+      documentSha256: sha(requested),
+      selectorSha256: sha(selector),
+      labelSha256: sha("Continue without accepting"),
+    },
+  };
+  const readyAt = now + 100;
+  const released = proofForReadyAction(retained, now + 20_000, readyAt);
+  assert.equal(released.expiresAtMs, readyAt + 10_000);
+  assert.deepEqual(released.binding, retained.binding);
+  assert.ok(released.expiresAtMs - (now + 6_588) >= 200);
+  assert.equal(proofForReadyAction(retained, now + 8_000, readyAt).expiresAtMs, now + 8_000);
+  assert.throws(() => proofForReadyAction(retained, Infinity, retained.expiresAtMs), /expired/);
+
+  const changedBindings = [
+    { ...retained.binding, requestedTargetSha256: sha("https://other.example/") },
+    { ...retained.binding, documentSha256: sha(requested + "other/") },
+    { ...retained.binding, labelSha256: sha("Close") },
+  ];
+  for (const binding of changedBindings) {
+    assert.equal(proofForReadyAction({ ...retained, binding }, Infinity, readyAt).expiresAtMs, readyAt + 6_000);
+  }
+});

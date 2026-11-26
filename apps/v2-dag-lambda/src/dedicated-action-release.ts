@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { GetObjectCommand, PutObjectCommand, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
-import { ACCEPT_FIRST_LAYER_GATE_MS, sitsBorlabsActionWindowMs, acceptFirstLayerProofMatches, readAcceptFirstLayerProof, type AcceptFirstLayerProof } from "@certscore/scan-core/accept-first-layer-gate";
+import { ACCEPT_FIRST_LAYER_GATE_MS, scopedConsentActionWindowMs, acceptFirstLayerProofMatches, readAcceptFirstLayerProof, type AcceptFirstLayerProof } from "@certscore/scan-core/accept-first-layer-gate";
 import { rejectFirstLayerProofMatches, type RejectFirstLayerProof } from "@certscore/scan-core/reject-gate-shadow-receipt";
 
 export type ActionLane = "accept" | "reject";
@@ -133,7 +133,7 @@ export function proofForReadyAction<P extends ExactProof>(proof: P, deadlineAtMs
   if (now < proof.issuedAtMs || now >= Math.min(proof.expiresAtMs, deadlineAtMs)) {
     throw new Error("action_release_expired");
   }
-  const extended = "binding" in proof ? sitsBorlabsActionWindowMs("reject", proof.exactSelector, proof.binding)
-    : sitsBorlabsActionWindowMs("accept", proof.exactSelector, proof);
+  const extended = "binding" in proof ? scopedConsentActionWindowMs("reject", proof.exactSelector, proof.binding)
+    : scopedConsentActionWindowMs("accept", proof.exactSelector, proof);
   return { ...proof, issuedAtMs: now, expiresAtMs: Math.min(deadlineAtMs, now + (extended ?? ACCEPT_FIRST_LAYER_GATE_MS)) };
 }

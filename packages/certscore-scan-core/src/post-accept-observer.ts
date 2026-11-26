@@ -1316,9 +1316,15 @@ export async function runPostAcceptObserver(
       selectorHint: selectedRecipe.controlSelector,
       expectedCustomControlBinding: selectedRecipe.customControlBinding,
     });
+    // OneTrust can replace its native button after resolution but before the
+    // first element read. Re-resolve that exact control once in the bound
+    // document. The original proof window and final pre-click guard still apply.
+    const retryExactOneTrust = exactOneTrustRecipe === selectedRecipe && firstLayerProof !== undefined &&
+      proofResolution.status === "label_unverifiable" &&
+      (proofResolution.reason === "resolved_control_unavailable" || proofResolution.reason === "resolved_control_detached");
     if (
       proofResolution.status !== "verified" &&
-      (proofResolution.reason === "resolved_control_no_longer_actionable" ||
+      (retryExactOneTrust || proofResolution.reason === "resolved_control_no_longer_actionable" ||
         proofResolution.reason === "resolved_control_scope_not_interactive" ||
         (input.allowCanonicalAcceptDiscovery && consentActionLabelNeedsRediscovery(proofResolution))) &&
       !exactCookieScriptRecipe && !cancellation()
@@ -1331,7 +1337,11 @@ export async function runPostAcceptObserver(
             ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
             : undefined,
         );
-        const recoveryDeadline = Math.max(resolverStartedAtMs + actionSearchTimeoutMs, actionReadinessDeadline);
+        if (retryExactOneTrust) sourceFrameBinding.assertCurrent();
+        const recoveryDeadline = Math.min(
+          Math.max(resolverStartedAtMs + actionSearchTimeoutMs, actionReadinessDeadline),
+          retryExactOneTrust ? Math.min(exactActionDeadline, Date.now() + 600) : Infinity,
+        );
         const remainingRecoveryBudgetMs = () => Math.max(0, recoveryDeadline - Date.now());
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
@@ -1353,12 +1363,12 @@ export async function runPostAcceptObserver(
           : await waitForDeterministicRecipe(
             page,
             [selectedRecipe],
-            Math.min(250, remainingRecoveryBudgetMs()),
+            Math.min(retryExactOneTrust ? 600 : 250, remainingRecoveryBudgetMs()),
             effectiveSignal,
             actionDiscovery,
             recordResolverSnapshot,
           );
-        if (lateResolution.status === "not_found" && input.allowCanonicalAcceptDiscovery && remainingRecoveryBudgetMs() >= 250) {
+        if (!retryExactOneTrust && lateResolution.status === "not_found" && input.allowCanonicalAcceptDiscovery && remainingRecoveryBudgetMs() >= 250) {
           lateResolution = await waitForCanonicalAcceptControlRecipe(
             page,
             remainingRecoveryBudgetMs(),
@@ -1377,19 +1387,19 @@ export async function runPostAcceptObserver(
           if (boundControlDispatch) sourceFrameBinding.bind(page, confirmationScope);
           useVerifiedGeometryDispatch = false;
           diagnostics.click.reResolvedBeforeDispatch = true;
-          confirmationBaseline = await captureConfirmationBaseline(
-            context,
-            page,
-            confirmationScope,
-            selectedRecipe.confirmation,
-            control,
-            confirmationDiagnostic.reason,
+          const refreshBaseline = () => captureConfirmationBaseline(
+            context!, page!, confirmationScope, selectedRecipe!.confirmation, control, confirmationDiagnostic.reason,
           );
+          const refreshedBaseline = retryExactOneTrust
+            ? await readWithinAcceptDeadline(refreshBaseline, undefined, recoveryDeadline, effectiveSignal)
+            : await refreshBaseline();
+          if (!refreshedBaseline) throw new Error("late_control_recovery_search_budget_exhausted");
+          confirmationBaseline = refreshedBaseline;
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
             expectedNativeSelector: firstLayerProof?.exactSelector,
             requireDrupalBanner: firstLayerProof?.drupalOverflow,
-            deadlineAtMs: resultBudgetDeadlineAtMs,
+            deadlineAtMs: retryExactOneTrust ? Math.min(recoveryDeadline, resultBudgetDeadlineAtMs ?? Infinity) : resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
             action: "accept",

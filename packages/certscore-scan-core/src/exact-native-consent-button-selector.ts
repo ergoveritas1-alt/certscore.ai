@@ -89,6 +89,22 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
       resolvesOnly("#" + element.id, element) && resolvesOnly(selector, element) ? selector : undefined;
   }
 
+  // Pusher's retained inventory and geometry used different generated button
+  // classes. Prove the same unique button under the reviewed consent wrapper
+  // in each capture, even if the button's styling class has changed.
+  if (view.location.href === "https://pusher.com/" && element.localName === "button") {
+    const banner = "div.CookiesConsent__Container-sc-18be04b-0";
+    const group = "div.CookiesConsent__FormButtons-sc-18be04b-9";
+    const selector = `${banner} ${group} button`;
+    const button = element as HTMLButtonElement;
+    if (element.matches(selector)) {
+      return !button.form && !button.closest("form") &&
+        !button.hasAttribute("form") && !button.hasAttribute("formaction") &&
+        root.querySelectorAll(banner).length === 1 && root.querySelectorAll(group).length === 1 &&
+        resolvesOnly(selector, element) ? selector : undefined;
+    }
+  }
+
   const direct = anchors(element).find(hint => resolvesOnly(hint, element));
   if (direct) return direct;
   // Each segment identifies the exact position among siblings of the same

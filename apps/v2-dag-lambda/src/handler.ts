@@ -2,7 +2,7 @@ import { EVIDENCE_WORKER_SCAN_BUDGET_MS, actionReleaseStore, newActionPreparatio
 import { readConsentEvidenceWorkerStream } from "./consent-evidence-stream.js";
 import { buildConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES, REJECT_CLICK_CHECKPOINT_MAX_BYTES,
   verifyConsentClickCheckpoint, type VerifiedConsentClickCheckpoint } from "./reject-click-checkpoint.js";
-import { acceptFirstLayerProofMatches, readAcceptFirstLayerProof, sitsBorlabsActionWindowMs, type AcceptFirstLayerGeometrySource,
+import { acceptFirstLayerProofMatches, readAcceptFirstLayerProof, scopedConsentActionWindowMs, type AcceptFirstLayerGeometrySource,
   type AcceptFirstLayerProof } from "@certscore/scan-core/accept-first-layer-gate";
 import { acceptGateProofDigest, readAcceptGateWorkerRecheck, type AcceptGateWorkerRecheck } from "@certscore/scan-core/accept-gate-shadow-receipt";
 import { readRejectFirstLayerProof, readRejectGateWorkerRecheck, rejectFirstLayerProofMatches,
@@ -3339,6 +3339,11 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         try {
           postRefusalWorkerSignal.throwIfAborted();
           const nowMs = Date.now();
+          const scopedWindow = proof && scopedConsentActionWindowMs("reject", proof.exactSelector, proof.binding);
+          if (scopedWindow && !prepared && nowMs < Math.min(proof.expiresAtMs, consentGateDispatchDeadlineMs.reject) &&
+              rejectFirstLayerProofMatches(proof, payload.scanId, payload.targetUrl, consentParentSha256, nowMs)) {
+            preparations.observe("reject");
+          }
           const preparedLane = preparations.decide("reject");
           if (enforced.reject && (nowMs >= consentGateDispatchDeadlineMs.reject || !(rejectFirstLayerProofMatches(proof,payload.scanId,payload.targetUrl,consentParentSha256,nowMs)))) {
             await preparedLane?.decline().catch(() => undefined);
@@ -3351,7 +3356,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           }
           if (preparationError) throw preparationError;
           if (preparedLane && proof) {
-            preparedActionWindows.reject = sitsBorlabsActionWindowMs("reject", proof.exactSelector, proof.binding);
+            preparedActionWindows.reject = scopedWindow;
             const released = await preparedLane.release(proof, () => preparedReleaseDeadline("reject", POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS), renewed => {
               dispatchedProofs.reject = renewed;
               postRefusalState.dispatchStartedAtMs = renewed.issuedAtMs;
@@ -3450,6 +3455,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
 
         postAcceptWorkerSignal.throwIfAborted();
         const nowMs = Date.now();
+        const scopedWindow = proof && scopedConsentActionWindowMs("accept", proof.exactSelector, proof);
+        if (scopedWindow && proof.parentDispatchSha256 === consentParentSha256 &&
+            nowMs < Math.min(proof.expiresAtMs, consentGateDispatchDeadlineMs.accept) &&
+            acceptFirstLayerProofMatches(proof, payload.scanId, payload.targetUrl, nowMs)) {
+          preparations.observe("accept");
+        }
         const preparedLane = preparations.decide("accept");
         if (enforced.accept && (nowMs >= consentGateDispatchDeadlineMs.accept || !(proof?.exactSelector && proof.parentDispatchSha256 === consentParentSha256 &&
             acceptFirstLayerProofMatches(proof,payload.scanId,payload.targetUrl,nowMs)))) {
@@ -3462,7 +3473,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           return undefined;
         }
         if (preparedLane && proof) {
-          preparedActionWindows.accept = sitsBorlabsActionWindowMs("accept", proof.exactSelector, proof);
+          preparedActionWindows.accept = scopedWindow;
           const released = await preparedLane.release(proof, () => preparedReleaseDeadline("accept", POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS), renewed => {
             dispatchedProofs.accept = renewed;
             postAcceptState.dispatchStartedAtMs = renewed.issuedAtMs;

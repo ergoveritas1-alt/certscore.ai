@@ -1,4 +1,4 @@
-import { sitsBorlabsActionWindowMs } from "./sits-borlabs-action-window.js";
+import { scopedConsentActionWindowMs } from "./scoped-consent-action-window.js";
 import { geometryConsentButtonLinkMatches } from "./exact-native-consent-button-selector.js";
 import { consentGateDocument } from "./consent-gate-document.js";
 import { STALE_CONSENT_GEOMETRY_BASIS } from "./consent-geometry-inventory-coverage.js";
@@ -58,7 +58,7 @@ export function readRejectFirstLayerProof(value: unknown): RejectFirstLayerProof
       typeof scanId !== "string" || !scanId || scanId.length > 200 ||
       typeof issuedAtMs !== "number" || typeof expiresAtMs !== "number" ||
       !Number.isSafeInteger(issuedAtMs) || !Number.isSafeInteger(expiresAtMs) ||
-      issuedAtMs < 0 || expiresAtMs <= issuedAtMs || expiresAtMs - issuedAtMs > (sitsBorlabsActionWindowMs("reject", proof.exactSelector, binding) ?? proofLifetimeMs) ||
+      issuedAtMs < 0 || expiresAtMs <= issuedAtMs || expiresAtMs - issuedAtMs > (scopedConsentActionWindowMs("reject", proof.exactSelector, binding) ?? proofLifetimeMs) ||
       !binding || typeof binding !== "object" || Array.isArray(binding) ||
       !validExactSelector(proof.exactSelector) || sha(proof.exactSelector) !== binding.selectorSha256 ||
       Object.keys(binding).length !== 10 + Number(Object.hasOwn(binding, "labelSource")) + Number(Object.hasOwn(binding, "drupalNoThanks")) ||
