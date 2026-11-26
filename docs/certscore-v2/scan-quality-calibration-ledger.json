@@ -26,14 +26,14 @@
     },
     "https://ivanti.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-12-24T02:25:47.355Z",
-      "lastContactAt": "2026-11-26T02:25:47.355Z",
+      "cooldownUntil": "2026-12-24T02:39:42.957Z",
+      "lastContactAt": "2026-11-26T02:39:42.957Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested one-off passive consent-control captures. Follow-up sampled the Transcend host without observing a choice. No privacy clicks or form submissions.",
       "state": "cooldown",
-      "url": "https://ivanti.com/",
-      "note": "Owner-requested one-off passive consent-control capture. No privacy clicks or form submissions. Cooldown exception recorded in the run selection."
+      "url": "https://ivanti.com/"
     },
     "https://navigraph.com/": {
       "consecutiveNoGoCount": 0,
@@ -3459,7 +3459,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-11-26T02:29:16.253Z",
+  "updatedAt": "2026-11-26T02:40:47.811Z",
   "contactOnlyUrls": [
     "https://adikteev.com/",
     "https://iobit.com/",
