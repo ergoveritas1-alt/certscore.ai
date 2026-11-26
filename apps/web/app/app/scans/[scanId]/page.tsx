@@ -6,7 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ShadowScanReport } from "../../../../components/scans/report-lab/shadow-scan-report";
-import { buildTerminalRuntimeVisitReport, buildVerifiedTimelineReportModel } from "../../../../server/scans/verified-timeline-report-model";
+import { buildTerminalRuntimeVisitReport, buildTimelineReportWithDeferredPolicyDisclosure, buildVerifiedTimelineReportModel } from "../../../../server/scans/verified-timeline-report-model";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
@@ -118,12 +118,16 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     );
   }
 
-  let report;
+  const fullSiteAllowed = (await readFullSiteOptions()).allowed;
+  let completedReport: ReturnType<typeof buildTimelineReportWithDeferredPolicyDisclosure>;
   try {
-    report = await buildVerifiedTimelineReportModel(persistedReportProjection);
+    completedReport = statusProjection.fullSite && fullSiteAllowed
+      ? { report: await buildVerifiedTimelineReportModel(persistedReportProjection) }
+      : buildTimelineReportWithDeferredPolicyDisclosure(persistedReportProjection);
   } catch {
     redirect(legacyScanHref(scanId));
   }
+  const { report, phaseInventories } = completedReport;
 
   return (
     <FullSiteReportContinuity scanId={scanId} cacheScope={reportCacheScope}>
@@ -139,7 +143,8 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         })}
         defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
         mode="authenticated"
-        report={(await readFullSiteOptions()).allowed ? report : { ...report, fullSite: undefined }}
+        report={fullSiteAllowed ? report : { ...report, fullSite: undefined }}
+        phaseInventories={phaseInventories}
         variant="timeline"
       />
     </FullSiteReportContinuity>

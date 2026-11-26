@@ -27,7 +27,8 @@ export function buildReportDisplayExport(report: Record<string, unknown>, option
   }) : rows;
   const phaseInventory = (value: unknown, path: string) => {
     if (!value || typeof value !== "object" || !("inventory" in value) || !value.inventory || typeof value.inventory !== "object") return value;
-    return { ...value, inventory: visibleResourceInventory(value.inventory, `${path}/inventory/resources`) };
+    const { rejectAdEvents: _individualEvents, ...visible } = value as Record<string, unknown>;
+    return { ...visible, inventory: visibleResourceInventory(value.inventory, `${path}/inventory/resources`) };
   };
   report = { ...report,
     ...(report.reviewFocus === "ccpa_cpra" && Array.isArray(report.findings) ? {

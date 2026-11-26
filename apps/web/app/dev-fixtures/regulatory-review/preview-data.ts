@@ -15,6 +15,10 @@ const summaries: Record<string, string> = {
   "california-destination": "The retained privacy-choice destination returned HTTP 404 in this illustrative result.",
   "california-collection-notice-link": "The directly linked Notice at Collection returned HTTP 404 in this illustrative result. Notice adequacy at collection points remains unassessed.",
   "california-rights-information-link": "The directly linked State Privacy Rights page returned HTTP 404 in this illustrative result. Other request methods remain unassessed.",
+  "california-post-reject": "Advertising requests reached an illustrative recipient after the recorded cookie Reject click.",
+  "california-collection-notice": "The complete linked notice describes how a contact form uses email addresses and omits retention periods or criteria.",
+  "california-choice-friction": "The linked sale or sharing opt-out page says visitors must create an account to make the request.",
+  "california-sensitive-transmission": "A successful request to an external domain matched a sensitive field in an illustrative form interaction.",
   "post-refusal": "8 non-essential HubSpot and LinkedIn requests were observed 0.3–1.14 seconds after confirmed Reject.",
   "preconsent-storage": "The example assessment retained a classified advertising cookie written before a consent choice.",
   "preconsent-tracking": "The example assessment retained optional advertising requests before a consent choice.",
@@ -50,7 +54,8 @@ const summaries: Record<string, string> = {
 export const REGULATORY_PREVIEW_FINDINGS: SitePriorityFinding[] = REGULATORY_REVIEW_TOPICS.map((topic, index) => ({
   id: topic.findingIds[0]!, rank: index + 1,
   title: topic.id === "post-refusal" ? "HubSpot and LinkedIn activity after Reject" : topic.title,
-  summary: summaries[topic.id]!, status: ["post-refusal", "preconsent-storage", "preconsent-tracking", "privacy-notice", "transport", "california-transport", "refusal-control"].includes(topic.id) ? "Potential gap" : "Partial concern",
+  summary: summaries[topic.id]!, status: topic.id === "california-sensitive-transmission" ? "Review" :
+    ["post-refusal", "preconsent-storage", "preconsent-tracking", "privacy-notice", "transport", "california-transport", "refusal-control", "california-collection-notice", "california-choice-friction"].includes(topic.id) ? "Potential gap" : "Partial concern",
   evidence: ["Illustrative presentation input. This example is not a retained scan result."],
   evidenceJson: { fixture: true, topicId: topic.id, findingId: topic.findingIds[0] },
   correctionSteps: ["Review the assessed evidence and correct the underlying issue where confirmed."],

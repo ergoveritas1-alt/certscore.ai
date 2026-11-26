@@ -325,6 +325,24 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
       ...topic.passages.flatMap(passage=>wrappedLines(passage.excerpt,{size:8,gapAfter:3})),
     ]) : []),
   );
+  const details = report.appendix.requestDetails ?? [];
+  function addRequestNotes(target: PdfLine[], phase: "before_choice" | "gpc_visit") {
+    let previousTitle: string | undefined;
+    for (const row of details.filter(row => row.phase === phase)) {
+      if (row.title !== previousTitle) target.push(sectionHeading(row.title));
+      target.push(...wrappedLines(row.summary));
+      if (row.endpoint) target.push(...wrappedLines(row.endpoint, { size: 9 }));
+      previousTitle = row.title;
+    }
+  }
+  if (report.reviewFocus === "gdpr_eprivacy") {
+    const ads = details.filter(row => row.kind === "reject_ad" && row.phase === "after_reject_click");
+    if (ads.length) sections.consent.push(sectionHeading("Ad requests post reject"),
+      ...pdfEvidenceTable("post-reject-ad-requests", ["Time (ms)", "Recipient", "Request sent"],
+        ads.map(row => [String(row.elapsedMs), row.recipient ?? "", [row.method, row.endpoint].filter(Boolean).join(" ")]),
+        [66, 154, 292]));
+    addRequestNotes(sections.external, "before_choice");
+  }
   lines = sections.consent;
   if(reportSectionInFocus("privacy",report.reviewFocus)) {
   lines.push(sectionHeading("Privacy choices and notices"));
@@ -356,7 +374,10 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null, appU
 
   const gpc=readDocumentGpc(report);
   if (gpc) {
-    const facts = describeGpcObservedFacts(gpc.observation);
+    addRequestNotes(lines, "gpc_visit");
+    const signalDescribed = details.some(row => row.kind === "gpc_signal" && row.phase === "gpc_visit");
+    const facts = describeGpcObservedFacts(gpc.observation).filter(fact =>
+      !signalDescribed || (fact.label !== "GPC signal" && fact.label !== "Visible GPC acknowledgment"));
     for (const fact of facts) lines.push(...wrappedLines(`${fact.label}: ${fact.value}`));
     if (gpc.activityComparison) lines.push(...wrappedLines(formatRetainedReportTiming(describeGpcActivityComparison(gpc.activityComparison))));
     const cmpStateComparison = readBoundGpcCmpStateComparison(gpc.cmpStateComparison, gpc, report.scan.id);

@@ -1,3 +1,5 @@
+import { AdTechRequestDetails } from "../adtech-request-details";
+import { projectAdTechRequestDetails } from "../../../lib/scans/adtech-request-details";
 import { formatReportSeconds, formatReportSecondsRange, formatRetainedReportTiming } from "../../../lib/scans/report-time";
 import { NoGoBrowserExtensionRecovery } from "../no-go-browser-extension-recovery";
 import { signalSnapshotValueClass } from "../signal-snapshot-styles";
@@ -27,7 +29,7 @@ import { cmpDetailsExperience } from "../../../lib/scans/cmp-audit-projection";
 import { EvidenceJumpLink, ReportEvidenceHashNavigation } from "../evidence-jump-link";
 import { SiteIntegrityEvidence } from "../site-integrity-evidence";
 import { choicePathExecutionLabel } from "@certscore/contracts";
-import React from "react";
+import React, { Suspense } from "react";
 import { RegulatoryReviewFocus, CaliforniaPrivacyWorkpaper, CaliforniaCoverageSummary } from "../regulatory-review-focus";
 import { resolveReportReviewFocus, reportUrlWithFocus, reviewFocusMismatchNote } from "../../../lib/scans/report-review-focus";
 import { ReportCoverageTiming } from "../report-coverage-timing";
@@ -88,6 +90,7 @@ import {
   SHADOW_REPORT,
   SHADOW_REPORT_SOURCE_URL,
   type GpcResponseReportProjection,
+  type ReportPhaseInventories,
   type ShadowEvidenceRow,
   type ShadowEvidenceStatus,
   type ShadowReportData,
@@ -104,6 +107,7 @@ type ShadowScanReportProps = {
   defaultScanFrom?: ServerScanFrom;
   mode?: "authenticated" | "public";
   report?: TimelineReportData;
+  phaseInventories?: Promise<ReportPhaseInventories>;
   variant: ShadowReportVariant;
 };
 
@@ -1239,7 +1243,15 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
   );
 }
 
-function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, mode }: Pick<ShadowScanReportProps, "allowRestrictedScanOptions" | "defaultScanFrom" | "mode"> & { report: ShadowReportData }) {
+async function ReportPhaseEvidenceWithPolicyDisclosure({ report, phaseInventories }: {
+  report: ShadowReportData;
+  phaseInventories: Promise<ReportPhaseInventories>;
+}) {
+  return <ReportPhaseEvidence report={{ ...report, ...await phaseInventories }}
+    initialFallback={<RuntimeInventoryTable report={report} heading="Services & Resources" />} />;
+}
+
+function TimelineVariant({ report, phaseInventories, allowRestrictedScanOptions, defaultScanFrom, mode }: Pick<ShadowScanReportProps, "allowRestrictedScanOptions" | "defaultScanFrom" | "mode" | "phaseInventories"> & { report: ShadowReportData }) {
   if (report.fullSite) return <HomepageTimelineVariant report={report} allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} />;
   const priorityReview = report.findings.map(finding => ({ ...finding, pages: [{ id: report.scan.id, url: report.scan.url, homepage: true }] }));
   return <ReportInventoryNavigation><div className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6" data-single-page-report>
@@ -1259,11 +1271,18 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
         <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end"><ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} /></div>
       </div>
     </header>
-    <FullSiteExecutiveSummary reportIdentity={{scanId: report.scan.id, documentUrl: report.scan.url, sourceHash: report.californiaPrivacyReview?.sourceHash}} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} californiaScore={report.californiaScore} inventorySummary={<ConsentTrackingSummary tiles={buildConsentTrackingOverview(report, report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode))} />} score={{ value: report.score.value, priorityReview, scoredPages: 1, deductions: report.scoreExplanation?.score === report.score.value ? report.scoreExplanation.deductions : undefined }} pending={false} scannedPages={1}
+    <FullSiteExecutiveSummary reportIdentity={{scanId: report.scan.id, documentUrl: report.scan.url, sourceHash: report.californiaPrivacyReview?.sourceHash}} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} californiaScore={report.californiaScore} inventorySummary={<ConsentTrackingSummary requestDetails={report.adTechDetails} tiles={buildConsentTrackingOverview(report, report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode))} />} score={{ value: report.score.value, priorityReview, scoredPages: 1, deductions: report.scoreExplanation?.score === report.score.value ? report.scoreExplanation.deductions : undefined }} pending={false} scannedPages={1}
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
       snapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} homepageHighlightExpansion={report.assessmentHighlightExpansion} />
     <SitePriorityReview reportIdentity={{scanId: report.scan.id, documentUrl: report.scan.url, sourceHash: report.californiaPrivacyReview?.sourceHash}} californiaAssessment={report.californiaPrivacyReview} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />
-    <ReportPhaseEvidence report={report} initialFallback={<RuntimeInventoryTable report={report} heading="Services & Resources" />} />
+    {phaseInventories ? <Suspense fallback={
+      <section id="report-resource-inventory" className="my-5 rounded-xl border border-zinc-200 bg-white p-4 lg:p-5">
+        <h2 className="text-xl font-semibold">Services &amp; Resources</h2>
+        <p className="mt-2 text-sm text-zinc-600" role="status">Loading retained resource evidence…</p>
+      </section>
+    }>
+      <ReportPhaseEvidenceWithPolicyDisclosure report={report} phaseInventories={phaseInventories} />
+    </Suspense> : <ReportPhaseEvidence report={report} initialFallback={<RuntimeInventoryTable report={report} heading="Services & Resources" />} />}
     <CollectionSurfacesTable afterAcceptLimited={report.afterAcceptFormsLimited} rows={report.collectionTableRows ?? []} loading={false} pagesWithoutInventory={report.collectionCoverage?.pagesWithoutInventory ?? 1} limitedPages={report.collectionCoverage?.limitedPages ?? 0} />
     <FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />
     <EvidenceDirectory compact report={report} />
@@ -1456,7 +1475,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
   );
 }
 
-export function GpcEvidenceIndexCard({ projection, california = false }: { projection: GpcResponseReportProjection; california?: boolean }) {
+export function GpcEvidenceIndexCard({ projection, california = false, requestDetails }: { requestDetails?: ShadowReportData["adTechDetails"]; projection: GpcResponseReportProjection; california?: boolean }) {
   if(!reportSectionInFocus("gpc",california?"ccpa_cpra":"gdpr_eprivacy"))return null;
   const activity = gpcCardActivity(projection);
   const recipients = gpcCollectionRecipients(projection);
@@ -1475,6 +1494,7 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
         recap={<GpcInventoryRecap fallback={scoredRisk ? "Risk observed" : gpcEvidenceHeaderLabel(projection)} />}
         badge={<EvidenceHeaderStatus rows={scoredRisk ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" && !projection.activityComparison ? [{status: "Limited"}] : []} />} />
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
+        <AdTechRequestDetails rows={requestDetails} />
         {projection.activityComparison ? <GpcActivityComparison comparison={projection.activityComparison}
           requestTable={<GpcInventoryRequestTable comparison={projection.activityComparison} />}>
           <GpcInventoryContributors />
@@ -1569,8 +1589,9 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               ) : null}
               <EvidenceIndexRows rows={consentRows} sharedEvidence={consentLinks} />
             </details>
-            {compact && report.fullSite ? <SitewideEvidenceCard group="tracking"><EvidenceIndexRows rows={report.trackingExternalRows} /></SitewideEvidenceCard> : <details className="group/tracking border-b border-r border-zinc-200 p-5">
+            {compact && report.fullSite ? <SitewideEvidenceCard group="tracking"><AdTechRequestDetails rows={report.adTechDetails?.filter(row => row.kind === "same_site_measurement")} /><EvidenceIndexRows rows={report.trackingExternalRows} /></SitewideEvidenceCard> : <details className="group/tracking border-b border-r border-zinc-200 p-5">
               <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.tracking} recap={evidenceSectionRecap(report.trackingExternalRows)} badge={<EvidenceHeaderStatus rows={report.trackingExternalRows} />} />
+              <AdTechRequestDetails rows={report.adTechDetails?.filter(row => row.kind === "same_site_measurement")} />
               <EvidenceIndexRows rows={report.trackingExternalRows} />
             </details>}
             <details id={(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "gdpr_eprivacy" ? "gdpr-eprivacy-evidence" : undefined} className="group/policy border-b border-r border-zinc-200 p-5">
@@ -1646,7 +1667,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
                 </div>
               </details>
             ) : null}
-            {GPC_CUSTOMER_RESULTS_ENABLED && reportSectionInFocus("gpc", report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) && (report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} california /> : <details id="gpc-evidence" className="group/gpc border-b border-r border-zinc-200 p-5"><EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc} recap="Evidence unavailable" badge={<EvidenceHeaderStatus rows={[{status: "Limited"}]} />} /><p className="mt-4 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></details>)}
+            {GPC_CUSTOMER_RESULTS_ENABLED && reportSectionInFocus("gpc", report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) && (report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} requestDetails={report.adTechDetails?.filter(row => row.phase === "gpc_visit")} california /> : <details id="gpc-evidence" className="group/gpc border-b border-r border-zinc-200 p-5"><EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc} recap="Evidence unavailable" badge={<EvidenceHeaderStatus rows={[{status: "Limited"}]} />} /><p className="mt-4 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></details>)}
             <CmsSecurityEvidence projection={report.cmsSecurity} />
           </EvidenceColumns>
         </div>
@@ -1668,6 +1689,7 @@ function VariantBody({
   allowRestrictedScanOptions,
   defaultScanFrom,
   mode,
+  phaseInventories,
   report = SHADOW_REPORT,
   variant,
 }: Omit<ShadowScanReportProps, "report"> & { report?: ShadowReportData }) {
@@ -1677,6 +1699,7 @@ function VariantBody({
       allowRestrictedScanOptions={allowRestrictedScanOptions}
       defaultScanFrom={defaultScanFrom}
       mode={mode}
+      phaseInventories={phaseInventories}
       report={report}
     />
   );
@@ -1693,11 +1716,12 @@ export function ShadowScanReport({
   allowRestrictedScanOptions,
   defaultScanFrom,
   mode = "public",
+  phaseInventories,
   report: sourceReport = SHADOW_REPORT,
   variant,
 }: ShadowScanReportProps) {
   const focus = resolveReportReviewFocus(reviewFocus ?? ("reviewFocus" in sourceReport ? sourceReport.reviewFocus : undefined), sourceReport.scan.originCode);
-  const report = sourceReport.resultDisposition === "no_go" ? sourceReport : scopeReportPresentation({ ...sourceReport, reviewFocus: focus,
+  const report = sourceReport.resultDisposition === "no_go" ? sourceReport : scopeReportPresentation({ ...sourceReport, reviewFocus: focus, adTechDetails: projectAdTechRequestDetails(sourceReport, focus),
     scan: { ...sourceReport.scan, reportUrl: reportUrlWithFocus(sourceReport.scan.reportUrl ?? `/scan/${sourceReport.scan.id}`, focus) } });
   const homepageContent = report.resultDisposition === "no_go" ? (
     <main className="mx-auto max-w-7xl space-y-8 px-5 py-10 lg:px-10">
@@ -1719,6 +1743,7 @@ export function ShadowScanReport({
         allowRestrictedScanOptions={allowRestrictedScanOptions}
         defaultScanFrom={defaultScanFrom}
         mode={mode}
+        phaseInventories={phaseInventories}
         report={report}
         variant={variant}
       />

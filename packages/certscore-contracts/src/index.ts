@@ -38,6 +38,8 @@ import { cookieClassificationSchema } from "./cookie-classification";
 import { CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION, privacyChoiceInspectionSchema, type PrivacyChoiceInspection } from "./california-privacy-review";
 import { definitiveTransportCertificateErrorSchema, transportPersonalDataCategorySchema } from "./california-transport-security";
 export * from "./california-privacy-review";
+export * from "./california-additional-review";
+import { CALIFORNIA_ADDITIONAL_REVIEW_VERSION, californiaChoiceBarrierObservationSchema } from "./california-additional-review";
 export * from "./california-restriction-shadow";
 export * from "./california-opt-out-shadow";
 import { consentAccessibilityDomBindingSchema } from "./consent-accessibility-dom-binding";
@@ -2093,6 +2095,7 @@ export const governingPolicySelectionSchema = z.object({
 
 export const policySurfaceObservationSchema = z.object({
   observationId: z.string(),
+  californiaChoiceBarrier: californiaChoiceBarrierObservationSchema.optional(),
   // Discovery provenance is never proof of document ownership or policy presence.
   cmpDiscovery: z.array(z.object({
     contractVersion: z.literal("cmp_policy_discovery.v1"),
@@ -2832,6 +2835,7 @@ export const policyNegativeSearchEvidenceSchema: z.ZodType<PolicyNegativeSearchE
 });
 
 export const policySurfaceInspectionOutcomeSchema = z.object({
+  californiaAdditionalReview: z.literal(CALIFORNIA_ADDITIONAL_REVIEW_VERSION).optional(),
   rightsReviewScorePolicy: z.literal(CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION).optional(),
   californiaDisclosureChoicePolicy:californiaDisclosureChoiceCapturePolicySchema.optional(),
   californiaReviewPolicy: z.enum(["california-privacy-review.v2","california-privacy-review.v3","california-privacy-review.v4","california-privacy-review.v5","california-privacy-review.v6","california-privacy-review.v7","california-privacy-review.v8","california-privacy-review.v9","california-privacy-review.v10"]).optional(),
@@ -2886,6 +2890,7 @@ export const verifiedPolicyEvidencePacketSchema = z.object({
 });
 
 export function derivePolicySurfaceInspectionOutcome(input: {
+  californiaAdditionalReview?: typeof CALIFORNIA_ADDITIONAL_REVIEW_VERSION;
   modulesRun?: z.infer<typeof scanModuleRunSchema>[];
   normalizedUrl?: string;
   negativeSearchEvidence?: PolicyNegativeSearchEvidence;
@@ -2967,6 +2972,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
       : "indeterminate_limited_coverage" as const;
 
   return policySurfaceInspectionOutcomeSchema.parse({
+    californiaAdditionalReview: input.californiaAdditionalReview,
     californiaReviewPolicy: input.californiaReviewPolicy,
     rightsReviewScorePolicy: input.rightsReviewScorePolicy,
     californiaDisclosureChoicePolicy: input.californiaDisclosureChoicePolicy,

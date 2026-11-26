@@ -2,8 +2,11 @@ import "server-only";
 import {loadGpcResourceInventory} from "./gpc-resource-inventory";
 import { isTerminalPageCaptureAssessment } from "../../lib/scans/scan-report-disposition";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
-import type { NoGoReportData } from "../../components/scans/report-lab/shadow-report-data";
+import type { NoGoReportData, ReportPhaseInventories, TimelineReportData } from "../../components/scans/report-lab/shadow-report-data";
 import { buildTimelineReportModel } from "../../components/scans/report-lab/timeline-report-model";
+import type { ActionResourceInventory } from "../../lib/scans/action-resource-inventory";
+import { attachInventoryPolicyDisclosure } from "../../lib/scans/single-page-resource-inventory";
+import { withServerTiming } from "../performance/log-server-timing";
 import { loadReviewedPoliciesFromProjection } from "./full-site-reviewed-policies";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { ScanStatusProjection } from "./scan-status-projection";
@@ -55,4 +58,32 @@ export async function buildVerifiedTimelineReportModel(record: ScanDetailRespons
   const documents = await loadReviewedPoliciesFromProjection(record).catch(() => []);
   const model = buildTimelineReportModel(record, documents);
   return options.includeGpcInventory && "findings" in model ? {...model,gpcResourceInventory:await loadGpcResourceInventory(record)} : model;
+}
+
+export function buildTimelineReportWithDeferredPolicyDisclosure(record: ScanDetailResponse): {
+  report: TimelineReportData;
+  phaseInventories?: Promise<ReportPhaseInventories>;
+} {
+  const report = buildTimelineReportModel(record);
+  if (report.resultDisposition === "no_go") return { report };
+
+  const { resourceInventory, actionInventories } = report;
+  const phaseInventories: Promise<ReportPhaseInventories> = withServerTiming(
+    "app.scan_detail.reviewed_policy_text",
+    () => loadReviewedPoliciesFromProjection(record),
+    { scanId: record.scan.id },
+  ).then(documents => {
+    const enrichAction = (action: ActionResourceInventory | null | undefined) => action && ({
+      ...action,
+      inventory: attachInventoryPolicyDisclosure(action.inventory, documents),
+    });
+    return {
+      resourceInventory: resourceInventory && attachInventoryPolicyDisclosure(resourceInventory, documents),
+      actionInventories: actionInventories && {
+        accept: enrichAction(actionInventories.accept),
+        reject: enrichAction(actionInventories.reject),
+      },
+    };
+  }).catch(() => ({ resourceInventory, actionInventories }));
+  return { report, phaseInventories };
 }

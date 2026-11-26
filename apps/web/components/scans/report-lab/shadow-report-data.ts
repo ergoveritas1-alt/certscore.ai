@@ -150,6 +150,7 @@ export type GpcResponseReportProjection = {
 };
 
 export type ShadowReportData = {
+  adTechDetails?: import("@certscore/api-contracts").ReportRequestDetail[];
   optOutSurfaces?: import("../../../lib/scans/public-first-layer-consent-evidence").PublicOptOutSurfaces;
   californiaOptOutPresence?: import("../../../lib/scans/california-choice-presence").CaliforniaOptOutPresence;
   californiaFrictionlessGpcException?: import("../../../lib/scans/california-choice-presence").CaliforniaFrictionlessGpcException | null;
@@ -189,6 +190,7 @@ export type ShadowReportData = {
     origin: string;
     originCode: string;
     reportUrl?: string;
+    documentOrigin?: string;
     url: string;
     visualEvidenceHref?: string | null;
     consentBannerPreview?: import("../../../lib/scans/visual-evidence").ConsentBannerPreview | null;
@@ -306,6 +308,8 @@ export type NoGoReportData = Pick<ShadowReportData, "scan" | "fullSite"> &
   };
 
 export type TimelineReportData = ShadowReportData | NoGoReportData;
+
+export type ReportPhaseInventories = Pick<ShadowReportData, "resourceInventory" | "actionInventories">;
 
 export const SHADOW_REPORT: ShadowReportData = {
   scan: {

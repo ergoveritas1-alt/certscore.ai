@@ -14,6 +14,8 @@ import {
   privacyChoiceInspectionSchema,
   materializeSelfHiddenFrameInspection,
   classifyCaliforniaRightsMethod,
+  californiaChoiceBarrierObservationSchema,
+  findCaliforniaMandatoryAccountClause,
   type PrivacyChoiceInspection,
   extractPolicyUpdateDateText,
   decodeCommonHtmlEntities,
@@ -2918,6 +2920,21 @@ async function processPolicyCandidate({
     title,
     finalUrl: fetchedFinalUrl,
   });
+  const californiaChoiceBarrier = !boundedAfterSoftBudget && documentSubstance.reasonCode !== "soft_404" &&
+    ["do_not_sell_or_share", "your_privacy_choices"].includes(linkedChoiceCandidate.deterministicSurfaceType) &&
+    linkedChoiceCandidate.deterministicClassifierProvenance === "privacy_surface_classifier.v1" &&
+    linkedChoiceCandidate.linkVisibility === "visible" && linkedChoiceCandidate.clickable &&
+    linkedChoiceCandidate.accessibleNameSource && linkedChoiceCandidate.accessibleNameSource !== "none" &&
+    isDirectlyLinkedPolicyCandidate(linkedChoiceCandidate) && !linkedChoiceCandidate.parentObservationId &&
+    (sameOrigin(input.normalizedUrl, fetchedFinalUrl) ||
+      ["target_controller", "first_party_brand"].includes(ownership.targetRelationship ?? "")) &&
+    fetched.bodyTruncated === false && fetched.documentFormat === "text" &&
+    fetched.status !== undefined && fetched.status >= 200 && fetched.status < 300 &&
+    (successfulPolicyFetchSizes(fetched).decompressedSizeBytes ?? Infinity) <= 32_000 &&
+    fetchedFinalUrl === linkedChoiceCandidate.normalizedUrl &&
+    policyFetchRedirectChain(fetched).every(url => url === fetchedFinalUrl)
+    ? retainCaliforniaChoiceBarrier(fetchedHtml, linkedChoiceCandidate.linkSourcePageUrl, fetchedFinalUrl)
+    : undefined;
   const guessedThinPrivacyDocument = shouldTreatGuessedPrivacyDocumentAsInsufficient({
     surfaceType: effectiveCandidate.deterministicSurfaceType,
     discoveryMethod: effectiveCandidate.discoveryMethod,
@@ -2931,7 +2948,7 @@ async function processPolicyCandidate({
     if (documentSubstance.reasonCode.startsWith("policy_document_purpose.v1-")) {
       return {
         observation: observationFromCandidate(effectiveCandidate, {
-          status: "failed", documentRole: "unknown",
+          status: "failed", documentRole: "unknown", californiaChoiceBarrier,
           documentRoleReasonCodes: [documentSubstance.reasonCode],
           httpStatus: fetched.status, finalUrl: fetchedFinalUrl,
           redirectChain: policyFetchRedirectChain(fetched),
@@ -2962,6 +2979,7 @@ async function processPolicyCandidate({
     return {
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
+        californiaChoiceBarrier,
       documentRole: documentRoleAssessment.role,
         documentRoleReasonCodes: documentRoleAssessment.reasonCodes,
         httpStatus: fetched.status,
@@ -3196,6 +3214,7 @@ async function processPolicyCandidate({
       : [];
   const retainedObservation = observationFromCandidate(effectiveCandidate, {
       status: "fetched",
+      californiaChoiceBarrier: retainedPrivacyDocumentCandidate ? undefined : californiaChoiceBarrier,
       documentLanguage: /<html\b[^>]*\slang\s*=\s*["']([a-zA-Z-]{2,40})["']/i.exec(fetchedHtml)?.[1]?.toLowerCase(),
       documentRole: documentRoleAssessment.role,
       documentRoleReasonCodes: documentRoleAssessment.reasonCodes,
@@ -3247,7 +3266,7 @@ async function processPolicyCandidate({
     retainedObservation.gdprTransparencyTopicCoverageDiagnostics = [];
   }
   const choiceObservation = retainedPrivacyDocumentCandidate ? observationFromCandidate(linkedChoiceCandidate, {
-    ...retainedObservation, documentRole: "unknown", documentRoleReasonCodes: [],
+    ...retainedObservation, californiaChoiceBarrier, documentRole: "unknown", documentRoleReasonCodes: [],
     governingPolicyBodyAssessment: undefined, governingPolicySelection: undefined,
     article13DisclosureSignals: [], gdprTransparencyTopicCandidates: [],
     discardedArticle13DisclosureSignals: [], retainedArticle13SectionEvidence: [], gdprTransparencyTopicCoverageDiagnostics: [],
@@ -7815,6 +7834,7 @@ function observationFromCandidate(
     linkObservationState === "observed";
   return {
     observationId: `policy_surface_${stableHash(candidate.normalizedUrl)}`,
+    californiaChoiceBarrier: input.californiaChoiceBarrier,
     sourceScanner: SOURCE_SCANNER,
     scenario: SCENARIO,
     consentStateAtTime: "not_applicable",
@@ -12294,6 +12314,21 @@ function htmlToVisibleText(html: string): string {
     .replace(/<iframe\b[\s\S]*?<\/iframe>/gi, " ")
     .replace(/<pre\b[\s\S]*?<\/pre>/gi, " ")
     .replace(/<[^>]+>/g, " ")));
+}
+
+function retainCaliforniaChoiceBarrier(html: string, sourceDocumentUrl: string | undefined, destinationUrl: string) {
+  // Only a bounded, static destination can prove a mandatory clause and let
+  // us check for alternate instructions without interacting with the page.
+  if (!sourceDocumentUrl || html.length > 32_000 ||
+      /<(?:script|iframe|template|noscript|dialog|details)\b|<link\b[^>]*\bstylesheet\b|<[^>]+\s(?:hidden|inert)(?:\s|=|>)|aria-hidden\s*=\s*["']?true|display\s*:\s*none|visibility\s*:\s*hidden/i.test(html)) return;
+  const body = /<body\b[^>]*>([\s\S]*)<\/body\s*>/i.exec(html.replace(/<!--[\s\S]*?-->/g, " "))?.[1];
+  if (!body) return;
+  const text = htmlToVisibleText(body.replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, ". "));
+  const clause = findCaliforniaMandatoryAccountClause(text);
+  const parsed = californiaChoiceBarrierObservationSchema.safeParse(clause && {
+    ...clause, sourceDocumentUrl, destinationUrl, textSha256: createHash("sha256").update(text).digest("hex"),
+  });
+  return parsed.success ? parsed.data : undefined;
 }
 
 function decodeBasicHtmlEntities(value: string): string {

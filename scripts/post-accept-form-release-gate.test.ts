@@ -12,6 +12,7 @@ test('form lifecycle stays mandatory in fast/full preflight and web/validation r
 
 test('completeness verification includes held-out policies, both actions and image competition',()=>{
  const pkg=JSON.parse(readFileSync('package.json','utf8'));
+ assert.ok(pkg.scripts['test:post-accept-forms'].includes('apps/v2-dag-lambda/src/sits-borlabs-regression.test.ts'));
  assert.match(pkg.scripts['test:scan-completeness'],/test:action-retained-reliability/);
  assert.match(pkg.scripts['test:scan-completeness'],/test:post-accept-forms/);
  for(const testFile of ['collection-surface-snapshots.test.ts','policy-body-declarations.test.ts','short-policy-retained.test.ts','onetrust-document-binding.test.ts'])assert.ok(pkg.scripts['test:scan-completeness'].includes(testFile));

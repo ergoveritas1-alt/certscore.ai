@@ -12,6 +12,8 @@ import type { ReviewedPolicy } from "./full-site-resource-context";
 
 export type ActionResourceInventory = {
   inventory: SinglePageResourceInventory;
+  /** Individual request times survive endpoint grouping in the inventory. */
+  rejectAdEvents?: Array<{ resourceKey: string; evidenceRef: string; elapsedMs: number }>;
   scope: "retained_capture" | "activity_sample";
   note: string;
   clockLabel: string;
@@ -59,6 +61,7 @@ export function projectActionResourceInventory(input: {
   const clockStart = start ?? registeredAt;
   if (clockStart === undefined) return null;
   const entries: Array<{ occurrence: CrawlOccurrence; evidence: string }> = [];
+  const rejectAdEvents: NonNullable<ActionResourceInventory["rejectAdEvents"]> = [];
   const add = (kind: CrawlOccurrence["kind"], name: string, storageIdentity: unknown, domain: string | undefined,
     vendor: string | undefined, purpose: string | undefined, atMs: number | null, ref: string,
     nonEssential: boolean, resourceType: string, details: Record<string, string | number | boolean | null> = {},
@@ -85,6 +88,10 @@ export function projectActionResourceInventory(input: {
     } else if (snapshot) {
       if (nonEssential) evidence = "Non-essential";
       else if (essentiality === "essential") evidence = "Essential";
+    }
+    if (input.action === "reject" && kind === "request" && occurrence.purpose === "advertising" &&
+        evidence === "Non-essential" && atMs !== null && endpoint && start !== undefined && !documentChanged) {
+      rejectAdEvents.push({resourceKey: "request:" + key, evidenceRef: ref, elapsedMs: atMs});
     }
     entries.push({ evidence, occurrence });
   };
@@ -133,6 +140,7 @@ export function projectActionResourceInventory(input: {
   const scope = requests ? "retained_capture" : "activity_sample";
   return {
     inventory: buildSinglePageResourceInventory(input.pageId, [], null, input.reviewedPolicies, entries, "choice"), scope,
+    ...(scope === "retained_capture" && rejectAdEvents.length ? { rejectAdEvents } : {}),
     clockLabel: start !== undefined ? `Times from the ${input.action === "accept" ? "Accept" : "Reject"} click` : `Times from confirmed ${input.action === "accept" ? "Accept" : "Reject"}`,
     measurement: {
       execution,

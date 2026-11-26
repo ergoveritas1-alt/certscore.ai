@@ -32,7 +32,7 @@ import { createActionRequestRetention } from "./action-request-retention.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { genericConsentActionLabelSupported } from "./consent-action-label-eligibility.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
-import { CONSENT_ACTION_RECIPE_CANDIDATE_MAX, prioritizeConsentActionRecipes, consentActionBindingDeadline, findRetainedNativeConsentControl, liveConsentActionCmp, type RetainedNativeConsentSelector } from "./consent-action-recipe-priority.js";
+import { CONSENT_ACTIONABILITY_TRIAL_MS, CONSENT_ACTION_RECIPE_CANDIDATE_MAX, prioritizeConsentActionRecipes, consentActionBindingDeadline, findRetainedNativeConsentControl, matchRetainedControlBeforeTrial, liveConsentActionCmp, type RetainedNativeConsentSelector } from "./consent-action-recipe-priority.js";
 import type { ActionTcfData } from "./consent-action-tcf-state.js";
 import { captureOneTrustBaseline, oneTrustBaselineLimitation, type OneTrustBaseline } from "./onetrust-consent-state.js";
 import { decodeTcfV2PurposeConsents, readConsentActionTcfData } from "./consent-action-tcf-state.js";
@@ -1469,7 +1469,11 @@ export async function runPostRefusalObserver(
       // The bounded exact probe already tested the same scoped control's
       // actionability. The dispatch still rebinds the actual element, checks
       // fresh exact proof and uses a normal, unforced Playwright click.
-      if (control !== readyExactCookieInformationControl) {
+      const readyExactControl = resolution.retainedNativeControl
+        ? await matchRetainedControlBeforeTrial(control, resolution.retainedNativeControl, firstLayerProof?.expiresAtMs, effectiveSignal)
+        : undefined;
+      if (readyExactControl) control = readyExactControl;
+      else if (control !== readyExactCookieInformationControl) {
         await trialRejectControl(page, control, selectedRecipe);
       }
     } catch (error) {
@@ -2966,6 +2970,7 @@ type DeterministicRecipeResolution =
       status: "found";
       recipe: PostRefusalActionRecipe;
       control: Locator;
+      retainedNativeControl?: Locator;
       diagnosticGeometry?: ConsentControlGeometryArtifact;
     }
   | {
@@ -3023,7 +3028,7 @@ async function trialRejectControl(
     }
     return;
   }
-  await control.click({ trial: true, timeout: 1_000 });
+  await control.click({ trial: true, timeout: CONSENT_ACTIONABILITY_TRIAL_MS });
 }
 
 async function dispatchRejectControl(
@@ -3853,6 +3858,8 @@ async function waitForCanonicalRejectControlRecipe(
         sawAmbiguousCanonicalControl = true;
       } else if (resolved.status !== "not_found") return {
           ...resolved,
+          ...(resolved.status === "found" && exactControl && !resolved.recipe.controlFrameUrl
+            ? { retainedNativeControl:exactControl } : {}),
           ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
         };
     }

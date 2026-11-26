@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import {cmpAuditAvailabilitySchema} from "../packages/certscore-api-contracts/src/cmp-audit-availability";
 import {
-  detailedEvidenceCountsSchema, detailedEvidenceRowSchema, detailedEvidenceSectionSchema,
+  reportRequestDetailSchema, detailedEvidenceCountsSchema, detailedEvidenceRowSchema, detailedEvidenceSectionSchema,
   detailedEvidenceReportSchema, publicCmpAuditSchema, publicCmsSecuritySchema, consentControlMeasurementSchema,
 } from "../packages/certscore-api-contracts/src/detailed-evidence";
 
@@ -28,7 +28,7 @@ function project(schema: z.ZodTypeAny): { ts: string; json: any } {
   throw new Error(`Unsupported detailed evidence schema: ${schema._def.typeName}`);
 }
 async function main() {
-  const schemas = { CmpAuditAvailability:cmpAuditAvailabilitySchema, DetailedEvidenceCounts: detailedEvidenceCountsSchema, DetailedEvidenceRow: detailedEvidenceRowSchema,
+  const schemas = { ReportRequestDetail: reportRequestDetailSchema, CmpAuditAvailability:cmpAuditAvailabilitySchema, DetailedEvidenceCounts: detailedEvidenceCountsSchema, DetailedEvidenceRow: detailedEvidenceRowSchema,
     DetailedEvidenceSection: detailedEvidenceSectionSchema, DetailedEvidenceReport: detailedEvidenceReportSchema,
     PublicCmpAudit: publicCmpAuditSchema, PublicCmsSecurity: publicCmsSecuritySchema, ConsentControlMeasurement: consentControlMeasurementSchema };
   const projected = Object.entries(schemas).map(([name, schema]) => [name, project(schema)] as const);

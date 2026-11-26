@@ -1,3 +1,4 @@
+import { sitsBorlabsActionWindowMs } from "./sits-borlabs-action-window.js";
 import { geometryConsentButtonLinkMatches } from "./exact-native-consent-button-selector.js";
 import { consentGateDocument } from "./consent-gate-document.js";
 import { DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP, drupalOverflowObservationMatches,
@@ -13,6 +14,7 @@ import {
 import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 
 const hashPattern = /^[a-f0-9]{64}$/;
+export { sitsBorlabsActionWindowMs };
 export const ACCEPT_FIRST_LAYER_GATE_MS = 6_000;
 const MAX_OBSERVATIONS = 32;
 const MAX_CONTROLS = 128;
@@ -82,7 +84,7 @@ export function readAcceptFirstLayerProof(value: unknown): AcceptFirstLayerProof
     typeof proof.issuedAtMs !== "number" || typeof proof.expiresAtMs !== "number" ||
     !Number.isSafeInteger(proof.issuedAtMs) || !Number.isSafeInteger(proof.expiresAtMs) ||
     proof.issuedAtMs < 0 || proof.expiresAtMs <= proof.issuedAtMs ||
-    proof.expiresAtMs - proof.issuedAtMs > ACCEPT_FIRST_LAYER_GATE_MS) return undefined;
+    proof.expiresAtMs - proof.issuedAtMs > (sitsBorlabsActionWindowMs("accept", proof.exactSelector, proof) ?? ACCEPT_FIRST_LAYER_GATE_MS)) return undefined;
   return proof as AcceptFirstLayerProof;
 }
 

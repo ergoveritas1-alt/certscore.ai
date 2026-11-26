@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { AdTechRequestDetails } from "./adtech-request-details";
+import type { ReportRequestDetail } from "@certscore/api-contracts";
 import { GpcRequestTable } from "./gpc-request-table";
 import type { GpcRequestWindow } from "../../lib/scans/gpc-request-window";
 import { ClassificationCounts } from "./report-inventory-summary";
@@ -99,14 +101,16 @@ export function GpcInventoryContributors() {
   </details>;
 }
 
-export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: ConsentTrackingTile[] }) {
+export function ConsentTrackingSummary({ tiles: initialTiles, requestDetails }: { tiles: ConsentTrackingTile[]; requestDetails?: ReportRequestDetail[] }) {
   const { tile: gpc } = useContext(GpcContext);
   const tiles = gpc ? initialTiles.map(tile => tile.id === "gpc" ? gpc : tile) : initialTiles;
   const id = useId();
   const [selected, setSelected] = useState<string | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
   const navigation = useReportInventoryNavigation();
-  const active = tiles.find(tile => tile.id === selected && canExpandTile(tile, Boolean(navigation)));
+  const canOpen = (tile: ConsentTrackingTile) => canExpandTile(tile, Boolean(navigation)) || Boolean(requestDetails?.some(row =>
+    (tile.id === "before" && row.kind === "consent_mode") || (tile.id === "reject" && row.kind === "reject_ad")));
+  const active = tiles.find(tile => tile.id === selected && canOpen(tile));
   const phase = active?.evidence === "forms" || active?.evidence === "privacy" ? undefined : active?.evidence;
 
   return <section aria-labelledby={`${id}-title`} data-consent-tracking-summary className="rounded-xl border border-slate-200 bg-white"
@@ -118,7 +122,7 @@ export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: Consent
     <div data-consent-tracking-grid className={`grid grid-cols-1 gap-px overflow-hidden bg-slate-200 min-[360px]:grid-cols-2 sm:grid-cols-3 ${active ? "" : "rounded-b-xl"}`}>
       {tiles.map(tile => {
         const open = active?.id === tile.id;
-        const expandable = canExpandTile(tile, Boolean(navigation));
+        const expandable = canOpen(tile);
         const counts = tile.count !== null ? tile.breakdown : undefined;
         const partialBaseline = showsPartialInventory(tile);
         const retainedNonEssential = partialBaseline ? tile.metrics?.flatMap(metric => {
@@ -164,6 +168,7 @@ export function ConsentTrackingSummary({ tiles: initialTiles }: { tiles: Consent
           baseline: tiles.find(tile => tile.id === "before")?.breakdown,
           gpc: active.count === null ? undefined : active.breakdown,
         }} /> : <h4 className="text-sm font-semibold text-slate-900">{active.label} <span className="ml-2 text-[11px] font-medium text-slate-600">{statusLabel[active.state]}</span></h4>}
+        {active.id === "before" || active.id === "reject" ? <AdTechRequestDetails rows={requestDetails?.filter(row => row.kind === (active.id === "before" ? "consent_mode" : "reject_ad"))} /> : null}
         {active.id === "gpc" && active.state === "partial" ? <p>The count covers the resources retained from the GPC visit. Capture coverage was limited.</p> : null}
         {active.notes?.length ? <ul className="max-h-44 space-y-1 overflow-y-auto">{active.notes.map((note, index) => <li key={index} className="break-words">{note}</li>)}</ul> : null}
         {active.facts?.length ? <dl className="flex flex-wrap gap-x-5 gap-y-2">{active.facts.map(fact => <div key={fact.label}><dt className="font-medium text-slate-800">{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl> : null}

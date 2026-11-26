@@ -6,6 +6,25 @@ import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } 
 
 export type RetainedNativeConsentSelector = { selector: string; labelSha256: string; expiresAtMs: number };
 
+export const CONSENT_ACTIONABILITY_TRIAL_MS = 1_000;
+const EXACT_PROOF_RESERVE_MS = 200;
+
+/** Reuse a complete live sweep only when its returned locator still resolves
+ * to the unique retained native control and a second trial could run out of time.
+ * The caller still binds and rechecks the exact handle before trusted input. */
+export async function matchRetainedControlBeforeTrial(
+  resolved: Locator, retained: Locator, proofExpiresAtMs: number | undefined, signal: AbortSignal,
+): Promise<Locator | undefined> {
+  if (proofExpiresAtMs === undefined ||
+      proofExpiresAtMs - Date.now() > CONSENT_ACTIONABILITY_TRIAL_MS + EXACT_PROOF_RESERVE_MS) return;
+  const sameControl = resolved.and(retained);
+  const matches = await readWithinActionBoundary(async () => {
+    const [retainedCount, matchingCount] = await Promise.all([retained.count(), sameControl.count()]);
+    return retainedCount === 1 && matchingCount === 1;
+  }, false, Math.min(proofExpiresAtMs, Date.now() + 100), signal).catch(() => false);
+  return matches ? sameControl : undefined;
+}
+
 /** Use a live, complete candidate sweep to bind the retained selector before
  * repeating per-candidate reads. The existing deterministic recipe sweep and
  * exact pre-dispatch recheck still verify the bound control independently. */

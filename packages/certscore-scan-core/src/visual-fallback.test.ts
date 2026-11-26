@@ -1,4 +1,14 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { once } from "node:events";
+import { createServer } from "node:http";
+import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { deriveAcceptFirstLayerProof } from "./accept-first-layer-gate.js";
+import { evaluateRejectGate, readRejectFirstLayerProof } from "./reject-gate-shadow-receipt.js";
+import { runPostAcceptObserver } from "./post-accept-observer.js";
+import { runPostRefusalObserver } from "./post-refusal-observer.js";
+import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
+import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes.js";
 import { access, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -270,4 +280,126 @@ test("bounded consent recovery can retain complete no-surface evidence", async (
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("independent recovery binds observed native and HubSpot controls to exact passive geometry", async t => {
+  for (const name of ["CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE", "CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE"]) {
+    const previous = process.env[name];
+    process.env[name] = "1";
+    t.after(() => {
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    });
+  }
+
+  const cases = [
+    { path: "/native", markup: `<section aria-label="Cookie consent">
+      <p>We use optional cookies for analytics. See our cookie policy.</p>
+      <div class="CookiesConsent__Container-sc-18be04b-0">
+        <div class="CookiesConsent__FormButtons-sc-18be04b-9"><button class="jvSrRs">Accept</button></div>
+      </div></section>`, acceptSelector: "button.jvSrRs" },
+    { path: "/hubspot", markup: `<section id="hs-eu-cookie-confirmation" aria-label="Cookie preferences">
+      <p>We use optional cookies for analytics. See our cookie policy.</p>
+      <div id="hs-eu-cookie-confirmation-button-group">
+        <a id="hs-eu-confirmation-button" role="button" tabindex="0">Accept all</a>
+        <a id="hs-eu-decline-button" role="button" tabindex="0">Decline all</a>
+      </div></section>`, acceptSelector: "#hs-eu-cookie-confirmation a#hs-eu-confirmation-button[role=\"button\"]:not([href], [target], [download])",
+      rejectSelector: "#hs-eu-cookie-confirmation a#hs-eu-decline-button[role=\"button\"]:not([href], [target], [download])" },
+  ];
+  const clicks: string[] = [];
+  const server = createServer((req, res) => {
+    if (req.method === "POST" && cases.some(row => req.url === row.path + "/accept" ||
+        row.rejectSelector && req.url === row.path + "/reject")) {
+      clicks.push(req.url!);
+      res.writeHead(204).end();
+      return;
+    }
+    const fixture = cases.find(row => req.url === row.path);
+    if (!fixture) { res.writeHead(404).end(); return; }
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(`<!doctype html><title>Catalog fixture</title>
+      <main><h1>Catalog</h1><p>Read about delivery and browse our product catalog.</p></main>
+      <style>section{position:fixed;inset:auto 1rem 1rem;background:white;border:1px solid;padding:1rem} a{display:inline-block;cursor:pointer;padding:.5rem}</style>
+      ${fixture.markup}
+      <script>
+        for (const [selector, action] of ${JSON.stringify([[fixture.acceptSelector, "accept"], [fixture.rejectSelector, "reject"]])}) {
+          if (!selector) continue;
+          document.querySelector(selector).addEventListener("click", event => {
+            if (!event.isTrusted) return;
+            fetch(location.pathname + "/" + action, {method:"POST"});
+            document.querySelector("section").hidden = true;
+          });
+        }
+      </script>`);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise<void>((resolve, reject) =>
+    server.close(error => error ? reject(error) : resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  const digest = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
+  for (const fixture of cases) {
+    const targetUrl = `http://127.0.0.1:${address.port}${fixture.path}`;
+    const startedAtMs = Date.now();
+    const out = await mkdtemp(path.join(tmpdir(), "certscore-recovery-binding-"));
+    t.after(() => rm(out, { recursive: true, force: true }));
+    const recovered = await capturePreConsentScreenshotOnlyFallback({
+      artifactWriter: await createArtifactWriter(out), normalizedUrl: targetUrl, scanStartedAtMs: startedAtMs,
+      captureMode: "full_page", recoverConsentEvidence: true, fallbackDeadlineMs: 6_000,
+    });
+    assert.ok(recovered.consentRecoveryCompleted && recovered.domSnapshot && recovered.consentUiObservation, fixture.path);
+    const bytes = await readFile(path.join(out, "ConsentControlGeometryEvidence.json"));
+    const scanId = "independent-recovery" + fixture.path;
+    const bundle = {
+      url: targetUrl, scanId, startedAt: new Date(startedAtMs).toISOString(),
+      domSnapshots: [recovered.domSnapshot], consentUiObservations: [recovered.consentUiObservation],
+      consentSurfaceInspection: { inspectedPreInteraction: true, inspectionCompleted: true, actionableControlObserved: true },
+    } as CanonicalEvidenceBundle;
+    const input = {
+      bundle, scanId, targetUrl, sourceSha256: digest(JSON.stringify(bundle)), parentDispatchSha256: digest(scanId),
+      geometry: { bytes, sizeBytes: bytes.length, sha256: digest(bytes) }, nowMs: Date.now(),
+    };
+    const acceptProof = deriveAcceptFirstLayerProof({ ...input, requireExactSelector:true, deadlineAtMs:input.nowMs + 6000 });
+    assert.equal(acceptProof?.exactSelector, fixture.acceptSelector, fixture.path);
+    assert.ok(acceptProof);
+    const common = { url:targetUrl, scanId, actionSearchTimeoutMs:5500, confirmationTimeoutMs:300,
+      observationWindowMs:250, resultBudgetMs:7000,
+      interactionAuthorization:{ kind:"loopback" as const, authorizationId:"loopback_local_lab" as const } };
+    const acceptCompleted: number[] = [];
+    const accept = await runPostAcceptObserver({
+      ...common, firstLayerProof:acceptProof, allowCanonicalAcceptDiscovery:true,
+      recipe:buildCanonicalPostAcceptActionRecipes().find(recipe => recipe.cmpId === "HubSpot Consent Banner")!,
+      onExactAcceptClickCompleted:event => acceptCompleted.push(event.completedAtMs),
+    });
+    assert.equal(accept.interactionDiagnostics?.click.outcome, "completed", JSON.stringify({
+      reason:accept.resolver.reason, limitations:accept.limitations, interaction:accept.interactionDiagnostics,
+    }));
+    assert.equal(acceptCompleted.length, 1);
+    assert.ok(acceptProof.expiresAtMs - acceptCompleted[0]! >= 200);
+    t.diagnostic(`${fixture.path} Accept proof reserve ${acceptProof.expiresAtMs - acceptCompleted[0]!} ms`);
+    const reject = evaluateRejectGate({...input, nowMs:Date.now()});
+    if (fixture.rejectSelector) {
+      assert.equal(reject.outcome, "qualified", JSON.stringify(reject));
+      assert.equal(reject.exactSelector, fixture.rejectSelector);
+      const firstLayerProof = readRejectFirstLayerProof({...reject, scanId});
+      assert.ok(firstLayerProof);
+      const rejectCompleted: number[] = [];
+      const packet = await runPostRefusalObserver({
+        ...common, firstLayerProof, parentDispatchSha256:input.parentDispatchSha256, allowCanonicalRejectDiscovery:true,
+        recipe:buildCanonicalPostRefusalActionRecipes().find(recipe => recipe.cmpId === "HubSpot Consent Banner")!,
+        onExactRejectClickCompleted:event => rejectCompleted.push(event.completedAtMs),
+      });
+      assert.equal(packet.interactionDiagnostics?.click.outcome, "completed", JSON.stringify({
+        reason:packet.resolver.reason, limitations:packet.limitations, interaction:packet.interactionDiagnostics,
+      }));
+      assert.equal(rejectCompleted.length, 1);
+      assert.ok(firstLayerProof.expiresAtMs - rejectCompleted[0]! >= 200);
+      t.diagnostic(`${fixture.path} Reject proof reserve ${firstLayerProof.expiresAtMs - rejectCompleted[0]!} ms`);
+    } else {
+      assert.equal(reject.outcome, "blocked");
+    }
+  }
+  assert.deepEqual(clicks, ["/native/accept", "/hubspot/accept", "/hubspot/reject"]);
 });

@@ -1,3 +1,4 @@
+import { projectAdTechRequestDetails } from "./adtech-request-details";
 import { projectRejectPresenceDetails } from "./reject-presence-details";
 import {
   detailedEvidenceReportSchema, publicCmpAuditSchema, publicCmsSecuritySchema,
@@ -25,6 +26,7 @@ import {
 
 /** Read-only presentation over the same report model as the website. Never creates findings or changes assessments. */
 export function buildDetailedEvidenceExport(report: ShadowReportData) {
+  const requestDetails = projectAdTechRequestDetails(report, resolveReportReviewFocus(report.reviewFocus, report.scan.originCode));
   report = scopeReportPresentation(report);
   const layout = detailedEvidenceLayout(report);
   const privacy = californiaPrivacyEvidence(report.privacyAuditEvidence, report.scan.id);
@@ -143,6 +145,11 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
         evidenceRefs: [row.evidenceRef, row.detectionRef], evidenceTarget: row.evidenceRef, source: { field: "cmsSecurity.advisories", rowId: row.evidenceRef } };
     }),
   });
+  const gpcDetails = requestDetails.filter(row => row.phase === "gpc_visit");
+  if (gpcDetails.length) sections.push({id:"gpc",title:EVIDENCE_SECTION_TITLES.gpc,recap:"Retained GPC evidence",
+    displayStatus:null,counts:{checks:0,review:0,limited:0,observed:0,unsupported:0},rows:[],requestDetails:gpcDetails});
+  const trackingDetails = requestDetails.filter(row => row.phase !== "gpc_visit");
+  if (trackingDetails.length) sections.find(s => s.id === "tracking")!.requestDetails = trackingDetails;
   const detailedEvidence: DetailedEvidenceReport = detailedEvidenceReportSchema.parse({
     version: "certscore.detailed-evidence.v1", scanId: report.scan.id, sections: sections.sort((a, b) => EVIDENCE_SECTION_ORDER.indexOf(a.id) - EVIDENCE_SECTION_ORDER.indexOf(b.id)),
     interpretation: "Section recaps and display labels describe existing report assessments. Audit rows are not additional findings. Source fields retain evidence and provenance; findings and score remain authoritative. Missing evidence does not establish absence.",

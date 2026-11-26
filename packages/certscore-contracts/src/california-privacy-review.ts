@@ -24,6 +24,10 @@ import { CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION, californiaDisclosureInspectionS
 export * from "./california-disclosure-inspection";
 import { verifiedSaleSharingOptOutSchema,saleSharingOptOutBindsDocument } from "./sale-sharing-opt-out";
 import { z } from "zod";
+import {
+  CALIFORNIA_CHOICE_FRICTION_FINDING, CALIFORNIA_COLLECTION_NOTICE_FINDING,
+  CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING, californiaAdditionalReviewSchema,
+} from "./california-additional-review";
 import { californiaCoverageV1Schema, californiaCoverageV2Schema,californiaCoverageV3Schema,californiaCoverageV4Schema } from "./california-review-coverage";
 export * from "./california-review-coverage";
 
@@ -218,7 +222,7 @@ export const CALIFORNIA_OPT_OUT_ACTIVITY_ID = "california_sale_sharing_opt_out_a
 export const CALIFORNIA_NOTICE_DESTINATION_ID = "california_notice_at_collection_destination_error";
 export const CALIFORNIA_RIGHTS_DESTINATION_ID = "california_rights_information_destination_error";
 export const OPT_OUT_ABSENCE_FINDING_ID="california_opt_out_not_observed_in_scope";
-export const CALIFORNIA_PRIVACY_REVIEW_IDS = [CALIFORNIA_AGENT_REGISTRATION_ID,BROAD_OPT_OUT_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,OPT_OUT_SIGNAL_FINDING_ID,FRICTIONLESS_GPC_FINDING_ID,POLICY_CHOICE_METHOD_FINDING_ID, CALIFORNIA_CHOICE_ABSENCE_ID, CALIFORNIA_CHOICE_DESTINATION_ID, CALIFORNIA_OPT_OUT_ACTIVITY_ID, CALIFORNIA_NOTICE_DESTINATION_ID, CALIFORNIA_RIGHTS_DESTINATION_ID, CALIFORNIA_RIGHTS_DISCLOSURE_ID] as const;
+export const CALIFORNIA_PRIVACY_REVIEW_IDS = [CALIFORNIA_COLLECTION_NOTICE_FINDING, CALIFORNIA_CHOICE_FRICTION_FINDING, CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING, CALIFORNIA_AGENT_REGISTRATION_ID,BROAD_OPT_OUT_FINDING_ID,OPT_OUT_ABSENCE_FINDING_ID,OPT_OUT_SIGNAL_FINDING_ID,FRICTIONLESS_GPC_FINDING_ID,POLICY_CHOICE_METHOD_FINDING_ID, CALIFORNIA_CHOICE_ABSENCE_ID, CALIFORNIA_CHOICE_DESTINATION_ID, CALIFORNIA_OPT_OUT_ACTIVITY_ID, CALIFORNIA_NOTICE_DESTINATION_ID, CALIFORNIA_RIGHTS_DESTINATION_ID, CALIFORNIA_RIGHTS_DISCLOSURE_ID] as const;
 export const CALIFORNIA_PRIVACY_REVIEW_SIGNAL = "privacy.california_privacy_review";
 
 const choiceSchema = z.object({
@@ -338,6 +342,7 @@ const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
   rightsReviewScorePolicy: z.literal(CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION).optional(),
   observedScoreBasis:californiaObservedScoreBasisSchema.optional(),
   agentRegistrationAssessment:californiaAgentRegistrationSchema.optional(),
+  additionalReview: californiaAdditionalReviewSchema.optional(),
   disclosureChoiceAssessment:californiaDisclosureChoiceAssessmentSchema.optional(),
   frictionlessGpcException:frictionlessGpcExceptionSchema.optional(),
   optOutPresenceSignal:optOutPresenceSignalSchema.optional(),
@@ -347,6 +352,22 @@ const californiaPrivacyReviewV10=californiaPrivacyReviewV9.extend({
 }).strict();
 type CaliforniaPrivacyReviewShape = z.infer<typeof californiaPrivacyReviewV1> | z.infer<typeof californiaPrivacyReviewV2> | z.infer<typeof californiaPrivacyReviewV3> | z.infer<typeof californiaPrivacyReviewV4> | z.infer<typeof californiaPrivacyReviewV5> | z.infer<typeof californiaPrivacyReviewV6> | z.infer<typeof californiaPrivacyReviewV7> | z.infer<typeof californiaPrivacyReviewV8> | z.infer<typeof californiaPrivacyReviewV9> | z.infer<typeof californiaPrivacyReviewV10>;
 const californiaPrivacyReviewValidatedSchema: z.ZodType<CaliforniaPrivacyReviewShape> = z.discriminatedUnion("contractVersion",[californiaPrivacyReviewV1,californiaPrivacyReviewV2,californiaPrivacyReviewV3,californiaPrivacyReviewV4,californiaPrivacyReviewV5,californiaPrivacyReviewV6,californiaPrivacyReviewV7,californiaPrivacyReviewV8,californiaPrivacyReviewV9,californiaPrivacyReviewV10]).superRefine((row, ctx) => {
+  if (row.contractVersion === "certscore.california-privacy-review.v10" && row.additionalReview) {
+    const proof = row.additionalReview;
+    const friction = proof.choiceFriction;
+    const documents = proof.notice?.documents ?? [];
+    if (proof.scanId !== row.scanId || proof.sourceBundleSha256 !== row.sourceHash || proof.documentUrl !== row.documentUrl ||
+        documents.some(source => !row.reviewCoverage.sourceDocuments.some(doc => doc.complete &&
+          doc.evidenceRef === source.evidenceRef && doc.sha256 === source.sha256 && doc.url === source.url)) ||
+        (proof.notice && !row.reviewCoverage.captureCoverage.collectionInventoryComplete) ||
+        (friction && (!row.reviewCoverage.captureCoverage.choiceInventoryComplete ||
+          friction.document.evidenceRef !== friction.controlEvidenceRef ||
+          !row.controls.some(control => control.destinationStatus === "retrieved" &&
+            control.evidenceRef === friction.controlEvidenceRef && control.destinationUrl === friction.document.url &&
+            (friction.scope === "sale_or_sharing" || control.kind === "your_privacy_choices"))))) {
+      ctx.addIssue({ code: "custom", message: "California review evidence must bind this scan, collection point and retained choice destination." });
+    }
+  }
   if (row.contractVersion === "certscore.california-privacy-review.v10" && row.agentRegistrationAssessment) {
     const proof = row.agentRegistrationAssessment;
     if (!californiaAgentRegistrationProjectionSchema.safeParse({assessment: proof, documentUrl: row.documentUrl}).success ||
@@ -526,6 +547,9 @@ export function californiaPrivacyReviewFindingIds(value: unknown): string[] {
   const observedNamedPage=(signal?.version==="sale_sharing_opt_out_signal.v4"||(signal?.version==="sale_sharing_opt_out_signal.v5"||(signal?.version==="sale_sharing_opt_out_signal.v6"||signal?.version==="sale_sharing_opt_out_signal.v7")))&&signal.basis==="visible_dom_opt_out_label"&&
     signal.sourceDocumentUrl===result.data.documentUrl&&signal.scope==="observed_page";
   return [
+    ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.additionalReview?.notice ? [CALIFORNIA_COLLECTION_NOTICE_FINDING] : []),
+    ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.additionalReview?.choiceFriction ? [CALIFORNIA_CHOICE_FRICTION_FINDING] : []),
+    ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.additionalReview?.sensitiveTransmission ? [CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING] : []),
     ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.agentRegistrationAssessment ? [CALIFORNIA_AGENT_REGISTRATION_ID] : []),
     ...(result.data.contractVersion==="certscore.california-privacy-review.v10"&&result.data.broadOptOutAssessment?[BROAD_OPT_OUT_FINDING_ID]:[]),
     ...(result.data.contractVersion === "certscore.california-privacy-review.v10" && result.data.optOutNegativeSearch && !requiredChoiceBasis ? [OPT_OUT_ABSENCE_FINDING_ID] : []),
@@ -544,6 +568,25 @@ export function californiaPrivacyReviewFindingIds(value: unknown): string[] {
 }
 
 export function californiaPrivacyReviewCopy(id: string, assessment?: CaliforniaPrivacyReview) {
+  if (id === CALIFORNIA_COLLECTION_NOTICE_FINDING) return {
+    title: "Notice at collection unavailable or incomplete",
+    description: assessment?.contractVersion === "certscore.california-privacy-review.v10" &&
+      assessment.additionalReview?.notice?.issue === "no_notice_in_completed_inspection"
+      ? "The completed inspection could not locate a notice available to visitors at the observed personal-information collection point."
+      : "A fully retained notice linked from the collection point did not state a retention period or criteria for the personal information requested.",
+    action: "Provide a conspicuous notice at or before collection and include the applicable categories, purposes and retention period or criteria.",
+  };
+  if (id === CALIFORNIA_CHOICE_FRICTION_FINDING) return {
+    title: "Privacy choice requires account creation",
+    description: "The verified privacy-choice destination says visitors must create an account to exercise the specified privacy choice.",
+    action: "Provide an accessible route to exercise the choice without creating an account.",
+  };
+  if (id === CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING) return {
+    title: "Sensitive form information sent to an external recipient",
+    description: "A successful request to an external domain matched a sensitive field from an observed form interaction. Review the recipient, the purpose, and whether the transmission was expected.",
+    action: "Confirm the recipient’s role and whether the transmission is necessary. Remove any unintended transmission and review the applicable disclosure and choice.",
+  };
+
   if (id === CALIFORNIA_AGENT_REGISTRATION_ID) return {
     title: "State registration required for authorized agents",
     description: "The retained California request instructions require Secretary of State registration for an authorized agent. Review whether this condition restricts consumers’ use of an agent.",

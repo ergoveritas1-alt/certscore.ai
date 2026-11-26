@@ -288,3 +288,12 @@ details[open] > .evidence-section-header .evidence-section-chevron { transform: 
 .report-evidence-link.text-inherit { color: inherit; }
 .report-evidence-link:hover { color: #0369a1; text-decoration-color: #38bdf8; }
 .report-evidence-link:focus-visible { outline: 2px solid #0ea5e9; outline-offset: 2px; border-radius: 2px; }
+
+.adtech-request-card { container-type: inline-size; }
+.adtech-endpoint { overflow-wrap: anywhere; font-size: 0.75rem; }
+@container (max-width: 390px) {
+  .adtech-requests, .adtech-requests thead, .adtech-requests tbody { display: block; width: 100%; }
+  .adtech-requests tr { display: grid; grid-template-columns: 5.25rem 1fr; }
+  .adtech-requests th:last-child { position: absolute; clip-path: inset(50%); }
+  .adtech-requests td:last-child { grid-column: 1 / -1; padding-top: 0; }
+}

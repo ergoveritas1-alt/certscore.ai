@@ -1,3 +1,6 @@
+import { retainedConsentAssessment } from "../../lib/scans/after-action-report-eligibility";
+import { projectRetainedAdTechRequestDetails } from "../../lib/scans/adtech-request-details";
+import { projectActionResourceInventory } from "../../lib/scans/action-resource-inventory";
 import {buildReportVisualReferences} from './report-visual-references';
 import {siteMetadataProjectionSchema,describeSiteTechnology} from '@certscore/contracts';
 import { redactGpcProducerBindings } from "../../lib/scans/gpc-public-evidence";
@@ -361,6 +364,18 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
   const postAcceptObservation = deriveApiV2PostAcceptObservation(scanRecord);
   const postRefusalObservation = deriveApiV2PostRefusalObservation(scanRecord);
   const gpcResponse = deriveApiV2GpcResponse(scanRecord);
+  const finalUrl = scanRecord.snapshot?.final_effective_url;
+  const gpc = gpcResponse?.contractVersion === "certscore.gpc-response-assessment.v3" ? gpcResponse : undefined;
+  const requestDetails = noGo ? [] : projectRetainedAdTechRequestDetails({
+    scanId: scanRecord.scan.id,
+    documentOrigin: typeof finalUrl === "string" ? URL.parse(finalUrl)?.origin : undefined,
+    preConsentEvidence: canonical.checklistRows.find(row => row.id === "pre_consent_third_party_tracking")?.criticalEvidence?.retainedEvidence,
+    rejectInventory: focus === "gdpr_eprivacy" ? projectActionResourceInventory({
+      pageId: scanRecord.scan.id, action: "reject", assessment: retainedConsentAssessment(scanRecord),
+      projection: scanRecord.runtimeArtifacts?.postRefusalEvidenceProjection,
+    }) : undefined,
+    gpcObservation: gpc?.observation?.sourceSha256 === gpc?.comparison.gpcArtifact?.sha256 ? gpc?.observation : undefined,
+  }, focus);
   const executiveSummary = buildExecutiveSummary({ assessment, checklistPresentation: canonical.checklistPresentation,
     findings: findings.filter(finding => finding.unifiedFindingId !== SITE_INTEGRITY_FINDING_ID) });
   if (focus === "ccpa_cpra") executiveSummary.sentences = [
@@ -432,7 +447,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       },
       {
         code: "privacy_opt_out_execution_not_tested",
-        detail: "Sale/sharing opt-out execution is assessed only where a supported, verified bounded observation is retained. Notice placement at collection points remains unassessed. Missing observation does not establish a working or broken opt-out.",
+        detail: "Sale/sharing opt-out execution is assessed only where a supported, verified bounded observation is retained. Missing observation does not establish a working or broken opt-out.",
       },
       ...(assessment?.limitations ?? []).map((limitation) => ({
         code: limitation.code,
@@ -441,6 +456,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       })),
     ],
     appendix: {
+      ...(requestDetails.length ? { requestDetails } : {}),
       ...(gpcInventory && focus === "ccpa_cpra" ? {gpcResourceInventory:gpcInventory} : {}),
       evidenceDossier: buildReportAppendixEvidence(scanRecord, canonical, assessment),
       ...(siteIntegrity ? { siteIntegrity } : {}),

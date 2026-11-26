@@ -40,6 +40,15 @@ export function inspectGpcRequestQualification(rawUrl: string, context: GppReque
       if (value && /^(?:LDU|\["LDU"\])$/i.test(value)) result.processingSignals.push("meta_ldu");
       else if (value !== "[]") result.processingSignals.push("privacy_signal_invalid");
     }
+    const singleZero = (keys: string[]) => {
+      const values = keys.flatMap(key => q.getAll(key));
+      return values.length === 1 && values[0] === "0";
+    };
+    if (result.processingSignals.includes("meta_ldu") && !result.processingSignals.includes("privacy_signal_invalid") &&
+      ["dpo", "data_processing_options"].flatMap(key => q.getAll(key)).length === 1 &&
+      singleZero(["dpoco", "data_processing_options_country"]) && singleZero(["dpost", "data_processing_options_state"])) {
+      result.metaLduGeography = "automatic";
+    }
   }
   // IAB US Privacy v1: character 3 is sale opt-out. A declared restriction
   // makes this event review-only; it does not establish that GPC was honored.

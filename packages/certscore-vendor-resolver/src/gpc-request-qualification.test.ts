@@ -87,3 +87,15 @@ test('revised qualification treats NPA as context, requires a supported role, an
  for(const candidate of ['https://www.google-analytics.com/g/collect?v=2&tid=G-ABC&cid=visitor123&sid=123&npa=1','https://securepubads.g.doubleclick.net/gampad/ads?iu=123&npa=1'])
   assert.equal(isQualifyingSaleSharingRequest(inspect(candidate)),false,'identifier or NPA removal alone does not establish a qualifying role');
 });
+
+test("Meta automatic geography requires one LDU declaration and both zero fields on the pixel request", () => {
+  const pixel = "https://www.facebook.com/tr/?id=publisher&ev=PageView&fbp=visitor-fixture";
+  assert.equal(inspect(pixel + "&dpo=LDU&dpoco=0&dpost=0").metaLduGeography, "automatic");
+  const body = new URLSearchParams({data_processing_options:'["LDU"]', data_processing_options_country:"0", data_processing_options_state:"0"});
+  assert.equal(inspect(pixel, {}, body).metaLduGeography, "automatic");
+  for (const suffix of ["dpoco=0&dpost=0", "dpo=LDU&dpoco=0", "dpo=LDU&dpoco=1&dpost=0",
+    "dpo=LDU&dpoco=0&dpost=0&dpost=0", "dpo=LDU&dpoco=0&dpost=0&data_processing_options=[]"]) {
+    assert.equal(inspect(pixel + "&" + suffix).metaLduGeography, undefined);
+  }
+  assert.equal(inspect("https://other.example/tr/?dpo=LDU&dpoco=0&dpost=0").metaLduGeography, undefined);
+});

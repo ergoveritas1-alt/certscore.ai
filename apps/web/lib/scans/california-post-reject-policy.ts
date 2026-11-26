@@ -126,6 +126,21 @@ export function retainedCaliforniaPostReject(runtime:Record<string,unknown>|null
  const derived=assessCaliforniaPostReject(runtime?.postRefusalEvidenceProjection,parsed.data.policyVersion);
  return derived && JSON.stringify(derived)===JSON.stringify(parsed.data)?parsed.data:null;
 }
+/** The score and customer finding consume the same verified canonical packet. */
+export function verifiedCaliforniaPostRejectFinding(finding: import("./unified-findings").UnifiedFindingDisplayPacket) {
+  if (finding.unifiedFindingId !== CALIFORNIA_POST_REJECT_FINDING ||
+      finding.presentationDecision.status !== "surface" || finding.surfacingDecision?.reportable !== true ||
+      !finding.concernContext?.promotionEligibilities.includes("eligible") ||
+      !finding.concernContext.externalSurfacingEligibilities.includes("eligible") ||
+      finding.details?.family !== "california_post_reject") return;
+  const parsed = californiaPostRejectAssessmentSchema.safeParse(finding.details.assessment);
+  if (!parsed.success || parsed.data.status !== "qualified_collection") return;
+  const assessment = parsed.data;
+  if (finding.scoreEffects?.some(effect => effect.appliesTo === "california_posture" && effect.framework === "california" &&
+      effect.policyVersion === assessment.policyVersion && effect.policyKey === "california.choice_enforcement.post_reject" &&
+      effect.deductionPoints === californiaPostRejectPoints(assessment))) return assessment;
+}
+
 export function californiaPostRejectPoints(a:CaliforniaPostRejectAssessment) {
  return californiaChoiceEnforcementPoints(a.recipientIds,a.status==="qualified_collection");
 }

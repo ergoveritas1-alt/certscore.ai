@@ -2,6 +2,7 @@
 
 import { authorizeCurrentReportShare } from "../scans/report-share-access";
 
+import { CapturedImageDialog } from "../scans/captured-image-dialog";
 import React, { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { sendReportEmailAction, type SendReportEmailActionState } from "../../server/scans/email-report";
@@ -400,6 +401,7 @@ export function ShareReportActions({
           <button
             type="button"
             aria-label="View captured image"
+            aria-haspopup="dialog"
             className={visualEvidenceOnly ? "app-raised-button group relative inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-700 hover:text-slate-950" : iconActionClassName()}
             data-analytics-cta-type="visual-evidence"
             data-analytics-event="report_cta_clicked"
@@ -492,138 +494,131 @@ export function ShareReportActions({
         </div>
       ) : null}
       {isVisualEvidenceDialogOpen && visualEvidenceHref ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6">
-          <div
-            aria-labelledby="visual-evidence-modal-title"
-            aria-modal="true"
-            className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
-            role="dialog"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-              <div className="space-y-1">
-                <h2 id="visual-evidence-modal-title" className="text-xl font-semibold tracking-normal text-slate-950">
-                  Captured image
-                </h2>
-                <p className="text-sm leading-6 text-slate-600">
-                  Visual evidence retained for {domainLabel}.
-                </p>
-              </div>
-              <div className="flex flex-none items-center gap-2">
-                <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <button
-                    type="button"
-                    aria-label="Force refresh captured image"
-                    className="scan-report-button inline-flex h-10 items-center justify-center border-r border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:text-slate-950"
-                    onClick={retryVisualEvidenceNow}
-                    title="Force refresh image"
-                  >
-                    Refresh
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Zoom out captured image"
-                    className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
-                    disabled={visualEvidenceZoom <= VISUAL_EVIDENCE_MIN_ZOOM}
-                    onClick={() => setVisualEvidenceZoom((value) => Math.max(VISUAL_EVIDENCE_MIN_ZOOM, Number((value - VISUAL_EVIDENCE_ZOOM_STEP).toFixed(2))))}
-                    title="Zoom out"
-                  >
-                    <ZoomOutIcon />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Reset captured image zoom"
-                    className="scan-report-button inline-flex h-10 min-w-14 items-center justify-center border-x-0 px-2 text-xs font-semibold text-slate-600 hover:text-slate-950"
-                    onClick={() => setVisualEvidenceZoom(1)}
-                    title="Reset zoom"
-                  >
-                    {Math.round(visualEvidenceZoom * 100)}%
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Zoom in captured image"
-                    className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
-                    disabled={visualEvidenceZoom >= VISUAL_EVIDENCE_MAX_ZOOM}
-                    onClick={() => setVisualEvidenceZoom((value) => Math.min(VISUAL_EVIDENCE_MAX_ZOOM, Number((value + VISUAL_EVIDENCE_ZOOM_STEP).toFixed(2))))}
-                    title="Zoom in"
-                  >
-                    <ZoomInIcon />
-                  </button>
-                </div>
+        <CapturedImageDialog onDismiss={closeVisualEvidenceDialog}>
+          <div className="flex flex-col items-start justify-between gap-3 border-b border-slate-200 px-3 py-3 sm:flex-row sm:gap-4 sm:px-5 sm:py-4">
+            <div className="min-w-0 space-y-1">
+              <h2 className="text-xl font-semibold tracking-normal text-slate-950">
+                Captured image
+              </h2>
+              <p className="break-words text-sm leading-6 text-slate-600">
+                Visual evidence retained for {domainLabel}.
+              </p>
+            </div>
+            <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:w-auto sm:flex-none">
+              <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <button
                   type="button"
-                  aria-label="Close captured image"
-                  className="scan-report-button inline-flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:text-slate-950"
-                  onClick={closeVisualEvidenceDialog}
+                  aria-label="Force refresh captured image"
+                  className="scan-report-button inline-flex h-10 items-center justify-center border-r border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:text-slate-950"
+                  onClick={retryVisualEvidenceNow}
+                  title="Force refresh image"
                 >
-                  <CloseIcon />
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  aria-label="Zoom out captured image"
+                  className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                  disabled={visualEvidenceZoom <= VISUAL_EVIDENCE_MIN_ZOOM}
+                  onClick={() => setVisualEvidenceZoom((value) => Math.max(VISUAL_EVIDENCE_MIN_ZOOM, Number((value - VISUAL_EVIDENCE_ZOOM_STEP).toFixed(2))))}
+                  title="Zoom out"
+                >
+                  <ZoomOutIcon />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Reset captured image zoom"
+                  className="scan-report-button inline-flex h-10 min-w-14 items-center justify-center border-x-0 px-2 text-xs font-semibold text-slate-600 hover:text-slate-950"
+                  onClick={() => setVisualEvidenceZoom(1)}
+                  title="Reset zoom"
+                >
+                  {Math.round(visualEvidenceZoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  aria-label="Zoom in captured image"
+                  className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                  disabled={visualEvidenceZoom >= VISUAL_EVIDENCE_MAX_ZOOM}
+                  onClick={() => setVisualEvidenceZoom((value) => Math.min(VISUAL_EVIDENCE_MAX_ZOOM, Number((value + VISUAL_EVIDENCE_ZOOM_STEP).toFixed(2))))}
+                  title="Zoom in"
+                >
+                  <ZoomInIcon />
                 </button>
               </div>
-            </div>
-            <div ref={visualEvidenceViewerRef} className="relative min-h-[18rem] flex-1 overflow-auto bg-slate-950/95 p-4">
-              {isVisualEvidenceImageLoading ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="inline-flex items-center gap-3 rounded-full border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm font-semibold text-slate-100 shadow-xl">
-                    <ImageLoadingGlyph />
-                    <span>Loading captured image</span>
-                  </div>
-                </div>
-              ) : null}
-              {visualEvidenceImageFailed ? (
-                <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-                  <div className="max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-5 text-slate-100 shadow-xl">
-                    <p className="font-semibold">The captured image is temporarily unavailable.</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">
-                      The evidence was retained, but the image service did not respond after several attempts.
-                    </p>
-                    <button className={`${actionClassName("primary")} mt-4`} onClick={retryVisualEvidenceNow} type="button">
-                      Try again
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <img
-                  alt={`Captured scan evidence for ${domainLabel}`}
-                  className={`mx-auto block rounded-lg bg-white object-contain shadow-lg transition-opacity duration-150 ${isVisualEvidenceImageLoading ? "opacity-0" : "opacity-100"}`}
-                  ref={visualEvidenceImageRef}
-                  onError={handleVisualEvidenceLoadError}
-                  onLoad={() => {
-                    setIsVisualEvidenceImageLoading(false);
-                    setVisualEvidenceImageFailed(false);
-                    const image = visualEvidenceImageRef.current;
-                    const viewer = visualEvidenceViewerRef.current;
-                    if (image && viewer) {
-                      const fitSize = calculateVisualEvidenceFit({
-                        containerWidth: viewer.clientWidth,
-                        naturalHeight: image.naturalHeight,
-                        naturalWidth: image.naturalWidth,
-                        viewportHeight: window.innerHeight
-                      });
-                      if (fitSize) {
-                        setVisualEvidenceFitSize(fitSize);
-                      }
-                    }
-                  }}
-                  src={buildVisualEvidenceRetryHref(visualEvidenceHref, visualEvidenceLoadAttempt, visualEvidenceRefreshToken)}
-                  style={{
-                    height: visualEvidenceFitSize ? `${visualEvidenceFitSize.height * visualEvidenceZoom}px` : "auto",
-                    maxHeight: visualEvidenceFitSize ? "none" : "72vh",
-                    maxWidth: visualEvidenceFitSize ? "none" : "100%",
-                    width: visualEvidenceFitSize ? `${visualEvidenceFitSize.width * visualEvidenceZoom}px` : "auto"
-                  }}
-                />
-              )}
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3">
               <button
-                className={actionClassName("primary")}
-                onClick={closeVisualEvidenceDialog}
                 type="button"
+                aria-label="Close captured image"
+                className="scan-report-button inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:text-slate-950 sm:h-11 sm:w-11"
+                onClick={closeVisualEvidenceDialog}
               >
-                Close
+                <CloseIcon />
               </button>
             </div>
           </div>
-        </div>
+          <div ref={visualEvidenceViewerRef} className="relative min-h-[min(18rem,25dvh)] flex-1 overflow-auto overscroll-contain bg-slate-950/95 p-4">
+            {isVisualEvidenceImageLoading ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="inline-flex items-center gap-3 rounded-full border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm font-semibold text-slate-100 shadow-xl">
+                  <ImageLoadingGlyph />
+                  <span>Loading captured image</span>
+                </div>
+              </div>
+            ) : null}
+            {visualEvidenceImageFailed ? (
+              <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
+                <div className="max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-5 text-slate-100 shadow-xl">
+                  <p className="font-semibold">The captured image is temporarily unavailable.</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    The evidence was retained, but the image service did not respond after several attempts.
+                  </p>
+                  <button className={`${actionClassName("primary")} mt-4`} onClick={retryVisualEvidenceNow} type="button">
+                    Try again
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <img
+                alt={`Captured scan evidence for ${domainLabel}`}
+                className={`mx-auto block rounded-lg bg-white object-contain shadow-lg transition-opacity duration-150 ${isVisualEvidenceImageLoading ? "opacity-0" : "opacity-100"}`}
+                ref={visualEvidenceImageRef}
+                onError={handleVisualEvidenceLoadError}
+                onLoad={() => {
+                  setIsVisualEvidenceImageLoading(false);
+                  setVisualEvidenceImageFailed(false);
+                  const image = visualEvidenceImageRef.current;
+                  const viewer = visualEvidenceViewerRef.current;
+                  if (image && viewer) {
+                    const fitSize = calculateVisualEvidenceFit({
+                      containerWidth: viewer.clientWidth,
+                      naturalHeight: image.naturalHeight,
+                      naturalWidth: image.naturalWidth,
+                      viewportHeight: window.innerHeight
+                    });
+                    if (fitSize) {
+                      setVisualEvidenceFitSize(fitSize);
+                    }
+                  }
+                }}
+                src={buildVisualEvidenceRetryHref(visualEvidenceHref, visualEvidenceLoadAttempt, visualEvidenceRefreshToken)}
+                style={{
+                  height: visualEvidenceFitSize ? `${visualEvidenceFitSize.height * visualEvidenceZoom}px` : "auto",
+                  maxHeight: visualEvidenceFitSize ? "none" : "72vh",
+                  maxWidth: visualEvidenceFitSize ? "none" : "100%",
+                  width: visualEvidenceFitSize ? `${visualEvidenceFitSize.width * visualEvidenceZoom}px` : "auto"
+                }}
+              />
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3">
+            <button
+              className={actionClassName("primary")}
+              onClick={closeVisualEvidenceDialog}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+        </CapturedImageDialog>
       ) : null}
     </>
   );

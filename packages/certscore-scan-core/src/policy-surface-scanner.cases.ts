@@ -9,6 +9,7 @@ import { gzipSync } from "node:zlib";
 import { chromium, type Browser } from "playwright";
 import {
   classifyPrivacySurface,
+  policySurfaceObservationSchema,
   GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   privacySurfacePathsForLocale,
@@ -2603,6 +2604,51 @@ test("policySurfaceScanner preserves an exact privacy notice when Nano ranks com
   } finally {
     server.close();
     await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("retains a California account barrier from the exact standalone choice response", async () => {
+  const clause = "To opt out of the sale or sharing of your personal information, you must create an account.";
+  let choiceResponse = `<h1>Do Not Sell or Share My Personal Information</h1><p>${clause}</p>`;
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    if (request.url === "/") {
+      response.end('<html lang="en"><body><main><h1>Example Shop</h1><p>Shop our products or review your privacy choices below.</p></main><footer><a href="/opt-out">Do Not Sell or Share My Personal Information</a></footer></body></html>');
+    } else if (request.url === "/opt-out") {
+      response.end(`<html lang="en"><body>${choiceResponse}</body></html>`);
+    } else {
+      response.writeHead(404).end();
+    }
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const pageUrl = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-choice-barrier-"));
+  try {
+    const run = async () => {
+      const result = await policySurfaceScanner({
+        url: pageUrl, normalizedUrl: pageUrl, scanStartedAtMs: Date.now(), internalBudgetMs: 7_500,
+        artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      });
+      const choice = result.policySurfaceObservations.find(row => row.surfaceType === "do_not_sell_or_share");
+      return policySurfaceObservationSchema.parse(choice);
+    };
+    const observed = await run();
+    assert.equal(observed.documentFetchState, "fetched");
+    assert.notEqual(observed.documentRole, "policy_document");
+    assert.equal(observed.californiaChoiceBarrier?.sourceDocumentUrl, pageUrl);
+    assert.equal(observed.californiaChoiceBarrier?.destinationUrl, pageUrl + "opt-out");
+    assert.match(observed.californiaChoiceBarrier?.excerpt ?? "", /must create an account/);
+    choiceResponse += "<p>You may opt out without an account.</p>";
+    assert.ok(!(await run()).californiaChoiceBarrier);
+    choiceResponse = `<div hidden><p>${clause}</p></div><p>You may submit your request here.</p>`;
+    assert.ok(!(await run()).californiaChoiceBarrier);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     await rm(tempRoot, { recursive: true, force: true });
   }
 });

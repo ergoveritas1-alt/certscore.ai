@@ -51,6 +51,7 @@ import {
   canonicalEvidenceBundleSchema,
   domSnapshotArtifactSchema,
   deriveConsentSurfaceInspectionOutcome,
+  CALIFORNIA_ADDITIONAL_REVIEW_VERSION,
   derivePolicySurfaceInspectionOutcome,
   isVerifiedTerminalConsentPacket,
   verifyConsentControlInspection,
@@ -101,7 +102,7 @@ import {
   chromiumProxyOptions,
   isLocalHeadedFallbackEnabled,
 } from "./playwright-runtime.js";
-import { captureConsentControlGeometry } from "./consent-control-geometry.js";
+import { capturePassiveConsentControlGeometry } from "./consent-control-geometry.js";
 import {
   buildConsentGeometryEgressDiagnostic,
   collectConsentGeometryPageAccess,
@@ -1434,6 +1435,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     californiaReviewPolicy: "california-privacy-review.v10",
     rightsReviewScorePolicy: CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION,
     californiaDisclosureChoicePolicy: CALIFORNIA_COMBINED_OPT_OUT_POLICY,
+    californiaAdditionalReview: CALIFORNIA_ADDITIONAL_REVIEW_VERSION,
     modulesRun: boundedModulesRun,
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });
@@ -3873,7 +3875,9 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
             frameTextTimeoutMs: Math.min(250, geometryTimeoutMs),
             supplementalBodyText: domText,
           });
-          const geometry = await captureConsentControlGeometry(page, {
+          // The recovered DOM inventory uses passive exact-selector capture.
+          // Retain the same selector and loader in the corroborating geometry.
+          const geometry = await capturePassiveConsentControlGeometry(page, {
             documentIdentity: recoveryDocumentBefore?.identity,
             timeoutMs: geometryTimeoutMs,
           });

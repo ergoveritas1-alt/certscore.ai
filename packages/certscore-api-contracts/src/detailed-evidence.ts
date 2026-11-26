@@ -19,9 +19,19 @@ export const detailedEvidenceRowSchema = z.object({
   source: z.object({ field: ref, rowId: ref }).strict(),
   sharedEvidence: z.object({ targetId: ref, label: text, showLink: z.boolean().optional() }).strict().optional(),
 }).strict();
+export const reportRequestDetailSchema = z.object({
+  kind: z.enum(["reject_ad", "google_processing", "consent_mode", "california_gpp", "meta_pixel", "same_site_measurement", "gpc_signal"]),
+  phase: z.enum(["before_choice", "after_reject_click", "gpc_visit"]),
+  title: text, summary: text, evidenceRef: ref,
+  elapsedMs: z.number().finite().nonnegative().optional(),
+  recipient: text.optional(), method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]).optional(),
+  endpoint: ref.optional(), fields: z.array(z.string().max(80)).max(12).optional(),
+}).strict();
+export type ReportRequestDetail = z.infer<typeof reportRequestDetailSchema>;
 export const detailedEvidenceSectionSchema = z.object({
   id: z.enum(["cmp", "consent", "tracking", "policy", "runtime", "transport", "accessibility", "cms", "gpc", "privacy"]),
   title: text, recap: text, displayStatus: z.enum(["Review", "Manual check", "Limited"]).nullable(),
+  requestDetails: z.array(reportRequestDetailSchema).optional(),
   counts: detailedEvidenceCountsSchema, rows: z.array(detailedEvidenceRowSchema).max(200),
 }).strict();
 export const detailedEvidenceReportSchema = z.object({

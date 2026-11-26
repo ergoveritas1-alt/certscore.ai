@@ -1098,7 +1098,7 @@ function buildCandidateEvidence(
   const borlabsExplanatoryClose = cmpName === "Borlabs Cookie" && candidate.layer === "first_layer" &&
     candidate.tagName === "button" && /brlbs-(?:dialog-positioner|cmpnt-dialog)/u.test(candidate.containerSelectorHint ?? "") &&
     candidate.ariaLabel === "Dialog schließen" &&
-    candidate.label === "Mit diesem Button wird der Dialog geschlossen. Seine Funktionalität ist identisch mit der des Buttons Ablehnen.";
+    /^Mit diesem Button wird der Dialog geschlossen\. Seine Funktionalität ist identisch mit der des Buttons (?:Ablehnen|Accept essential cookies)\.$/u.test(candidate.label);
   const baseClassification: ConsentControlLabelClassification = borlabsExplanatoryClose
     ? {...labelClassification, intent: "unknown", semanticRole: "dismiss", reasonCodes: ["matched_dismiss", "borlabs_explanatory_close"]}
     : labelClassification;

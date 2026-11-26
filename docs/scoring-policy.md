@@ -5,6 +5,15 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
+The California scorecard also reads `apps/web/lib/scans/california-regulatory-score.ts`.
+`california-regulatory-posture.v30-collection-notice-and-choice-friction` adds
+deductions for a verified notice-at-collection gap and an explicit account
+requirement on an observed California privacy-choice destination. A shared
+privacy-notice gap and a missing collection notice share one deduction when
+they describe the same absence. Qualified advertising collection after a
+recorded Reject uses the existing recipient schedule. An exact sensitive-field
+match in a successful external request supports a score-neutral review.
+
 Local versions: `gdpr-eprivacy-posture.v26-consent-only`, `overall-posture.v13`, and
 `full-site-distinct-findings.v12`. See the October 26 privacy-posture release record for the deployed scope.
 The separately approved California recipient schedule is unchanged. New GPC

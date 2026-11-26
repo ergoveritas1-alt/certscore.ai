@@ -11,6 +11,24 @@ import { inventoryPurposeGroups } from "./inventory-purpose-presentation";
 
 type Resource = FullSiteReportResponse["services"][number]["resources"][number];
 export type SinglePageResourceInventory = { requestMetric?: { label: string; value: number; counts: { nonEssential: number; review: number; contextual: number; essential: number; unclassified?: number }; overview?: NetworkInventoryOverview }; resources: Resource[]; services: FullSiteReportResponse["services"]; mix: FullSiteReportResponse["inventoryMix"] };
+
+/** Add policy disclosure to existing resource identities and groupings. */
+export function attachInventoryPolicyDisclosure(inventory: SinglePageResourceInventory, documents: ReviewedPolicy[]) {
+  if (!documents.length) return inventory;
+  const byResource = new Map(inventory.resources.map(resource => [resource, {
+    ...resource,
+    context: describeCrawlService(resource.context.identity, documents),
+  }]));
+  return {
+    ...inventory,
+    resources: [...byResource.values()],
+    services: inventory.services.map(service => {
+      const resources = service.resources.map(resource => byResource.get(resource)!);
+      return { ...service, resources, context: resources[0]!.context };
+    }),
+  };
+}
+
 /** Adapt the canonical retained inventory to the same resource/service presentation as site scans. */
 export function buildSinglePageResourceInventory(pageId: string, rows: InventoryGroupRow[], requests: CrawlOccurrence[] | null, reviewedPolicies: ReviewedPolicy[] = [], retainedResources: Array<{ occurrence: CrawlOccurrence; evidence: string }> = [], scope: "baseline" | "choice" = "baseline"): SinglePageResourceInventory {
   const resources = new Map<string, Resource>();

@@ -1,0 +1,54 @@
+[
+  {
+    "label": "Accept all",
+    "actionType": "accept_all",
+    "tagName": "button",
+    "semanticallyInteractive": true,
+    "role": "button",
+    "selectorHint": "button.brlbs-btn-accept-all",
+    "visible": true,
+    "consentContextEvidence": "local_surface",
+    "matchedTerm": "accept all",
+    "matchStrength": "direct",
+    "classifierReasonCodes": [
+      "matched_accept",
+      "match_strength_direct",
+      "context_satisfied"
+    ]
+  },
+  {
+    "label": "Accept essential cookies",
+    "actionType": "reject_all",
+    "tagName": "button",
+    "semanticallyInteractive": true,
+    "role": "button",
+    "selectorHint": "button",
+    "visible": true,
+    "matchedTerm": "accept essential",
+    "matchStrength": "equivalent",
+    "classifierReasonCodes": [
+      "matched_reject",
+      "match_strength_equivalent",
+      "variant_necessary_only",
+      "context_satisfied"
+    ],
+    "classifierVariant": "necessary_only"
+  },
+  {
+    "label": "Mit diesem Button wird der Dialog geschlossen. Seine Funktionalität ist identisch mit der des Buttons Accept essential c",
+    "actionType": "reject_all",
+    "tagName": "button",
+    "semanticallyInteractive": true,
+    "selectorHint": "button[aria-label=\"Dialog\\ schließen\"]",
+    "visible": true,
+    "consentContextEvidence": "local_surface",
+    "matchedTerm": "accept essential",
+    "matchStrength": "equivalent",
+    "classifierReasonCodes": [
+      "matched_reject",
+      "match_strength_equivalent",
+      "variant_necessary_only",
+      "context_satisfied"
+    ]
+  }
+]

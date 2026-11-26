@@ -4,7 +4,10 @@ import { hasTerminalReportPublicationFailure, reportPublicationResultState, term
 import { projectScanPostureScores } from "../api-v2/posture-scores";
 import { hasSuspendedGpcScoreEffect } from "../scans/gpc-customer-policy";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../api-v2/scan-report-summary";
-import { isAccessibilityAuditLimited } from "@certscore/contracts";
+import { CALIFORNIA_CHOICE_FRICTION_FINDING, CALIFORNIA_COLLECTION_NOTICE_FINDING,
+  CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING, isAccessibilityAuditLimited } from "@certscore/contracts";
+import { CALIFORNIA_POST_REJECT_FINDING } from "../scans/california-post-reject-policy";
+import { projectCaliforniaRegulatoryPriorities } from "../scans/california-regulatory-priorities";
 import { projectAccessibilityAuditSummary, withAccessibilityAuditCoverage } from "../scans/accessibility-audit-evidence";
 import { SPLIT_ACCESSIBILITY_FINDING_IDS } from "../scans/accessibility-evidence";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
@@ -20,6 +23,7 @@ import { getHybridRuntimeEvidence } from "../scans/hybrid-runtime-evidence";
 import { getPublicReportFindingDisplay } from "../scans/public-report-finding-display";
 import type { CertScoreFinding } from "../scans/finding-registry";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
+import { regulatoryReviewContext } from "../scans/regulatory-review-catalog";
 import { getAssessmentDirection, getEvidenceLabel } from "../scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../scans/gdpr-eprivacy-checklist-rationale";
 import {
@@ -449,9 +453,19 @@ function buildPulseReportSurface(input: {
   });
   const checklistFindings = buildChecklistConcernTopFindings(gdprEprivacyChecklist);
   const canonicalHighPriorityFindings = selectCanonicalHighPriorityFindings(checklistFindings);
+  const californiaPackets = unifiedFindingPackets.filter(packet => [CALIFORNIA_CHOICE_FRICTION_FINDING,
+    CALIFORNIA_COLLECTION_NOTICE_FINDING, CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING,
+    CALIFORNIA_POST_REJECT_FINDING].some(id => id === packet.unifiedFindingId));
+  const californiaFindings = projectCaliforniaRegulatoryPriorities(californiaPackets).map((row): CertScoreFinding => ({
+    id: row.id, label: row.title, shortSummary: row.summary, section: "Privacy & Tracking", defaultSurfacePriority: 0,
+    severity: row.severity === "low" ? "low" : "medium", confidence: "good", directVsInferred: "direct",
+    evidencePreview: row.evidence, evidenceRefs: [],
+    whyItMatters: regulatoryReviewContext(row.id, "ccpa_cpra")?.why ?? row.summary,
+    remediation: row.correctionSteps.join(" "),
+  }));
   const { allFindings, topFindings } = selectPublicPulseFindingsFromUnifiedProjection({
     checklistFindings,
-    findings: executive.findings,
+    findings: [...executive.findings, ...californiaFindings.filter(row => !executive.findings.some(finding => finding.id === row.id))],
     topFindings: canonicalHighPriorityFindings
   });
   const gdprEprivacyScoreAssessment = deriveRegulatoryCoverageScore({
@@ -931,7 +945,13 @@ function getReviewLenses(scanRecord: ScanDetailResponse, findings: CertScoreFind
   };
 }
 
+const CALIFORNIA_REVIEW_LENS = "CCPA / CPRA";
+
 function getFindingReviewLenses(finding: CertScoreFinding) {
+  if (regulatoryReviewContext(finding.id, "ccpa_cpra")) {
+    return regulatoryReviewContext(finding.id, "gdpr_eprivacy")
+      ? ["GDPR / ePrivacy", CALIFORNIA_REVIEW_LENS] : [CALIFORNIA_REVIEW_LENS];
+  }
   const lenses = new Set<string>();
   if (
     finding.id === "policy_behavior_conflict" ||
@@ -955,7 +975,8 @@ export function isPublicPulseApiFinding(finding: Pick<CertScoreFinding, "id" | "
 function getFindingReviewLensLinks(finding: CertScoreFinding, scanId: string) {
   return getFindingReviewLenses(finding).map((name) => ({
     name,
-    url: absoluteUrl(`/scan/${scanId}#${getRegulatoryLensAnchor(name)}`)
+    url: absoluteUrl(name === CALIFORNIA_REVIEW_LENS ? `/scan/${scanId}?reviewFocus=ccpa_cpra#report-top-issues`
+      : `/scan/${scanId}#${getRegulatoryLensAnchor(name)}`)
   }));
 }
 

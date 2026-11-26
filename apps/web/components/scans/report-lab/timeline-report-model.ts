@@ -460,6 +460,8 @@ function buildChoicePathComparison(
 }
 
 function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["scan"] {
+  const finalUrl = recordString(record(scanRecord.snapshot), ["final_effective_url"]);
+  const documentOrigin = finalUrl ? URL.parse(finalUrl)?.origin : undefined;
   const visualArtifacts = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts);
   const visualEvidence = visualArtifacts
     .find((artifact) => artifact.status === "available" && artifact.key);
@@ -480,6 +482,7 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
     originCode: scanRecord.scan.scanFromValue || scanRecord.scan.scanFromLabel,
     reportUrl: `/scan/${encodeURIComponent(scanRecord.scan.id)}`,
     url: reportUrl(scanRecord),
+    ...(documentOrigin ? { documentOrigin } : {}),
     visualEvidenceHref: visualEvidence
       ? `/api/scans/${encodeURIComponent(scanRecord.scan.id)}/visual-evidence/${encodeURIComponent(visualEvidence.id)}`
       : null,

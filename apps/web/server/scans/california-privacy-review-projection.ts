@@ -1,3 +1,4 @@
+import { projectCaliforniaAdditionalReview } from "./california-additional-review-projection";
 import {deriveOptOutExecutionAssessment} from '@certscore/contracts';
 import {deriveCombinedOptOutRisk} from "../../lib/scans/california-combined-opt-out-policy";
 import {CALIFORNIA_COMBINED_OPT_OUT_POLICY} from "@certscore/contracts";
@@ -287,6 +288,13 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
     ...(refinedPolicy?{saleSharingAssessment}:{}),
   });
   if (!result.success) return null;
+  if (result.data.contractVersion === "certscore.california-privacy-review.v10") {
+    const additionalReview = projectCaliforniaAdditionalReview(bundle, result.data, clauseDocuments);
+    if (additionalReview) {
+      const extended = californiaPrivacyReviewSchema.safeParse({ ...result.data, additionalReview });
+      if (extended.success) result = extended;
+    }
+  }
   if (agentRegistrationAssessment) {
     const registered = californiaPrivacyReviewSchema.safeParse({...result.data, agentRegistrationAssessment});
     if (registered.success) result = registered;

@@ -14456,11 +14456,20 @@ function reconcileGenericNativeChoiceSelectors(
   const inspection = verifyConsentControlInspection(geometry.controlInspection, geometry.candidates);
   if (inspection?.structuralCoverage !== "complete") return current;
 
-  const controls = current.controls.map(control => {
+  // The inventory caps labels at 120 characters. Match the complete,
+  // independently verified close caption to that same bounded representation.
+  const dismiss = geometry.candidates.find(candidate =>
+    candidate.classifierReasonCodes.includes("borlabs_explanatory_close") &&
+    candidate.frameContext.frameKind === "main_frame" && candidate.frameContext.frameUrl === geometry.pageUrl &&
+    inspection.candidates.some(row => row.candidateId === candidate.candidateId && row.role === "dismiss"));
+  const inventory = current.controls.filter(control => !(dismiss && control.actionType === "reject_all" &&
+    control.tagName === dismiss.tagName && control.selectorHint === dismiss.selectorHint &&
+    (control.label === dismiss.label || control.label === dismiss.label.slice(0, 120))));
+  const controls = inventory.map(control => {
     if (control.tagName !== "button" || control.selectorHint !== "button" || control.domBinding ||
         control.visible !== true || !isConsentControlInteractionEligible(control) ||
         (control.actionType !== "accept_all" && control.actionType !== "reject_all") ||
-        current.controls.filter(other => other.visible && other.actionType === control.actionType).length !== 1) return control;
+        inventory.filter(other => other.visible && other.actionType === control.actionType).length !== 1) return control;
     const isAccept = control.actionType === "accept_all";
     const matches = geometry.candidates.filter(candidate => candidate.actionType === control.actionType &&
       candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible");
@@ -14477,7 +14486,7 @@ function reconcileGenericNativeChoiceSelectors(
           row.label === control.label && row.selectorHint === match.selectorHint)) return control;
     return {...control, selectorHint: match.selectorHint, consentContextEvidence: "local_surface" as const};
   });
-  return controls.every((control, index) => control === current.controls[index])
+  return controls.length === current.controls.length && controls.every((control, index) => control === current.controls[index])
     ? current : {...current, controls};
 }
 

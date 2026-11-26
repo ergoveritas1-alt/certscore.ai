@@ -1,3 +1,4 @@
+import { CALIFORNIA_CHOICE_FRICTION_FINDING, CALIFORNIA_COLLECTION_NOTICE_FINDING } from "@certscore/contracts";
 import { policySurfaceInspectionOutcomeSchema } from "@certscore/contracts";
 import { isCompletePrivacyPolicyAbsence } from "./privacy-policy-discovery";
 import { siteIntegrityFindingEffects, siteIntegrityDeduction, CALIFORNIA_SITE_INTEGRITY_SCORE_VERSION, SITE_INTEGRITY_SCORE_POLICY_KEY } from "./site-integrity-score-policy";
@@ -12,7 +13,7 @@ import {supportsCaliforniaRuntimeLink} from "./california-runtime-link-policy";
 import {CALIFORNIA_RUNTIME_LINK_POLICY,CALIFORNIA_NINE_POINT_LINK_POLICY} from "@certscore/contracts";
 import {CA_VERIFIED_COLLECTION_POLICY,CA_PRESENCE_RISK_POLICY,CA_PER_VISIT_RISK_POLICY,scoreCaliforniaCollectionVisits,CA_IDENTIFIER_RISK_POLICY,scoreCaliforniaCollectionReview,collectionReviewScorePolicy,CA_RETAINED_SCOPE_RISK_POLICY,californiaPotentialRiskSchema,CA_POTENTIAL_RISK_FINDING,CA_POTENTIAL_RISK_POLICY,CA_POTENTIAL_RISK_LEGACY_POLICY} from "./california-potential-risk-policy";
 import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
-import {PER_VISIT_POST_REJECT_POLICY,californiaPostRejectAssessmentSchema,californiaPostRejectPoints,CALIFORNIA_POST_REJECT_POLICY,INDEX_AUCTION_POST_REJECT_POLICY,MAGNITE_AUCTION_POST_REJECT_POLICY,CALIFORNIA_POST_REJECT_FINDING} from "./california-post-reject-policy";
+import {PER_VISIT_POST_REJECT_POLICY,verifiedCaliforniaPostRejectFinding,CALIFORNIA_POST_REJECT_POLICY,INDEX_AUCTION_POST_REJECT_POLICY,MAGNITE_AUCTION_POST_REJECT_POLICY,CALIFORNIA_POST_REJECT_FINDING} from "./california-post-reject-policy";
 import {deriveGppPropagationPolicy, GPP_PROPAGATION_FINDING_ID, GPP_PROPAGATION_POLICY_KEY, GPP_PROPAGATION_POINTS} from "./gpp-propagation-policy";
 import { accessibilityFindingDeductionBreakdown } from "./accessibility-score-policy";
 import { CALIFORNIA_MIXED_CONTENT_SCORE_VERSION, CALIFORNIA_TRANSPORT_SCORE_VERSION, californiaTransportDeduction } from "./california-transport-score-policy";
@@ -44,10 +45,16 @@ const LEGACY_SCORE_VERSION = "california-regulatory-posture.v1" as const;
 export const CALIFORNIA_REGULATORY_SCORE_FLOOR = 0;
 export const CALIFORNIA_SHARED_PRIVACY_NOTICE_KEY = "california.shared_privacy_notice_unavailable";
 const LEGACY_SCORE_RULES = CALIFORNIA_SCORING_RULES_V1;
+export const CALIFORNIA_ADDITIONAL_SCORE_VERSION = "california-regulatory-posture.v30-collection-notice-and-choice-friction" as const;
+const additionalRules = [
+  { findingId: CALIFORNIA_COLLECTION_NOTICE_FINDING, policyKey: "california.collection_notice", label: "Notice at collection unavailable or incomplete", points: 10 },
+  { findingId: CALIFORNIA_CHOICE_FRICTION_FINDING, policyKey: "california.choice_friction", label: "Privacy choice requires account creation", points: 8 },
+];
 export const CALIFORNIA_REGULATORY_SCORE_RULES = [
   ...CALIFORNIA_COMBINED_OPT_OUT_SCORING_RULES.map(rule => rule.findingId === CALIFORNIA_RIGHTS_DISCLOSURE_ID
     ? { ...rule, points: CALIFORNIA_CONDITIONAL_CORE_RIGHTS_POINTS } : rule),
   CALIFORNIA_AGENT_REGISTRATION_RULE,
+  ...additionalRules,
 ];
 export {CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION,CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION,CALIFORNIA_RUNTIME_LINK_SCORE_VERSION,CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION};
 const isDisclosureChoiceScore=(version:string)=>version === CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION || version === CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION || version === CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION || version === CALIFORNIA_RUNTIME_LINK_SCORE_VERSION;
@@ -64,7 +71,7 @@ function scoreVersion(version:string, assessment?:CaliforniaPrivacyReview) {
 }
 
 export type CaliforniaRegulatoryScore = {
-  policyVersion: typeof CALIFORNIA_MIXED_CONTENT_SCORE_VERSION | typeof CALIFORNIA_TRANSPORT_SCORE_VERSION | typeof CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION | "california-regulatory-posture.v26-verified-event" | "california-regulatory-posture.v25-presence" | typeof PER_VISIT_SCORE_VERSION | typeof CALIFORNIA_SITE_INTEGRITY_SCORE_VERSION | typeof CALIFORNIA_AGENT_REGISTRATION_SCORE_VERSION | typeof CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION | typeof CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION | typeof CALIFORNIA_RUNTIME_LINK_SCORE_VERSION | typeof CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION | "california-regulatory-posture.v17-reject-scope" | "california-regulatory-posture.v16-collection-review" | "california-regulatory-posture.v15-collection-review" | typeof CALIFORNIA_REJECT_SCORE_VERSION | typeof CALIFORNIA_GPP_SCORE_VERSION | typeof CALIFORNIA_REGULATORY_SCORE_VERSION | typeof PRE_OBSERVED_SCORE_VERSION | "california-regulatory-posture.v9" | typeof PRE_TRANSFER_SCORE_VERSION | typeof LEGACY_SCORE_VERSION | typeof COVERAGE_GATED_SCORE_VERSION | typeof CAPTURE_BASED_SCORE_VERSION | typeof CLAUSE_PREDECESSOR_SCORE_VERSION | typeof CLAUSE_SCORE_VERSION | typeof REFINED_SCORE_VERSION;
+  policyVersion: typeof CALIFORNIA_ADDITIONAL_SCORE_VERSION | typeof CALIFORNIA_MIXED_CONTENT_SCORE_VERSION | typeof CALIFORNIA_TRANSPORT_SCORE_VERSION | typeof CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION | "california-regulatory-posture.v26-verified-event" | "california-regulatory-posture.v25-presence" | typeof PER_VISIT_SCORE_VERSION | typeof CALIFORNIA_SITE_INTEGRITY_SCORE_VERSION | typeof CALIFORNIA_AGENT_REGISTRATION_SCORE_VERSION | typeof CALIFORNIA_COMBINED_OPT_OUT_SCORE_VERSION | typeof CALIFORNIA_NINE_POINT_LINK_SCORE_VERSION | typeof CALIFORNIA_RUNTIME_LINK_SCORE_VERSION | typeof CALIFORNIA_DISCLOSURE_CHOICE_SCORE_VERSION | "california-regulatory-posture.v17-reject-scope" | "california-regulatory-posture.v16-collection-review" | "california-regulatory-posture.v15-collection-review" | typeof CALIFORNIA_REJECT_SCORE_VERSION | typeof CALIFORNIA_GPP_SCORE_VERSION | typeof CALIFORNIA_REGULATORY_SCORE_VERSION | typeof PRE_OBSERVED_SCORE_VERSION | "california-regulatory-posture.v9" | typeof PRE_TRANSFER_SCORE_VERSION | typeof LEGACY_SCORE_VERSION | typeof COVERAGE_GATED_SCORE_VERSION | typeof CAPTURE_BASED_SCORE_VERSION | typeof CLAUSE_PREDECESSOR_SCORE_VERSION | typeof CLAUSE_SCORE_VERSION | typeof REFINED_SCORE_VERSION;
   score: number | null;
   scope: "starting_page";
   coverage: "bounded" | "limited" | "unavailable";
@@ -105,6 +112,15 @@ function requiredLinkProof(assessment?:CaliforniaPrivacyReview, runtimeGpc?:unkn
 
 /** Only canonical, reportable California findings can carry the new policy effect. */
 export function californiaFindingScoreEffect(id: string, evidenceRef: string, assessmentVersion = "certscore.california-privacy-review.v1", assessment?: CaliforniaPrivacyReview, runtimeGpc?:unknown) {
+  const additional = additionalRules.find(rule => rule.findingId === id);
+  if (additional) {
+    if (assessmentVersion !== "certscore.california-privacy-review.v10" || assessment?.sourceHash !== evidenceRef ||
+        !californiaPrivacyReviewFindingIds(assessment).includes(id)) return [];
+    return [{ appliesTo: "california_posture" as const, framework: "california" as const,
+      deductionPoints: additional.points, evidenceRefs: [evidenceRef], observedActivity: [],
+      policyKey: additional.policyKey, policyVersion: CALIFORNIA_ADDITIONAL_SCORE_VERSION,
+      reasonCode: "verified_reportable_california_finding" }];
+  }
   if (id === CALIFORNIA_AGENT_REGISTRATION_RULE.findingId) {
     const parsed = californiaPrivacyReviewSchema.safeParse(assessment);
     if (!parsed.success || parsed.data.contractVersion !== "certscore.california-privacy-review.v10" ||
@@ -250,15 +266,8 @@ export function deriveCaliforniaRegulatoryScore(input: {
     }
   }
   if(assessment.contractVersion==="certscore.california-privacy-review.v10")for(const finding of input.unifiedFindings) {
-    if(finding.unifiedFindingId!==CALIFORNIA_POST_REJECT_FINDING || finding.presentationDecision.status!=="surface" ||
-      finding.surfacingDecision?.reportable!==true || !finding.concernContext?.promotionEligibilities.includes("eligible") ||
-      !finding.concernContext?.externalSurfacingEligibilities.includes("eligible") || finding.details?.family!=="california_post_reject")continue;
-    const parsed=californiaPostRejectAssessmentSchema.safeParse(finding.details.assessment);
-    if(!parsed.success || parsed.data.scanId!==assessment.scanId || parsed.data.status!=="qualified_collection")continue;
-    const a=parsed.data;
-    if(!finding.scoreEffects?.some(effect=>effect.appliesTo==="california_posture"&&effect.framework==="california"&&
-      effect.policyVersion===a.policyVersion&&effect.policyKey==="california.choice_enforcement.post_reject"&&
-      effect.deductionPoints===californiaPostRejectPoints(a)))continue;
+    const a = verifiedCaliforniaPostRejectFinding(finding);
+    if (!a || a.scanId !== assessment.scanId) continue;
     if (a.policyVersion === PER_VISIT_POST_REJECT_POLICY) perVisitFull = true;
     a.recipientIds.forEach(id=>visits.reject.add(id));choiceSupported=true;rejectChoiceSupported=true;
     if(a.policyVersion===CALIFORNIA_POST_REJECT_POLICY||a.policyVersion===INDEX_AUCTION_POST_REJECT_POLICY||a.policyVersion===MAGNITE_AUCTION_POST_REJECT_POLICY)rejectScopePolicyApplied=true;
@@ -325,6 +334,34 @@ export function deriveCaliforniaRegulatoryScore(input: {
     deductions.push({findingId: "regulatory_gap__gdpr_eprivacy__privacy_notice_availability",
       policyKey: CALIFORNIA_SHARED_PRIVACY_NOTICE_KEY, label: "Privacy notice unavailable", points: CALIFORNIA_SHARED_NOTICE_POINTS});
   }
+  let additionalDeduction = false;
+  if (assessment.contractVersion === "certscore.california-privacy-review.v10" && assessment.additionalReview) {
+    const assessmentIds = californiaPrivacyReviewFindingIds(assessment);
+    for (const rule of additionalRules) {
+      if (!assessmentIds.includes(rule.findingId)) continue;
+      // A complete negative search can support both absence findings. The
+      // existing missing-policy or broken-notice deduction covers that defect.
+      if (rule.findingId === CALIFORNIA_COLLECTION_NOTICE_FINDING &&
+          assessment.additionalReview.notice?.issue === "no_notice_in_completed_inspection" &&
+          deductions.some(row => row.policyKey === CALIFORNIA_SHARED_PRIVACY_NOTICE_KEY ||
+            row.findingId === "california_notice_at_collection_destination_error")) continue;
+      const verified = input.unifiedFindings.some(finding =>
+        finding.unifiedFindingId === rule.findingId && finding.presentationDecision.status === "surface" &&
+        finding.surfacingDecision?.reportable === true && finding.concernContext?.promotionEligibilities.includes("eligible") &&
+        finding.concernContext.externalSurfacingEligibilities.includes("eligible") &&
+        finding.details?.family === "california_privacy_review" &&
+        finding.details.projection.contractVersion === "certscore.california-privacy-review.v10" &&
+        finding.details.projection.scanId === assessment.scanId && finding.details.projection.sourceHash === assessment.sourceHash &&
+        JSON.stringify(californiaPrivacyReviewSchema.safeParse(finding.details.projection).data) === JSON.stringify(assessment) &&
+        finding.scoreEffects?.some(effect => effect.appliesTo === "california_posture" && effect.framework === "california" &&
+          effect.policyVersion === CALIFORNIA_ADDITIONAL_SCORE_VERSION && effect.policyKey === rule.policyKey &&
+          effect.deductionPoints === rule.points && effect.evidenceRefs.length === 1 && effect.evidenceRefs[0] === assessment.sourceHash));
+      if (verified) {
+        deductions.push(rule);
+        additionalDeduction = true;
+      }
+    }
+  }
   const integrityPoints = recipientPolicy ? siteIntegrityDeduction(siteIntegrityFindingEffects(input.unifiedFindings, assessment.scanId), {
     appliesTo: "california_posture", policyVersion: SITE_INTEGRITY_POLICY_VERSION,
   }) : 0;
@@ -358,7 +395,7 @@ export function deriveCaliforniaRegulatoryScore(input: {
   const hasRiskDeduction=deductions.some(row=>row.findingId===CA_POTENTIAL_RISK_FINDING);
   const usesRetainedScopePolicy=rejectScopePolicyApplied||(hasRiskDeduction&&(riskVersion===CA_POTENTIAL_RISK_POLICY || riskVersion===CA_RETAINED_SCOPE_RISK_POLICY || riskVersion===CA_IDENTIFIER_RISK_POLICY));
   const conditionalRights = deductions.some(row => usesConditionalRightsWeight(row.findingId, assessment));
-  return { policyVersion:transport.points ? transport.policyVersion : conditionalRights ? CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION : hasRiskDeduction && riskVersion===CA_VERIFIED_COLLECTION_POLICY ? "california-regulatory-posture.v26-verified-event" : hasRiskDeduction && riskVersion===CA_PRESENCE_RISK_POLICY ? "california-regulatory-posture.v25-presence" : perVisitFull || (hasRiskDeduction && riskVersion === CA_PER_VISIT_RISK_POLICY) ? PER_VISIT_SCORE_VERSION : integrityPoints ? CALIFORNIA_SITE_INTEGRITY_SCORE_VERSION : registration ? CALIFORNIA_AGENT_REGISTRATION_SCORE_VERSION : isDisclosureChoiceScore(policyVersion) ? policyVersion : usesRetainedScopePolicy?"california-regulatory-posture.v17-reject-scope":hasRiskDeduction?(riskVersion===CA_POTENTIAL_RISK_LEGACY_POLICY?"california-regulatory-posture.v15-collection-review":"california-regulatory-posture.v16-collection-review"):rejectChoiceSupported?CALIFORNIA_REJECT_SCORE_VERSION:deductions.some(row=>row.findingId===GPP_PROPAGATION_FINDING_ID)?CALIFORNIA_GPP_SCORE_VERSION:policyVersion,
+  return { policyVersion:additionalDeduction ? CALIFORNIA_ADDITIONAL_SCORE_VERSION : transport.points ? transport.policyVersion : conditionalRights ? CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION : hasRiskDeduction && riskVersion===CA_VERIFIED_COLLECTION_POLICY ? "california-regulatory-posture.v26-verified-event" : hasRiskDeduction && riskVersion===CA_PRESENCE_RISK_POLICY ? "california-regulatory-posture.v25-presence" : perVisitFull || (hasRiskDeduction && riskVersion === CA_PER_VISIT_RISK_POLICY) ? PER_VISIT_SCORE_VERSION : integrityPoints ? CALIFORNIA_SITE_INTEGRITY_SCORE_VERSION : registration ? CALIFORNIA_AGENT_REGISTRATION_SCORE_VERSION : isDisclosureChoiceScore(policyVersion) ? policyVersion : usesRetainedScopePolicy?"california-regulatory-posture.v17-reject-scope":hasRiskDeduction?(riskVersion===CA_POTENTIAL_RISK_LEGACY_POLICY?"california-regulatory-posture.v15-collection-review":"california-regulatory-posture.v16-collection-review"):rejectChoiceSupported?CALIFORNIA_REJECT_SCORE_VERSION:deductions.some(row=>row.findingId===GPP_PROPAGATION_FINDING_ID)?CALIFORNIA_GPP_SCORE_VERSION:policyVersion,
     score, scope: "starting_page", coverage, assessmentSourceHash: assessment.sourceHash, deductions,
     ...(potentialRiskRecipientIds.length?{potentialRiskRecipientIds}:{}),
     ...(!legacy ? {reviewCoverage:assessment.reviewCoverage} : {}),

@@ -1,3 +1,4 @@
+import { CALIFORNIA_CHOICE_FRICTION_FINDING, CALIFORNIA_COLLECTION_NOTICE_FINDING, CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING } from "@certscore/contracts";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 import { regulatoryChecklistFindingIds } from "./regulatory-review-catalog";
 
@@ -45,6 +46,15 @@ export const FINDING_APPLICABILITY_REGISTRY: readonly ApplicabilityEntry[] = [
   california("california-agent-registration", ["california_agent_registration_required"],
     "The retained California rights instructions impose a state-registration condition on an authorized agent.",
     ["Review whether the business and request fall within CCPA/CPRA.", "Check authorization routes for individuals and any stated alternatives or exceptions to registration."]),
+  california("california-collection-notice-content", [CALIFORNIA_COLLECTION_NOTICE_FINDING],
+    "California requires a covered business that collects personal information to provide a notice at or before collection (§7012).",
+    ["Confirm the observed collection point and any directly linked notice section.", "Check retention periods or criteria for the applicable data categories."], "CCPA regulation §7012"),
+  california("california-choice-friction", [CALIFORNIA_CHOICE_FRICTION_FINDING],
+    "California’s sale or sharing opt-out and sensitive-information limit requests must be available without creating an account (§§7026–7027).",
+    ["Confirm the retained account requirement applies to the actual opt-out or limit path.", "Check how a visitor can exercise the applicable choice."], "CCPA regulations §§7004, 7026, 7027"),
+  california("california-sensitive-transmission", [CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING],
+    "Identifiable sensitive information sent to another party warrants reviewing purpose, necessity and the recipient’s role (§§1798.100, 1798.121).",
+    ["Check the matched data category and verified response.", "Review any applicable exception or processing arrangement."], "CCPA §§1798.100, 1798.121"),
   california("california-rights-link", ["california_rights_information_destination_error"],
     "A rights-information route matters when people rely on it to understand or exercise applicable CCPA rights (§§7011, 7020).",
     ["Identify the right served by the failed link.", "Check alternative routes and required request methods; one broken link does not establish that all methods fail."]),

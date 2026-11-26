@@ -1,3 +1,4 @@
+import { CALIFORNIA_CHOICE_FRICTION_FINDING, CALIFORNIA_COLLECTION_NOTICE_FINDING, CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING } from "@certscore/contracts";
 import { isContextualReviewFinding } from "./assessment-finding-context";
 import { selectCaliforniaPriorityFindings } from "./california-priority-selection";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
@@ -96,6 +97,18 @@ export const REGULATORY_REVIEW_TOPICS: RegulatoryReviewTopic[] = [
   { id: "california-destination", title: "Broken privacy-choice destination", findingIds: ["california_privacy_choice_destination_error"], contexts: { ccpa_cpra: {
     why: "People need a working route to exercise applicable sale/sharing opt-out rights. A confirmed missing destination warrants repairing the route and checking available alternative methods.",
     rule: "CCPA §1798.135; regulations §§7013, 7026", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf", cases: [], priority: 95 } } },
+  { id: "california-post-reject", title: "Advertising collection after Reject", findingIds: ["california_post_reject_collection"], contexts: { ccpa_cpra: {
+    why: "The observed collection followed a recorded cookie choice. Review the recipient’s activity and whether the control communicated a California sale or sharing choice.",
+    rule: "CCPA §1798.120; regulation §7026", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf#page=50", cases: [], priority: 99 } } },
+  { id: "california-collection-notice", title: "Notice at collection unavailable or incomplete", findingIds: [CALIFORNIA_COLLECTION_NOTICE_FINDING], contexts: { ccpa_cpra: {
+    why: "People should be able to find the applicable information before they share personal information. Retention periods or criteria help them understand how long it will be kept.",
+    rule: "CCPA §1798.100(a); regulation §7012", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf#page=25", cases: [], priority: 95 } } },
+  { id: "california-choice-friction", title: "Privacy choice requires account creation", findingIds: [CALIFORNIA_CHOICE_FRICTION_FINDING], contexts: { ccpa_cpra: {
+    why: "A required account can prevent a visitor from exercising the applicable California privacy choice.",
+    rule: "CCPA regulations §§7004, 7026, 7027", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf#page=51", cases: ["honda"], priority: 94 } } },
+  { id: "california-sensitive-transmission", title: "Sensitive form information sent to an external recipient", findingIds: [CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING], contexts: { ccpa_cpra: {
+    why: "An external recipient received information matching a sensitive field. Review the recipient’s role and whether the data was necessary for the observed purpose.",
+    rule: "CCPA §§1798.100(c), 1798.121", ruleUrl: "https://cppa.ca.gov/pdf/20260101_ccpa_statute.pdf#page=3", cases: [], priority: 65 } } },
   eu("post-refusal", "Activity after Reject", ["post_reject_tracking_reduction"], "A refusal needs to take effect for tracking that requires consent. Review the retained activity and decision confirmation to check whether optional services respect the visitor’s choice.", "ePrivacy Art. 5(3); GDPR Arts. 6–7", ["shein"], 100),
   eu("preconsent-storage", "Cookies or storage before consent", ["pre_consent_cookies_storage"], "Storing or reading information on a device generally needs prior consent unless an exemption applies. Review the purpose of the retained non-essential items.", "ePrivacy Art. 5(3)", ["shein"], 95),
   eu("preconsent-tracking", "Tracking before consent", ["pre_consent_third_party_tracking", "advertising_retargeting_vendor_signal_observed", "retargeting_behavioral_advertising_signal_observed", "analytics_vendor_observed"], "Optional tracking can begin sharing information before a visitor has chosen. Check which operations require consent and whether they wait for that choice.", "ePrivacy Art. 5(3); GDPR Arts. 6–7", ["shein"], 94),
@@ -154,7 +167,11 @@ export function selectRegulatoryReview<T extends { id: string; status: string; r
     finding.id === "california_rights_disclosure_not_observed"
       ? { ...finding, status: "Review" as const, severity: "low" as const, priority: undefined }
       : finding);
-  const priorityFindings = focus === "ccpa_cpra" ? selectCaliforniaPriorityFindings(scoped) : scoped;
+  const sharedNoticeFinding = scoped.some(finding => finding.id === "california_notice_at_collection_destination_error" ||
+    regulatoryChecklistFindingIds("privacy_notice_availability").includes(finding.id));
+  const priorityFindings = focus === "ccpa_cpra" ? selectCaliforniaPriorityFindings(scoped).filter(finding =>
+    !sharedNoticeFinding || finding.id !== CALIFORNIA_COLLECTION_NOTICE_FINDING ||
+    (finding.evidenceJson?.notice as { issue?: string } | undefined)?.issue !== "no_notice_in_completed_inspection") : scoped;
   const relevant = priorityFindings.filter(finding => regulatoryReviewContext(finding.id, focus));
   const regulatory = [...relevant].sort((a, b) =>
     Number(b.status === "Potential gap") - Number(a.status === "Potential gap") ||

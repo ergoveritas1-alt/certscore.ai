@@ -213,17 +213,23 @@ function AdminScanSummaryCells({ scan }: { scan: AdminScanListItem }) {
   </>;
 }
 
+function ScanRowActions({ scan, showSnapshot = false }: { scan: AdminScanListItem; showSnapshot?: boolean }) {
+  return <AdminScanActions compact domainLabel={scan.domainHostname ?? scan.pageUrl ?? "Scanned website"}
+    scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} visualEvidenceHref={scan.visualEvidenceHref}
+    pageUrl={scan.pageUrl} showSnapshot={showSnapshot} />;
+}
+
 function AdminBasicScanTable({ scans }: { scans: AdminScanListItem[] }) {
   return <table aria-label="Basic scan activity" role="table" className={`${basicTableStyles.table} ${basicTableStyles.basic} w-full table-fixed text-left text-xs`}>
     <colgroup>
-      {[110, 180, 125, 260, 75, 210, 180, 80, 100, 55, 55].map((width, index) => <col key={index} style={{ width }} />)}
+      {[110, 180, 125, 260, 75, 210, 180, 80, 100, 55, 128].map((width, index) => <col key={index} style={{ width }} />)}
     </colgroup>
     <thead role="rowgroup" className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr role="row">
       {[...ADMIN_SCAN_SUMMARY_COLUMNS, { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }].map(({ label, title }) => <th role="columnheader" key={label} title={title} className="border-b border-slate-200 font-semibold">{label}</th>)}
     </tr></thead>
     <tbody role="rowgroup" className="divide-y divide-slate-100 bg-white text-slate-700">{scans.map((scan) => <tr role="row" className="group h-[52px] hover:bg-slate-50/70" key={scan.activityId}>
       <AdminScanSummaryCells scan={scan} />
-      <td data-label="Open" role="cell" className="bg-white group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <Link aria-label="Open report" title="Open report" className="inline-flex h-7 w-6 items-center justify-center rounded-md text-sky-800 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600" href={scan.scanViewHref} prefetch={false}><svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg></Link> : "—"}</td>
+      <td data-label="Open" role="cell" className="bg-white group-hover:bg-slate-50"><ScanRowActions scan={scan} /></td>
     </tr>)}</tbody>
   </table>;
 }
@@ -501,14 +507,14 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           showPageJump
         />
         <div role="region" aria-label="Scrollable scan activity table" tabIndex={0} className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">
-          {showReportDetails ? <table aria-label="Detailed scan activity" className={`${basicTableStyles.table} w-[3957px] min-w-[3957px] table-fixed text-left text-xs`}>
+          {showReportDetails ? <table aria-label="Detailed scan activity" className={`${basicTableStyles.table} w-[4047px] min-w-[4047px] table-fixed text-left text-xs`}>
             <colgroup>
               <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "173px" }} /><col style={{ width: "75px" }} /><col style={{ width: "190px" }} /><col style={{ width: "170px" }} />
               <col style={{ width: "70px" }} /><col style={{ width: "100px" }} /><col style={{ width: "75px" }} /><col style={{ width: "65px" }} /><col style={{ width: "65px" }} /><col style={{ width: "65px" }} /><col style={{ width: "156px" }} />
               <col style={{ width: "80px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "65px" }} /><col style={{ width: "75px" }} /><col style={{ width: "190px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "130px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
-              <col style={{ width: "80px" }} /><col style={{ width: "240px" }} /><col style={{ width: "160px" }} /><col style={{ width: "190px" }} /><col style={{ width: "190px" }} /><col style={{ width: "78px" }} />
+              <col style={{ width: "80px" }} /><col style={{ width: "240px" }} /><col style={{ width: "160px" }} /><col style={{ width: "190px" }} /><col style={{ width: "190px" }} /><col style={{ width: "168px" }} />
             </colgroup>
             <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
@@ -561,7 +567,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.industry ?? undefined}>{scan.industry ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={scan.linkedScanId ?? scan.scanId}>{scan.linkedScanId ?? scan.scanId}</p><p className="mt-0.5 flex gap-1.5 text-[9px]">{scan.linkedScanId ? <><Link className="text-sky-700 hover:underline" href={adminOperationalSnapshotHref("/app/admin/analytics", { q: scan.linkedScanId, traffic: trafficScope })} prefetch={false}>Events</Link><Link className="text-sky-700 hover:underline" href={adminOperationalSnapshotHref("/app/admin/pulse", { q: scan.linkedScanId, traffic: trafficScope })} prefetch={false}>API</Link><Link className="text-sky-700 hover:underline" href={adminOperationalSnapshotHref("/app/admin/mcp", { q: scan.linkedScanId, traffic: trafficScope })} prefetch={false}>MCP</Link></> : null}</p></td>
                     <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={scan.scannerEgressId ?? "Scanner egress not recorded"}>{scan.scannerEgressId ?? "Not recorded"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400" title={scan.scannerEgressProvider ?? undefined}>{scan.scannerEgressProvider ?? "Outbound runtime"}</p></td>
-                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <AdminScanActions compact domainLabel={scan.domainHostname ?? scan.pageUrl ?? "Scanned website"} scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} visualEvidenceHref={scan.visualEvidenceHref} /> : <span className="text-slate-400">—</span>}</td>
+                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50"><ScanRowActions scan={scan} showSnapshot /></td>
                   </tr>
                 );
               })}

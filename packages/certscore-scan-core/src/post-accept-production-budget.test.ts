@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, type Locator, type Page } from "playwright";
@@ -267,4 +268,122 @@ for (const [scenario, description] of Object.entries(scopedButtonScenarios)) {
       }
     });
   }
+}
+
+for (const action of ["accept", "reject"] as const) for (const variant of ["stable", "duplicate"] as const) {
+  test(`near-expiry native ${action} with ${variant} control keeps the final proof check`, async t => {
+    const browser = await chromium.launch({args:["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
+    t.after(() => browser.close());
+    const accepting = action === "accept";
+    const selector = accepting ? 'button[data-testid="cookie-banner-accept"]' : "button.banner-close-button";
+    const label = accepting ? "Accept" : "Continue without accepting";
+    const scanId = `native-${action}-proof-${variant}`;
+    const banner = accepting ? "cookie-banner" : "onetrust-banner-sdk";
+    const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+    let phase = "";
+    let delayedFirstStorageRead = false;
+    let trials = 0;
+    let clicks = 0;
+    let page: Page | undefined;
+    let proofExpiresAtMs: number;
+    const open = browser.newContext.bind(browser);
+    t.mock.method(browser, "newContext", async (options: Parameters<typeof open>[0]) => {
+      const context = await open({...options, serviceWorkers:"block"});
+      await context.route("**/*", route => {
+        if (route.request().url() === url + "clicked") {
+          clicks++;
+          return route.fulfill({status:204});
+        }
+        if (route.request().url() !== url) return route.abort();
+        return route.fulfill({contentType:"text/html", body:`<!doctype html><section role="dialog" aria-label="Cookie preferences" id="${banner}">
+          <p>We use optional cookies for analytics. Choose which cookies you allow.</p>
+          <button ${accepting ? 'data-testid="cookie-banner-accept"' : 'class="banner-close-button"'}>${label}</button>
+        </section><script>
+          if (!${accepting}) {
+            window.OneTrust = {GetDomainData: () => ({Groups: [
+              {CustomGroupId:"C0001",Status:"always active"}, {CustomGroupId:"C0002",Status:"inactive"}
+            ]})};
+            document.cookie = "OptanonConsent=groups=C0001:1,C0002:0;path=/";
+          }
+          document.querySelector('button').addEventListener('click', event => {
+            if (!event.isTrusted) return;
+            fetch('/clicked', {method:'POST'});
+            document.querySelector('section').hidden = true;
+          });
+        </script>`});
+      });
+      const cookies = context.cookies.bind(context);
+      t.mock.method(context, "cookies", async (...args: Parameters<typeof cookies>) => {
+        if (!delayedFirstStorageRead && (accepting ? phase === "storage_baseline" : args.length === 0)) {
+          delayedFirstStorageRead = true;
+          // Reconstruct the observed short dispatch window without assuming
+          // which browser operation consumed time in the original AWS run.
+          await delay(Math.max(0, proofExpiresAtMs - Date.now() - 920));
+          if (variant === "duplicate") {
+            await page!.locator(selector).evaluate(button => button.after(button.cloneNode(true)));
+          }
+        }
+        return cookies(...args);
+      });
+      const newPage = context.newPage.bind(context);
+      t.mock.method(context, "newPage", async () => {
+        page = await newPage();
+        const prototype = Object.getPrototypeOf(page.locator(selector));
+        const click = prototype.click;
+        t.mock.method(prototype, "click", async function (this: Locator, options: Parameters<Locator["click"]>[0]) {
+          if (options?.trial) {
+            trials++;
+            await delay(950);
+          }
+          return click.call(this, options);
+        });
+        return page;
+      });
+      return context;
+    });
+    const issuedAtMs = Date.now();
+    proofExpiresAtMs = issuedAtMs + 6000;
+    const binding = { parentDispatchSha256:hash("parent"), sourceSha256:hash("retained-bundle"),
+      geometrySha256:hash("retained-geometry"), requestedTargetSha256:hash(url), documentSha256:hash(url),
+      labelSha256:hash(label), selectorSha256:hash(selector) };
+    const common = { browser, url, scanId, actionSearchTimeoutMs:5500,
+      confirmationTimeoutMs:300, observationWindowMs:250, resultBudgetMs:8000,
+      interactionAuthorization:{kind:"scan_target" as const, authorizationId:"sharded_scan_exact_target.v1" as const, scanId, normalizedUrl:url} };
+    const receipts: number[] = [];
+    const rechecks: string[] = [];
+    const packet = accepting ? await runPostAcceptObserver({
+      ...common,
+      firstLayerProof:{...binding, version:"certscore.accept-first-layer-proof.v1", scanId, exactSelector:selector,
+        issuedAtMs, expiresAtMs:proofExpiresAtMs},
+      allowCanonicalAcceptDiscovery:true,
+      recipe:buildCanonicalPostAcceptActionRecipes().find(recipe => recipe.cmpId === "HubSpot Consent Banner")!,
+      onDiagnosticStage:stage => { phase = stage; },
+      onAcceptGateFinalRecheck:outcome => rechecks.push(outcome),
+      onExactAcceptClickCompleted:event => receipts.push(event.completedAtMs),
+    }) : await runPostRefusalObserver({
+      ...common,
+      firstLayerProof:{outcome:"qualified", scanId, exactSelector:selector, issuedAtMs, expiresAtMs:proofExpiresAtMs,
+        binding:{...binding, documentTokenSha256:hash("loader"), selectorEvidence:"verified_geometry", labelMatch:"exact"}},
+      parentDispatchSha256:binding.parentDispatchSha256, allowCanonicalRejectDiscovery:true,
+      recipe:buildCanonicalPostRefusalActionRecipes().find(recipe => recipe.cmpId === "OneTrust")!,
+      onRejectGateFinalRecheck:outcome => rechecks.push(outcome),
+      onExactRejectClickCompleted:event => receipts.push(event.completedAtMs),
+    });
+    assert.equal(delayedFirstStorageRead, true);
+    const diagnostics = JSON.stringify({click:packet.interactionDiagnostics?.click, limitations:packet.limitations, resolver:packet.resolver});
+    if (variant === "stable") {
+      assert.equal(packet.interactionDiagnostics?.click.outcome, "completed", diagnostics);
+      assert.equal(trials, 0);
+      assert.deepEqual(rechecks, ["passed"]);
+      assert.equal(clicks, 1);
+      assert.equal(receipts.length, 1);
+      const reserveMs = proofExpiresAtMs - receipts[0]!;
+      assert.ok(reserveMs >= 200, `Only ${reserveMs} ms of proof remained`);
+      t.diagnostic(`Exact native ${action} retained one completed click with ${reserveMs} ms remaining`);
+    } else {
+      assert.equal(clicks, 0, diagnostics);
+      assert.equal(receipts.length, 0);
+      assert.ok(!rechecks.includes("passed"));
+    }
+  });
 }

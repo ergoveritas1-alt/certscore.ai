@@ -2,7 +2,7 @@ import { EVIDENCE_WORKER_SCAN_BUDGET_MS, actionReleaseStore, newActionPreparatio
 import { readConsentEvidenceWorkerStream } from "./consent-evidence-stream.js";
 import { buildConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES, REJECT_CLICK_CHECKPOINT_MAX_BYTES,
   verifyConsentClickCheckpoint, type VerifiedConsentClickCheckpoint } from "./reject-click-checkpoint.js";
-import { acceptFirstLayerProofMatches, readAcceptFirstLayerProof, type AcceptFirstLayerGeometrySource,
+import { acceptFirstLayerProofMatches, readAcceptFirstLayerProof, sitsBorlabsActionWindowMs, type AcceptFirstLayerGeometrySource,
   type AcceptFirstLayerProof } from "@certscore/scan-core/accept-first-layer-gate";
 import { acceptGateProofDigest, readAcceptGateWorkerRecheck, type AcceptGateWorkerRecheck } from "@certscore/scan-core/accept-gate-shadow-receipt";
 import { readRejectFirstLayerProof, readRejectGateWorkerRecheck, rejectFirstLayerProofMatches,
@@ -64,6 +64,7 @@ import {
   verifyRuntimeEvidenceGraph,
   type RuntimeGraphDispatch,
   classifyV2DagLambdaResultDisposition,
+  CALIFORNIA_ADDITIONAL_REVIEW_VERSION,
   derivePolicySurfaceInspectionOutcome,
   gpcObservationDispatchConfigSchema,
   postAcceptEvidencePacketSchema,
@@ -3250,6 +3251,11 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const consentGateDispatchDeadlineMs = {accept:options.deadlineAtMs ?? Infinity,reject:options.deadlineAtMs ?? Infinity};
   const consentParentSha256 = postRefusalParentDispatchSha256(payload);
   const dispatchedProofs: { accept?: AcceptFirstLayerProof; reject?: RejectFirstLayerProof } = {};
+  const preparedActionWindows: Partial<Record<ActionLane, number>> = {};
+  function preparedReleaseDeadline(action: ActionLane, ordinaryMs: number) {
+    const extraMs = Math.max(0, (preparedActionWindows[action] ?? ordinaryMs) - ordinaryMs);
+    return Math.min(options.deadlineAtMs ?? Infinity, consentGateDispatchDeadlineMs[action] + extraMs);
+  }
   const qualifiedForAction = () => {
     if (!shadowPassive) return;
     const accept = shadowPassive.accept, reject = shadowPassive.reject;
@@ -3345,7 +3351,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           }
           if (preparationError) throw preparationError;
           if (preparedLane && proof) {
-            const released = await preparedLane.release(proof, () => consentGateDispatchDeadlineMs.reject, renewed => {
+            preparedActionWindows.reject = sitsBorlabsActionWindowMs("reject", proof.exactSelector, proof.binding);
+            const released = await preparedLane.release(proof, () => preparedReleaseDeadline("reject", POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS), renewed => {
               dispatchedProofs.reject = renewed;
               postRefusalState.dispatchStartedAtMs = renewed.issuedAtMs;
             });
@@ -3353,6 +3360,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
               dedicatedRejectReleased = true;
               return preparedLane.result;
             }
+            delete preparedActionWindows.reject;
             if (Date.now() >= Math.min(proof.expiresAtMs, consentGateDispatchDeadlineMs.reject)) throw new Error("action_release_expired");
           }
           if (proof && !preparationId && payload.postRefusalObservation?.observationWindowMs === DEDICATED_REJECT_OBSERVATION_WINDOW_MS) {
@@ -3454,11 +3462,13 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           return undefined;
         }
         if (preparedLane && proof) {
-          const released = await preparedLane.release(proof, () => consentGateDispatchDeadlineMs.accept, renewed => {
+          preparedActionWindows.accept = sitsBorlabsActionWindowMs("accept", proof.exactSelector, proof);
+          const released = await preparedLane.release(proof, () => preparedReleaseDeadline("accept", POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS), renewed => {
             dispatchedProofs.accept = renewed;
             postAcceptState.dispatchStartedAtMs = renewed.issuedAtMs;
           });
           if (released) return preparedLane.result;
+          delete preparedActionWindows.accept;
           if (Date.now() >= Math.min(proof.expiresAtMs, consentGateDispatchDeadlineMs.accept)) throw new Error("action_release_expired");
         }
         postAcceptState.dispatchStartedAtMs = Date.now();
@@ -3887,7 +3897,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     ? options.deadlineAtMs ?? Infinity
     : Infinity;
   const acceptOuterTailWaitMs = Math.max(0, acceptOuterDeadlineAtMs - passiveLaneBarrierCompletedAtMs);
-  const normalAcceptTailWaitMs = Math.min(POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS, acceptOuterTailWaitMs);
+  const normalAcceptTailWaitMs = Math.min(preparedActionWindows.accept ?? POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS, acceptOuterTailWaitMs);
   let postAcceptMaxTailWaitMs = normalAcceptTailWaitMs;
   let acceptLateFormProgress: Promise<boolean> | undefined;
   const awaitPostAcceptWithinTail = async (workerPromise: Promise<void>, workerAlreadySettled = false): Promise<boolean> => {
@@ -3961,7 +3971,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     }
     return waitForAccept(postAcceptAbortController);
   };
-  let postRefusalMaxTailWaitMs = POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+  const initialRejectTailMs = preparedActionWindows.reject ?? POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+  let postRefusalMaxTailWaitMs = initialRejectTailMs;
   const readDedicatedRejectCheckpoint = enforced.reject && consentClickCheckpointEnabled(payload, "reject") &&
     payload.postRefusalObservation?.observationWindowMs === DEDICATED_REJECT_OBSERVATION_WINDOW_MS
     ? () => (dedicatedRejectReleased && !options.signal?.aborted ? verifiedClicks.reject?.checkpoint : undefined)
@@ -3969,7 +3980,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const awaitRejectWithinBarrier = async (workerPromise: Promise<void>, workerAlreadySettled?: boolean) => {
     const remaining = await awaitRejectWorkerWithLateClickAllowance({
       abortController: postRefusalAbortController, passiveLaneBarrierCompletedAtMs,
-      maxTailWaitMs: postRefusalMaxTailWaitMs, absoluteDeadlineAtMs: options.deadlineAtMs,
+      maxTailWaitMs: postRefusalMaxTailWaitMs, initialTailMs: initialRejectTailMs, absoluteDeadlineAtMs: options.deadlineAtMs,
       inlineDispatch: rejectContinuation && postRefusalState.dispatchStartedAtMs !== undefined
         ? { kind: rejectContinuation, startedAtMs: postRefusalState.dispatchStartedAtMs } : undefined,
       verifiedClickAtMs: () => verifiedClicks.reject?.checkpoint.completedAtMs,
@@ -4121,8 +4132,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     return leadTimes.map(leadMs => setTimeout(read, Math.max(0, remaining - leadMs)));
   };
   const clickCheckpointReadTimers = [
-    ...scheduleClickCheckpointReads("accept", POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS),
-    ...scheduleClickCheckpointReads("reject", POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS),
+    ...scheduleClickCheckpointReads("accept", normalAcceptTailWaitMs),
+    ...scheduleClickCheckpointReads("reject", initialRejectTailMs),
   ];
   const [postRefusalCompletedInsideBarrier, postAcceptCompletedInsideBarrier] = await Promise.all([
     joinPostRefusalWithinBarrier(),
@@ -4867,13 +4878,14 @@ export async function awaitRejectWorkerWithLateClickAllowance(input: {
   passiveLaneBarrierCompletedAtMs: number;
   absoluteDeadlineAtMs?: number;
   maxTailWaitMs: number;
+  initialTailMs?: number;
   inlineDispatch?: { kind: "aria_label" | "onetrust_native"; startedAtMs: number };
   verifiedClickAtMs: () => number | undefined;
   readDedicatedRejectCheckpoint?: () => VerifiedConsentClickCheckpoint | undefined;
   workerPromise: Promise<void>;
   workerAlreadySettled?: boolean;
 }) {
-  const base = POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+  const base = input.initialTailMs ?? POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
   const barrier = input.passiveLaneBarrierCompletedAtMs;
   const dispatch = input.inlineDispatch?.startedAtMs;
   // The OneTrust worker can dispatch before the final passive evidence joins
@@ -7336,6 +7348,7 @@ export function buildVerifiedPolicyEvidencePacket(input: {
       californiaReviewPolicy: "california-privacy-review.v10",
       rightsReviewScorePolicy: CALIFORNIA_RIGHTS_REVIEW_SCORE_VERSION,
       californiaDisclosureChoicePolicy: CALIFORNIA_COMBINED_OPT_OUT_POLICY,
+      californiaAdditionalReview: CALIFORNIA_ADDITIONAL_REVIEW_VERSION,
       modulesRun: [input.result.moduleRun],
       policySurfaceObservations,
     }),

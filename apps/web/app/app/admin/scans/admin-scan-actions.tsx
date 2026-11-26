@@ -9,8 +9,10 @@ import { ShareReportActions } from "../../../../components/scans/share-report-ac
 
 type AdminScanActionsProps = {
   compact?: boolean;
-  scanId: string;
+  scanId: string | null;
   scanViewHref: string;
+  pageUrl: string | null;
+  showSnapshot?: boolean;
   domainLabel: string;
   visualEvidenceHref?: string | null;
 };
@@ -153,10 +155,13 @@ function ActionButton({
   );
 }
 
-export function AdminScanActions({ compact = false, domainLabel, scanId, scanViewHref, visualEvidenceHref }: AdminScanActionsProps) {
+export function AdminScanActions({ compact = false, domainLabel, scanId, scanViewHref, pageUrl, visualEvidenceHref, showSnapshot = false }: AdminScanActionsProps) {
+  const url = pageUrl ? URL.parse(pageUrl) : null;
+  const website = url && (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password ? url : null;
+  if (!scanId && !website) return <span className="text-slate-400">—</span>;
   return (
     <div className={`flex items-center ${compact ? "gap-1" : "gap-2"}`}>
-      {visualEvidenceHref ? (
+      {scanId && visualEvidenceHref ? (
         <ShareReportActions
           domainLabel={domainLabel}
           scanId={scanId}
@@ -164,12 +169,32 @@ export function AdminScanActions({ compact = false, domainLabel, scanId, scanVie
           visualEvidenceOnly
         />
       ) : null}
-      <ActionButton compact={compact} href={scanViewHref} label="Open scan report">
-        <SimpleScanIcon />
-      </ActionButton>
-      <ActionButton compact={compact} href={`/app/admin/scans/${scanId}`} label="Inspect snapshot">
-        <SnapshotInspectIcon />
-      </ActionButton>
+      {scanId && scanViewHref ? (
+        <ActionButton compact={compact} href={scanViewHref} label="Open scan report">
+          <SimpleScanIcon />
+        </ActionButton>
+      ) : null}
+      {website ? (
+        <a
+          aria-label={`Open ${website.host} in a new tab`}
+          title={`Open ${website.host} in a new tab`}
+          className={`app-raised-button inline-flex shrink-0 items-center justify-center rounded-full text-slate-700 hover:text-slate-950 ${compact ? "h-8 w-8" : "h-10 w-10"}`}
+          href={website.href}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" className={compact ? "h-4 w-4" : "h-5 w-5"} fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="12" cy="12" r="9" />
+            <ellipse cx="12" cy="12" rx="4" ry="9" />
+            <path d="M3 12h18" />
+          </svg>
+        </a>
+      ) : null}
+      {showSnapshot && scanId ? (
+        <ActionButton compact={compact} href={`/app/admin/scans/${scanId}`} label="Inspect snapshot">
+          <SnapshotInspectIcon />
+        </ActionButton>
+      ) : null}
     </div>
   );
 }

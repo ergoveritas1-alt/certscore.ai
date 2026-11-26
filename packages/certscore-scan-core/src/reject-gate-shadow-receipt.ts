@@ -1,3 +1,4 @@
+import { sitsBorlabsActionWindowMs } from "./sits-borlabs-action-window.js";
 import { geometryConsentButtonLinkMatches } from "./exact-native-consent-button-selector.js";
 import { consentGateDocument } from "./consent-gate-document.js";
 import { STALE_CONSENT_GEOMETRY_BASIS } from "./consent-geometry-inventory-coverage.js";
@@ -57,7 +58,7 @@ export function readRejectFirstLayerProof(value: unknown): RejectFirstLayerProof
       typeof scanId !== "string" || !scanId || scanId.length > 200 ||
       typeof issuedAtMs !== "number" || typeof expiresAtMs !== "number" ||
       !Number.isSafeInteger(issuedAtMs) || !Number.isSafeInteger(expiresAtMs) ||
-      issuedAtMs < 0 || expiresAtMs <= issuedAtMs || expiresAtMs - issuedAtMs > proofLifetimeMs ||
+      issuedAtMs < 0 || expiresAtMs <= issuedAtMs || expiresAtMs - issuedAtMs > (sitsBorlabsActionWindowMs("reject", proof.exactSelector, binding) ?? proofLifetimeMs) ||
       !binding || typeof binding !== "object" || Array.isArray(binding) ||
       !validExactSelector(proof.exactSelector) || sha(proof.exactSelector) !== binding.selectorSha256 ||
       Object.keys(binding).length !== 10 + Number(Object.hasOwn(binding, "labelSource")) + Number(Object.hasOwn(binding, "drupalNoThanks")) ||
@@ -155,7 +156,7 @@ export function evaluateRejectGate(input: {
     candidate.classifierReasonCodes.includes("borlabs_explanatory_close") &&
     inspection.candidates.some(row => row.candidateId === candidate.candidateId && row.role === "dismiss"));
   const controlsByObservation = observations.map(row => row.controls.filter(c => c.visible && c.actionType === "reject_all" &&
-    !(explanatoryClose && c.label === explanatoryClose.label && c.selectorHint === explanatoryClose.selectorHint &&
+    !(explanatoryClose && (c.label === explanatoryClose.label || c.label === explanatoryClose.label.slice(0, 120)) && c.selectorHint === explanatoryClose.selectorHint &&
       c.tagName === explanatoryClose.tagName)));
   const controls = controlsByObservation.flat();
   const firstLayer = artifact.candidates.filter(c => c.layer === "first_layer");
@@ -182,6 +183,8 @@ export function evaluateRejectGate(input: {
   const nativeControl = candidate?.exactNativeRejectSelectorVerified === true && candidate.tagName === control?.tagName &&
     (candidate.tagName === "button" || control?.role === "button" &&
       geometryConsentButtonLinkMatches(candidate, artifact.cmp, "reject"));
+  const borlabsEssentials = candidate?.selectorHint === "button.brlbs-btn-accept-only-essential" &&
+    candidate.label === "Accept essential cookies" && artifact.cmp?.detections?.some(cmp => cmp.canonicalName === "Borlabs Cookie");
   const cookieInformationLabel = candidate && cookieInformationRenderedLabel(candidate, artifact.cmp);
   if (!control || !candidate || candidate.frameContext?.frameKind !== "main_frame" ||
       candidate.frameContext.frameUrl !== document.url || (!nativeControl && !cookieScriptRole) ||
@@ -193,7 +196,7 @@ export function evaluateRejectGate(input: {
       !passiveButtonSelectorMatches(control, candidate.selectorHint, "reject", document.url, identity.token) ||
       (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label) && control.label !== cookieInformationLabel) ||
       !candidate.label || (!drupalNoThanks && ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
-        label === undefined || (typeof label === "string" && (!label || directReject(label)))))) {
+        label === undefined || (typeof label === "string" && (!label || directReject(label) || borlabsEssentials && label === candidate.label))))) {
     return block("control_binding_unverified");
   }
   if (controls.length > 1 && !controls.every(other => other.tagName === control.tagName &&

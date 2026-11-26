@@ -26,6 +26,8 @@ test("refreshed authenticated report preserves scoped access and the scanso comp
   assert.match(source, /loadPersistedScanReportProjection\(\{/);
   assert.match(source, /organizationId: isPlatformAdmin \? null : organization\.id/);
   assert.match(source, /buildVerifiedTimelineReportModel\(persistedReportProjection\)/);
+  assert.match(source, /buildTimelineReportWithDeferredPolicyDisclosure\(persistedReportProjection\)/);
+  assert.match(source, /phaseInventories=\{phaseInventories\}/);
   assert.match(source, /mode="authenticated"/);
   assert.match(source, /\/app\/scanso\//);
   assert.match(comparisonRoute, /scans\/\[scanId\]\/legacy-page/);

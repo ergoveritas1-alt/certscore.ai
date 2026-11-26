@@ -245,3 +245,47 @@ test("retained GPC inventory follows the resolved export focus, including a Cali
  const eu=buildCanonicalReportExport(scan,undefined,'gdpr_eprivacy',gpc)!;
  assert.equal(eu.appendix.gpcResourceInventory,undefined);
 });
+
+test("Word and PDF show request-bound evidence under the selected posture", async () => {
+  const { priorityScanRecord, priorityChecklistRow } = await import("./report-priority.fixture");
+  const { afterRejectProjection } = await import("../../lib/scans/test-fixtures/after-reject-scoring");
+  const { observedControlAssessment } = await import("../../lib/scans/test-fixtures/observed-control-assessment");
+  const { renderCanonicalReportPdf } = await import("./report-export-pdf");
+  const source = priorityReportFixture();
+  const pixel = "https://www.facebook.com/tr/?id=publisher&ev=PageView&fbp=visitor-fixture";
+  const gpc = californiaPriorityGpcFixture([pixel, pixel + "&dpo=LDU&dpoco=0&dpost=0"], source.scan.id);
+  source.projection.unifiedFindings = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+    runtimeArtifacts: { gpcResponseAssessment: gpc },
+  });
+  const row = priorityChecklistRow("pre_consent_third_party_tracking");
+  row.criticalEvidence.retainedEvidence = { findingEntities: [{ id: "preconsent_tracking", entities: {
+    runtimeRequestUrls: ["https://metrics.example.test/g/collect?tid=property&cid=visitor-fixture"],
+  } }] };
+  source.projection.checklist.push(row);
+  const scan = priorityScanRecord(source);
+  scan.snapshot = { ...scan.snapshot, final_effective_url: "https://www.example.test/", consentControlAssessment: observedControlAssessment };
+  scan.runtimeArtifacts = { ...scan.runtimeArtifacts, postRefusalEvidenceProjection: afterRejectProjection("advertising") };
+  for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
+    const report = buildCanonicalReportExport(scan, undefined, focus)!;
+    const detail = report.appendix.requestDetails ?? [];
+    const eu = focus === "gdpr_eprivacy";
+    if (eu) assert.deepEqual(detail.map(row => row.kind), ["reject_ad", "same_site_measurement"]);
+    else {
+      const meta = detail.filter(row => row.kind === "meta_pixel");
+      assert.equal(meta.length, 2);
+      assert.doesNotMatch(meta[0]!.summary, /Limited Data Use/);
+      assert.match(meta[1]!.summary, /Limited Data Use with automatic country and state selection/);
+    }
+    const doc = text(parts(await renderCanonicalReportDocx(report)).get("word/document.xml")!);
+    const pdf = [...renderCanonicalReportPdf(report).toString("latin1").matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)]
+      .map(match => match[1]!.replace(/\\([\\()])/g, "$1")).join(" ");
+    assert(!JSON.stringify(detail).includes("visitor-fixture"));
+    for (const content of [doc, pdf]) {
+      assert(content.includes(eu ? "Ad requests post reject" : "Meta pixel request"));
+      assert(content.includes(eu ? "Same-site measurement" : "Limited Data Use"));
+      assert(!content.includes(eu ? "Meta pixel request" : "Ad requests post reject"));
+      assert(!content.includes("visitor-fixture"));
+    }
+  }
+});

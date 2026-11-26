@@ -75,3 +75,13 @@ test("choice request identities ignore query variants and keep positive evidence
   assert.equal(capture.inventory.resources.length, 1);
   assert.equal(capture.inventory.resources[0]?.inventoryEvidence, "Non-essential");
 });
+
+test("repeated advertising requests keep separate evidence IDs and times after Reject", () => {
+  const p = afterRejectProjection("advertising");
+  const first = p.scoringEvidence!.requests[0]!;
+  const repeat = {...first, requestId:"later", startedAtMs:260, rootStartedAtMs:260, completedAtMs:270, msOffsetFromRefusal:140};
+  const projection = {...p, scoringEvidence:{...p.scoringEvidence, requests:[first, repeat]}};
+  const result = projectActionResourceInventory({...input, projection})!;
+  assert.equal(result.inventory.resources.length, 1);
+  assert.deepEqual(result.rejectAdEvents?.map(e => [e.evidenceRef, e.elapsedMs]), [["request-1", 90], ["later", 150]]);
+});

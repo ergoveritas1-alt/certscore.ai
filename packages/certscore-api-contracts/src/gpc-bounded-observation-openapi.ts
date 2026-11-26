@@ -576,6 +576,10 @@ export const gpcBoundedObservationOpenApi = {
                         },
                         "maxItems": 10
                       },
+                      "metaLduGeography": {
+                        "const": "automatic",
+                        "type": "string"
+                      },
                       "gpp": {
                         "type": "object",
                         "additionalProperties": false,
@@ -1087,6 +1091,10 @@ export const gpcBoundedObservationOpenApi = {
                       ]
                     },
                     "maxItems": 10
+                  },
+                  "metaLduGeography": {
+                    "const": "automatic",
+                    "type": "string"
                   },
                   "gpp": {
                     "type": "object",

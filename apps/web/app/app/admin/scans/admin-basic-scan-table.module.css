@@ -4,7 +4,7 @@
 
 /* Preserve readable columns and the same table on touch and desktop screens. */
 .basic {
-  min-width: 1430px;
+  min-width: 1503px;
 }
 
 .table th,

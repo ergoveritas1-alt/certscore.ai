@@ -69,6 +69,7 @@ export const saleSharingRequestQualificationSchema = z.object({
         basis: z.enum(Object.keys(activityByBasis) as [keyof typeof activityByBasis, ...(keyof typeof activityByBasis)[]]),
         processingSignals: z.array(z.enum(["google_rdp", "google_npa", "google_limited_ads", "meta_ldu",
           "us_privacy_sale_opt_out", "gpp_unresolved", "privacy_signal_invalid", "gpp_opt_out", "gpp_service_provider", "privacy_signal_conflict"])).max(10),
+        metaLduGeography: z.literal("automatic").optional(),
         gpp: gpcRequestGppSchema.optional(),
         propertyEvidence: propertySaleSharingProofSchema.optional(),
 }).strict();

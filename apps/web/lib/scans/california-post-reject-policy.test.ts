@@ -1,3 +1,5 @@
+import { projectReportPriorityFindings } from "./report-priority-projection";
+import { selectRegulatoryReview } from "./regulatory-review-catalog";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {createHash} from "node:crypto";
@@ -329,6 +331,10 @@ test("property-bound sale/sharing reaches canonical CA findings, preserves EU ev
  source.targetSha256=p.sourceIdentity!.targetSha256;p.propertySaleSharingSource=source;
  const a=assessCaliforniaPostReject(p)!;assert.equal(a.status,"qualified_collection");assert.deepEqual(a.recipientIds,["ent_7509263a9ab6"]);assert.ok(a.requests[0]?.propertyEvidence);
  const projected=canonical(p);assert.equal(projected.score.score,85);assert.ok(projected.findings.find(f=>f.unifiedFindingId==="california_post_reject_collection")?.scoreEffects?.length);
+ const top = projectReportPriorityFindings([], projected.findings);
+ assert.ok(selectRegulatoryReview(top, "ccpa_cpra").topIssues.some(finding => finding.id === "california_post_reject_collection"));
+ assert.ok(!selectRegulatoryReview(top, "gdpr_eprivacy").topIssues.some(finding => finding.id === "california_post_reject_collection"));
+
  assert.deepEqual(retainedCaliforniaPostReject(projected.runtime),a);
  const old=assessCaliforniaPostReject(p,"california-post-reject.v2-qualified-disclosure")!;assert.equal(old.recipientIds.length,0);assert.equal(old.requests[0]?.reason,"qualification_unresolved");
  const runtime=buildPostRefusalRuntimeProjection(p),before=(runtime as Record<string,unknown>).afterRejectScoringAssessment;

@@ -1,3 +1,5 @@
+import { CALIFORNIA_CHOICE_FRICTION_FINDING, CALIFORNIA_COLLECTION_NOTICE_FINDING, CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING } from "@certscore/contracts";
+import { CALIFORNIA_POST_REJECT_FINDING, verifiedCaliforniaPostRejectFinding } from "./california-post-reject-policy";
 import { CALIFORNIA_AGENT_REGISTRATION_ID, californiaAgentRegistrationProjectionSchema } from "@certscore/contracts";
 import {describeGpcObservedFacts} from "./gpc-observed-facts";
 import {supportsCombinedOptOutRisk} from "./california-combined-opt-out-policy";
@@ -25,6 +27,19 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
   const gpcObservation=gpc?.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? gpc.assessment.observation : undefined;
   const result: Omit<SitePriorityFinding, "pages" | "rank">[] = [];
   for (const finding of eligible) {
+    if (finding.unifiedFindingId === CALIFORNIA_POST_REJECT_FINDING) {
+      const proof = verifiedCaliforniaPostRejectFinding(finding);
+      if (!proof) continue;
+      result.push({
+        id: CALIFORNIA_POST_REJECT_FINDING, title: "Advertising collection after Reject", status: "Partial concern",
+        summary: "Qualified advertising collection continued after the recorded cookie rejection during the observed visit.",
+        evidence: [`Recorded control: “${proof.controlLabel}”`, ...proof.requests.filter(row => row.reason === "qualified_collection")
+          .map(row => `${row.entity ?? row.entityId}: ${row.msAfterClick} ms after the click`)],
+        evidenceJson: { findingId: CALIFORNIA_POST_REJECT_FINDING, assessment: proof },
+        correctionSteps: ["Check the choice communicated by the control and the subsequent advertising collection. Verify whether the choice covers California sale or sharing."],
+      });
+      continue;
+    }
     if (finding.unifiedFindingId === CALIFORNIA_TRANSPORT_FINDING_ID) {
       const proof = verifiedCaliforniaTransportFinding(finding);
       if (!proof) continue;
@@ -48,6 +63,23 @@ export function projectCaliforniaRegulatoryPriorities(findings: UnifiedFindingDi
     if (finding.details?.family !== "california_privacy_review" || !californiaPrivacyReviewFindingIds(finding.details.projection).includes(finding.unifiedFindingId)) continue;
     const projection = finding.details.projection;
     const copy = californiaPrivacyReviewCopy(finding.unifiedFindingId, projection);
+    const additional = projection.contractVersion === "certscore.california-privacy-review.v10" ? projection.additionalReview : undefined;
+    const id = finding.unifiedFindingId;
+    if (additional && (id === CALIFORNIA_COLLECTION_NOTICE_FINDING || id === CALIFORNIA_CHOICE_FRICTION_FINDING ||
+        id === CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING)) {
+      const notice = id === CALIFORNIA_COLLECTION_NOTICE_FINDING ? additional.notice : undefined;
+      const friction = id === CALIFORNIA_CHOICE_FRICTION_FINDING ? additional.choiceFriction : undefined;
+      const sensitive = id === CALIFORNIA_SENSITIVE_TRANSMISSION_FINDING ? additional.sensitiveTransmission : undefined;
+      result.push({ id, title: copy.title, summary: copy.description, status: sensitive ? "Review" : "Potential gap",
+        severity: sensitive ? "low" : "medium",
+        evidence: notice ? notice.points.map(point => `Observed form requests ${point.categories.map(category => category.replaceAll("_", " ")).join(", ")}`)
+          : friction ? [friction.excerpt, friction.document.url]
+          : (sensitive ?? []).map(row => `${row.recipientHost} received a matched ${row.category.replaceAll("_", " ")} field · HTTP ${row.responseStatus}`),
+        evidenceJson: { findingId: id, notice, friction, sensitive },
+        correctionSteps: [copy.action],
+      });
+      continue;
+    }
     const combined=finding.unifiedFindingId==="california_privacy_choice_not_observed" && supportsCombinedOptOutRisk(projection,finding.details.gpcAssessment);
     const documentUrlSha256=createHash("sha256").update(projection.documentUrl).digest("hex");
     const reject=eligible.flatMap(row=>row.unifiedFindingId === "california_post_reject_collection" && row.details?.family === "california_post_reject" ? [row.details.assessment] : [])
