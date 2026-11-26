@@ -1,3 +1,4 @@
+import { buildWorkerDiscoveredClick, WORKER_DISCOVERED_CLICK_FILE } from "./worker-discovered-click.js";
 import { buildConsentClickCheckpoint, verifyConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES } from "./reject-click-checkpoint.js";
 import { redHatCanaryFixture } from "./test-fixtures/redhat-canary";
 import redHatPacketFixture from '../../../packages/certscore-contracts/src/test-fixtures/redhat-terminal-choice.json';
@@ -2458,6 +2459,8 @@ async function runCoordinatorFixture(input: {
   action: "none" | "hang" | "late" | "completed" | "validation_failed" | "completed_during_finalization" | "completed_after_finalization";
   dispatchDelayMs?: number;
   replayParallelActions?: boolean;
+  workerFirst?: boolean;
+  corruptWorkerDiscoveredReceipt?: "accept" | "reject";
   replayPassiveTailMs?: number;
   actionLane?: "accept" | "reject";
   gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
@@ -2539,7 +2542,10 @@ async function runCoordinatorFixture(input: {
   const clickReserves: Partial<Record<"accept" | "reject", number>> = {};
   const workerStartedMs: Partial<Record<"accept" | "reject", number>> = {};
   const workerVerifiedReceipts = new Set<"accept" | "reject">();
-  const enforcementAuthorization = input.enforcementGeometry ? {
+  const enforcementAuthorization = input.workerFirst ? {
+    kind:"scan_target_resolution" as const, authorizationId:"sharded_scan_resolved_exact_target.v2",
+    requestedUrl:input.consentBundle.url, scanId:input.scanId, maxRedirects:1, resolutionTimeoutMs:750,
+  } : input.enforcementGeometry ? {
     kind:"scan_target" as const, authorizationId:"sharded_scan_exact_target.v1",
     normalizedUrl:input.consentBundle.url, scanId:input.scanId,
   } : undefined;
@@ -2581,6 +2587,7 @@ async function runCoordinatorFixture(input: {
   const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
     orchestrationMode: "sharded",
     ...(enforcementAuthorization ? {targetEnvironment:"production",resultPurpose:"persisted_scan"} : {}),
+    ...(input.workerFirst ? {awsRegion:"us-west-1"} : {}),
     scanId: input.scanId,
     callbackCorrelationId: input.scanId,
     ...(input.presenceOnly?{privacyCaptureProfile:PRESENCE_ONLY_CAPTURE_PROFILE}:{}),
@@ -2595,16 +2602,25 @@ async function runCoordinatorFixture(input: {
     } } : {}),
     ...(input.gpcPair ? { targetUrl: input.gpcPair.baseline.url, hostname: new URL(input.gpcPair.baseline.url).hostname, gpcObservation: { contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true, pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc" } } : {}),
     ...(input.redHatOptOut?{targetUrl:"https://redhat.com/",hostname:"redhat.com",awsRegion:"us-west-1",functionName:"certscore-redhat-fixture:42",saleSharingOptOut:{policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:input.scanId,exactTargetUrl:"https://redhat.com/"}}:{}),
-    ...(actionLanes.includes("accept") ? {postAcceptObservation: {...coordinatorPostAcceptConfig(input.dispatchDelayMs), ...productionConfig}} : {}),
-    ...(actionLanes.includes("reject") ? {postRefusalObservation: {...coordinatorPostRefusalConfig(input.dispatchDelayMs), ...productionConfig}} : {}),
+    ...(actionLanes.includes("accept") ? {postAcceptObservation: {...coordinatorPostAcceptConfig(input.dispatchDelayMs), ...productionConfig,
+      ...(input.workerFirst ? {resolver:{kind:"canonical_cmp_registry",recipeSetId:"canonical-consent-control-accept-v6"}} : {})}} : {}),
+    ...(actionLanes.includes("reject") ? {postRefusalObservation: {...coordinatorPostRefusalConfig(input.dispatchDelayMs), ...productionConfig,
+      ...(input.workerFirst ? {resolver:{kind:"canonical_cmp_registry",recipeSetId:"canonical-consent-control-reject-v23"}} : {})}} : {}),
   }));
   const packets = new Map<"accept" | "reject", {completedAt: string; uri: string}>();
   if (["completed", "completed_during_finalization", "completed_after_finalization"].includes(input.action)) {
     for (const action of actionLanes) {
       const packet = action === "accept" ? coordinatorPostAcceptPacket(input.scanId) : coordinatorPostRefusalPacket(input.scanId);
-      const body = Buffer.from(JSON.stringify(packet));
+      const targetSha256 = createHash("sha256").update(payload.targetUrl).digest("hex");
+      const packetBody = input.workerFirst ? {...packet,
+        actionControlProof:{...packet.actionControlProof!, authorizedTargetSha256:targetSha256,frameIdentitySha256:targetSha256},
+        interactionDiagnostics:{navigation:{outcome:"completed",documentCommitted:true,finalUrlAuthorized:true},
+          click:{outcome:"completed",reResolvedBeforeDispatch:false,confirmationCheckedAfterError:false}},
+      } : packet;
+      const body = Buffer.from(JSON.stringify(packetBody));
       const packetFile = action === "accept" ? "PostAcceptEvidencePacket.json" : "PostRefusalEvidencePacket.json";
-      const uri = `s3://test-bucket/workers/${input.scanId}/${action}_observation/${packetFile}`;
+      const prefix = input.workerFirst ? `v2-dag-lambda/local/${input.scanId}/lanes` : `workers/${input.scanId}`;
+      const uri = `s3://test-bucket/${prefix}/${action}_observation/${packetFile}`;
       pointers.set(uri, {uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength});
       packets.set(action, {uri, completedAt: packet.completedAt});
     }
@@ -2750,6 +2766,17 @@ async function runCoordinatorFixture(input: {
         if (input.action === "none") throw new Error("action should not have dispatched");
         if (!packet) throw new Error("missing action packet fixture");
         const original = pointers.get(packet.uri)!;
+        if (input.workerFirst) {
+          const atMs = Date.now();
+          const control = JSON.parse(original.body.toString()).actionControlProof;
+          const body = buildWorkerDiscoveredClick({action:runningAction,scanId:input.scanId,
+            parentDispatchSha256:workerPayload.parentDispatchSha256,requestedUrl:payload.targetUrl},
+          {control,recheckedAtMs:atMs,dispatchedAtMs:atMs,completedAtMs:atMs,deadlineAtMs:atMs+200},original.body);
+          assert.ok(body);
+          const uri = packet.uri.replace(/[^/]+$/, WORKER_DISCOVERED_CLICK_FILE);
+          pointers.set(uri,{uri,body,sizeBytes:body.length,sha256: input.corruptWorkerDiscoveredReceipt === runningAction
+            ? "0".repeat(64) : createHash("sha256").update(body).digest("hex")});
+        }
         const uri = input.invalidActionHash ? {...original, sha256: "0".repeat(64)} : original;
         const descriptor = runningAction === "accept"
           ? {
@@ -2844,6 +2871,11 @@ async function runCoordinatorFixture(input: {
       }
       const entry = pointers.get(uri);
       if (!entry) throw new Error(`missing fixture object ${uri}`);
+      if (key.endsWith(WORKER_DISCOVERED_CLICK_FILE)) {
+        assert.equal(command.input.Range, "bytes=0-1023");
+        return { Body:entry.body, ContentLength:entry.sizeBytes,
+          ContentRange:`bytes 0-${entry.sizeBytes - 1}/${entry.sizeBytes}`, Metadata:{sha256:entry.sha256} };
+      }
       if (Object.values(CONSENT_CLICK_CHECKPOINT_FILES).some(file => key.endsWith(file))) {
         assert.equal(command.input.Range, "bytes=0-511");
         return { Body: entry.body, ContentLength: entry.sizeBytes,
@@ -6966,3 +6998,42 @@ test("five-case local coordinator timing replay", {timeout: 15_000}, async t => 
     }
   }));
 });
+
+for (const corruptWorkerDiscoveredReceipt of [undefined, "reject"] as const) {
+test(`California worker discovery seals only verified packet-bound receipts (corrupt=${corruptWorkerDiscoveredReceipt ?? "none"})`, async t => {
+  for (const [name, value] of Object.entries({
+    CERTSCORE_CA_WORKER_CONSENT_DISCOVERY_ENABLED:"1",
+    CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE:"1", CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE:"1",
+    [POST_ACCEPT_WORKER_FEATURE_FLAG]:"1", [POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]:"1",
+    CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:"test-bucket", CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX:"v2-dag-lambda/local",
+  })) {
+    const previous = process.env[name];
+    process.env[name] = value;
+    t.after(() => { if (previous === undefined) delete process.env[name]; else process.env[name] = previous; });
+  }
+  const scanId = "67d8e4f0-fcb4-42fb-a57a-0b096e393d2c";
+  const result = await runCoordinatorFixture({scanId, workerFirst:true, corruptWorkerDiscoveredReceipt, replayParallelActions:true, replayPassiveTailMs:500,
+    consentBundle:coordinatorConsentBundle(scanId, {inspectionCompleted:true, acceptControlObserved:true, rejectControlObserved:true}),
+    action:"completed", dispatchDelayMs:0});
+  t.after(() => rm(result.artifactRoot, {recursive:true,force:true}));
+  const manifest = JSON.parse(await readFile(path.join(result.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
+  const barrier = Date.parse(manifest.laneTimingSummary.passiveLaneBarrierCompletedAt);
+  for (const action of ["accept","reject"] as const) {
+    assert.ok(result.workerStartedMs[action]! < barrier, action + " overlapped passive work");
+    const worker = result.workerPayloads.find(payload => payload.workerLane === action + "_observation");
+    assert.ok(worker);
+    assert.equal(worker.acceptFirstLayerProof ?? worker.rejectFirstLayerProof ?? worker.actionPreparation, undefined);
+    const receipt = manifest.workerDiscoveredClicks?.[action];
+    if (action === corruptWorkerDiscoveredReceipt) {
+      assert.equal(receipt,undefined);
+    } else {
+      assert.equal(receipt?.action,action);
+      assert.equal(receipt?.reserveMs,200);
+      assert.equal(receipt?.parentDispatchSha256,worker.parentDispatchSha256);
+      assert.equal(receipt?.packetSha256,manifest.artifactMetadata[action === "accept" ? "postAcceptPacketUri" : "postRefusalPacketUri"].sha256);
+    }
+  }
+  assert.equal(result.bundle.postAcceptLaneOutcome?.status,"joined");
+  assert.equal(result.bundle.postRefusalLaneOutcome?.status,"joined");
+});
+}

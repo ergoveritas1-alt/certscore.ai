@@ -1,6 +1,6 @@
 import { verifyStarfieldConsentListener } from "./starfield-consent-listener.js";
 import { verifyCaiaAcceptListeners } from "./caia-accept-control.js";
-import { hubSpotHrefLessConsentSelector, reviewedConsentAnchor, TOOM_ACCEPT_SELECTOR } from "./exact-native-consent-button-selector.js";
+import { exactNativeConsentButtonSelector, hubSpotHrefLessConsentSelector, reviewedConsentAnchor, TOOM_ACCEPT_SELECTOR } from "./exact-native-consent-button-selector.js";
 import { DRUPAL_ACCEPT_BANNER_SELECTOR, DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP } from "./drupal-consent-overflow-geometry.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import {
@@ -202,6 +202,7 @@ export type ConsentActionControlProofInput = {
   /** During the final recheck, the recipe must still select this node. */
   exactElement?: ElementHandle<HTMLElement | SVGElement>;
   requireUniqueSelector?: boolean;
+  workerDiscovered?: boolean;
   /** The passive Reject selector must resolve only to the resolver's bound native button. */
   expectedNativeSelector?: string;
   requireDrupalBanner?: true;
@@ -466,7 +467,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       return { status: "label_unverifiable", reason: "starfield_click_handler_unverified" };
     }
     const toomShadow = input.action === "accept" && input.expectedNativeSelector === TOOM_ACCEPT_SELECTOR;
-    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, italianAcceptScope, drupalBannerSelector, caiaBannerSelector, toomShadow}) => {
+    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, italianAcceptScope, drupalBannerSelector, caiaBannerSelector, toomShadow, workerDiscovered}) => {
       if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
       if (passiveSelector) {
         const document = exact?.ownerDocument;
@@ -478,6 +479,9 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
           (!reviewedAnchor.id || document.querySelectorAll("#" + reviewedAnchor.id).length === 1) &&
           !exact.closest("form,button,label,[contenteditable]") && !exact.querySelector("a,button,input,[role=button]");
         if (reviewedAnchor && !exactReviewedAnchor) return null;
+        if (workerDiscovered && (!exact || exact.closest("form, label, [contenteditable], [inert]") ||
+            exact.hasAttribute("form") || exact.hasAttribute("formaction") ||
+            exact.querySelector("a, button, input, [role=button]"))) return null;
         const buttonLink = exactReviewedAnchor || exact?.localName === "a" && exact.getAttribute("role") === "button" &&
           !exact.hasAttribute("target") && !exact.hasAttribute("download") &&
           (hubSpotAnchor ? !exact.hasAttribute("href") &&
@@ -532,7 +536,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
       return { selectorMatchCount: elements.length, labels };
-    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, toomShadow,
+    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, toomShadow, workerDiscovered: input.workerDiscovered,
       italianAcceptScope: oneTrustItalianAccept ? italianAccept : undefined,
       drupalBannerSelector: drupalScope?.bannerSelector,
       caiaBannerSelector: caiaAccept ? caia.bannerSelector : undefined}).catch(() => null));
@@ -763,4 +767,46 @@ function sha256(value: string) {
 
 function normalizedTarget(value: string) {
   try { const url = new URL(value); url.hash = ""; return url.toString(); } catch { return value; }
+}
+
+
+/** Recheck the same element in the worker's bound document immediately before
+ * its single input. This path has no coordinator-supplied selector. */
+export async function dispatchWorkerDiscoveredConsentControl(input: {
+  page: Page;
+  control?: ElementHandle<HTMLElement | SVGElement>;
+  proof: ConsentActionControlProof;
+  deadlineAtMs: number;
+  signal?: AbortSignal;
+  assertCurrent: () => void;
+  commit: () => void;
+}) {
+  const { page, control, proof, signal, deadlineAtMs } = input;
+  if (!control || !proof.authorizedTargetSha256 || proof.frameIdentitySha256 !== proof.authorizedTargetSha256 ||
+      proof.actionSemantics !== "direct_label") throw new Error("worker_consent_control_unbound");
+  input.assertCurrent();
+  const selector = await boundedControlProof({page, signal, deadlineAtMs}, guard =>
+    guard.read(() => control.evaluate(exactNativeConsentButtonSelector)));
+  if (!selector) throw new Error("worker_consent_exact_selector_unavailable");
+  input.assertCurrent();
+  const verified = await buildConsentActionControlProof({
+    page, control, exactElement: control, requireUniqueSelector: true, workerDiscovered: true,
+    expectedNativeSelector: selector,
+    action: proof.action, authorizedTargetSha256: proof.authorizedTargetSha256,
+    selectorHint: selector, recipeId: proof.recipeId, cmpId: proof.cmpId,
+    observedAtMs: proof.observedAtMs, signal, deadlineAtMs,
+  });
+  const current = verified.status === "verified" ? verified.proof : undefined;
+  if (!current || current.accessibleLabel !== proof.accessibleLabel || current.labelSource !== proof.labelSource ||
+      current.actionSemantics !== proof.actionSemantics || current.frameIdentitySha256 !== proof.frameIdentitySha256) {
+    throw new Error("worker_consent_control_changed_before_dispatch");
+  }
+  const recheckedAtMs = Date.now();
+  input.assertCurrent();
+  assertConsentActionDispatchAllowed(page, signal, proof.authorizedTargetSha256, deadlineAtMs);
+  const timeout = deadlineAtMs - Date.now();
+  if (timeout <= 0) throw new Error("worker_consent_dispatch_deadline_exceeded");
+  input.commit();
+  await control.click({ timeout });
+  return { control: current, recheckedAtMs, completedAtMs: Date.now() };
 }

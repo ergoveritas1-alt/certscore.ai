@@ -1,3 +1,5 @@
+import { buildWorkerDiscoveredClick, verifyWorkerDiscoveredClick, WORKER_DISCOVERED_CLICK_FILE,
+  WORKER_DISCOVERED_CLICK_MAX_BYTES, type WorkerDiscoveredClick, type VerifiedWorkerDiscoveredClick } from "./worker-discovered-click.js";
 import { EVIDENCE_WORKER_SCAN_BUDGET_MS, actionReleaseStore, newActionPreparation, parseActionPreparation, proofForReadyAction, type ActionLane, type ActionPreparation } from "./dedicated-action-release.js";
 import { readConsentEvidenceWorkerStream } from "./consent-evidence-stream.js";
 import { buildConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES, REJECT_CLICK_CHECKPOINT_MAX_BYTES,
@@ -1101,8 +1103,19 @@ function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
     value === "accept_observation";
 }
 
+export function californiaWorkerConsentDiscoveryEnabled(payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject") {
+  const configuration = action === "accept" ? payload.postAcceptObservation : payload.postRefusalObservation;
+  return process.env.CERTSCORE_CA_WORKER_CONSENT_DISCOVERY_ENABLED === "1" &&
+    payload.targetEnvironment === "production" && payload.awsRegion === "us-west-1" &&
+    classifyV2DagLambdaResultDisposition(payload).kind === "persisted_scan" &&
+    configuration?.enabled === true && configuration.rolloutMode === "all_eligible" &&
+    configuration.interactionAuthorization.kind === "scan_target_resolution" &&
+    configuration.interactionAuthorization.scanId === payload.scanId &&
+    configuration.resolver.kind === "canonical_cmp_registry";
+}
+
 function productionConsentGateEnforced(payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject") {
-  return payload.targetEnvironment === "production" &&
+  return payload.targetEnvironment === "production" && !californiaWorkerConsentDiscoveryEnabled(payload, action) &&
     process.env[action === "accept" ? "CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE" : "CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE"] === "1";
 }
 
@@ -1700,7 +1713,14 @@ function isCloudConsentHandoffPayload(payload: LocalV2DagLambdaDispatchPayload) 
     typeof payload.parentDispatchSha256 === "string" && /^[a-f0-9]{64}$/.test(payload.parentDispatchSha256);
 }
 
+type WorkerDiscoveredClickManifest = {
+  parentDispatchSha256: string;
+  accept?: VerifiedWorkerDiscoveredClick;
+  reject?: VerifiedWorkerDiscoveredClick;
+};
+
 export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
+  workerDiscoveredClicks?: WorkerDiscoveredClickManifest;
   consentGateShadow?: ProductionConsentGateShadowFields;
   conditionalOptOutDecision?: ConditionalOptOutDecision;
   executedSaleSharingOptOut?: SaleSharingOptOutDispatch;
@@ -1829,6 +1849,7 @@ export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
       screenshotSafetyReview: screenshotSafetyReviewCoordinator.diagnostics(),
     } : {}),
     consentGateShadow: input.consentGateShadow,
+    workerDiscoveredClicks: input.workerDiscoveredClicks,
     payload,
     phaseTimings,
     pointers,
@@ -2550,6 +2571,25 @@ function consentClickCheckpointSink(
   };
 }
 
+async function retainWorkerDiscoveredClick(
+  payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject", click: WorkerDiscoveredClick | undefined,
+  packet: Buffer, options: { s3Client?: S3PutClient; signal?: AbortSignal },
+) {
+  // Require the original parent dispatch identity and the already-uploaded
+  // packet. These receipts are distinct from coordinator-gated checkpoints.
+  if (!click || !payload.parentDispatchSha256 || options.signal?.aborted) return;
+  const body = buildWorkerDiscoveredClick({ scanId:payload.scanId, action,
+    parentDispatchSha256:payload.parentDispatchSha256, requestedUrl:payload.targetUrl }, click, packet);
+  if (!body) return;
+  const timeout = AbortSignal.timeout(500);
+  const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
+  await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion, 1)).send(new PutObjectCommand({
+    Bucket:requireArtifactBucket(), Key:`${artifactKeyPrefix(payload)}/${WORKER_DISCOVERED_CLICK_FILE}`,
+    Body:body, IfNoneMatch:"*", ContentType:"application/json",
+    Metadata:{sha256:createHash("sha256").update(body).digest("hex")},
+  }), {abortSignal:signal}).catch(() => undefined);
+}
+
 /** The same exact worker's URL check may begin when its proof is released.
  * A changed proof or an old result must perform the ordinary check again. */
 export function beginExactRejectNetworkCheck(
@@ -2699,6 +2739,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   if (!prepared && !options.deferredProof && (enforce || firstLayerProof) && (!enforce || !rejectFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,payload.parentDispatchSha256,Date.now()))) {
     throw new Error("reject_gate_worker_proof_missing_invalid_or_expired");
   }
+  let workerDiscoveredClick: WorkerDiscoveredClick | undefined;
   let gateRecheck: {outcome:"passed" | "failed"; observedAtMs:number} | undefined;
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   await mkdir(options.artifactRoot, { recursive: true });
@@ -2789,6 +2830,9 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
           return proof;
         },
       } } : {}),
+      ...(californiaWorkerConsentDiscoveryEnabled(payload, "reject") ? {
+        onWorkerDiscoveredClick: (click: WorkerDiscoveredClick) => { workerDiscoveredClick = click; },
+      } : {}),
       ...(enforce ? {
         onRejectGateFinalRecheck: (outcome: "passed" | "failed") => {
           gateRecheck = { outcome, observedAtMs: Date.now() };
@@ -2833,6 +2877,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   if (!archive.body.equals(body)) throw new Error("Reject packet changed after it was sealed.");
   await archive.uploaded;
   const { bucket, key, sha256 } = archive;
+  await retainWorkerDiscoveredClick(payload, "reject", workerDiscoveredClick, body, options);
   const packetPointer = s3Uri(bucket, key);
   const descriptor = postRefusalLambdaEvidenceDescriptorSchema.parse({
     artifactOnly: true,
@@ -2890,6 +2935,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
         !acceptFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,Date.now())))) {
     throw new Error("accept_gate_worker_proof_missing_invalid_or_expired");
   }
+  let workerDiscoveredClick: WorkerDiscoveredClick | undefined;
   let gateRecheck: {outcome:"passed" | "failed"; observedAtMs:number} | undefined;
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   await mkdir(options.artifactRoot, { recursive: true });
@@ -2927,6 +2973,9 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
           return proof;
         },
       } } : {}),
+      ...(californiaWorkerConsentDiscoveryEnabled(payload, "accept") ? {
+        onWorkerDiscoveredClick: (click: WorkerDiscoveredClick) => { workerDiscoveredClick = click; },
+      } : {}),
       ...(enforce ? {
         onAcceptGateFinalRecheck: (outcome: "passed" | "failed") => { gateRecheck = { outcome, observedAtMs: Date.now() }; },
         onExactAcceptClickCompleted: (click: ExactClick) => { onExactAcceptClickCompleted?.(click); },
@@ -2988,6 +3037,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
     }), { abortSignal: options.signal });
     await checkpoint("artifact_upload_completed");
   });
+  await retainWorkerDiscoveredClick(payload, "accept", workerDiscoveredClick, body, options);
   const packetPointer = s3Uri(bucket, key);
   const descriptor = postAcceptLambdaEvidenceDescriptorSchema.parse({
     artifactOnly: true,
@@ -4052,6 +4102,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         ? earlyRejectPacket.join(result)
         : readPostRefusalPacketFromArtifactResult(result, {
           awsRegion: payload.awsRegion, s3GetClient: evidenceReader, signal: postRefusalAbortController.signal,
+          retainWorkerDiscoveredBytes: californiaWorkerConsentDiscoveryEnabled(payload, "reject"),
         });
       // The phase samples memory asynchronously before joining. Observe an early
       // failure immediately and let the join report the original rejection.
@@ -4092,6 +4143,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             awsRegion: payload.awsRegion,
             s3GetClient: options.s3GetClient,
             signal: postAcceptAbortController.signal,
+            retainWorkerDiscoveredBytes: californiaWorkerConsentDiscoveryEnabled(payload, "accept"),
           }).then((verifiedPacket) => {
             packet = verifiedPacket;
           })),
@@ -4388,25 +4440,43 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       packet:joinedPostRefusalPacket,
     },
   }) : undefined;
-  const consentActionStages = shadow && {
+  const discoveryActions = {
+    accept:californiaWorkerConsentDiscoveryEnabled(payload, "accept"),
+    reject:californiaWorkerConsentDiscoveryEnabled(payload, "reject"),
+  };
+  const consentActionStages = (shadow || discoveryActions.accept || discoveryActions.reject) && {
     version: "certscore.consent-action-stages.v1" as const,
     scanId: payload.scanId,
-    ...(shadow.baseline.accept ? { accept: consentActionStage({
+    ...((shadow?.baseline.accept || discoveryActions.accept) ? { accept: consentActionStage({
       ...postAcceptState, workerReturned: Boolean(postAcceptState.result), workerFailed: postAcceptState.result?.status === "failed",
       deadlineAtMs: passiveLaneBarrierCompletedAtMs + postAcceptMaxTailWaitMs,
       gateDeclined: gateDeclines.accept !== undefined, packetJoined: Boolean(joinedPostAcceptPacket),
-      recheck: shadow.baseline.accept.finalRecheck?.outcome,
+      recheck: shadow?.baseline.accept?.finalRecheck?.outcome,
     }) } : {}),
-    ...(shadow.baseline.reject ? { reject: consentActionStage({
+    ...((shadow?.baseline.reject || discoveryActions.reject) ? { reject: consentActionStage({
       ...postRefusalState, workerReturned: Boolean(postRefusalState.result), workerFailed: postRefusalState.result?.status === "failed",
       deadlineAtMs: passiveLaneBarrierCompletedAtMs + postRefusalMaxTailWaitMs,
       gateDeclined: gateDeclines.reject !== undefined, packetJoined: Boolean(joinedPostRefusalPacket),
-      recheck: shadow.baseline.reject.finalRecheck?.outcome,
+      recheck: shadow?.baseline.reject?.finalRecheck?.outcome,
     }) } : {}),
   };
+  const readDiscoveredClick = (action: "accept" | "reject") => {
+    if (!discoveryActions[action]) return;
+    const state = action === "accept" ? postAcceptState : postRefusalState;
+    const packet = action === "accept" ? joinedPostAcceptPacket : joinedPostRefusalPacket;
+    const tailMs = action === "accept" ? postAcceptMaxTailWaitMs : postRefusalMaxTailWaitMs;
+    return readJoinedWorkerDiscoveredClick({ payload, action, packet, result:state.result,
+      workerDispatchedAtMs:state.dispatchStartedAtMs, parentDispatchSha256:consentParentSha256,
+      deadlineAtMs:Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + tailMs),
+      s3GetClient:evidenceReader, signal:options.signal });
+  };
+  const [discoveredAccept, discoveredReject] = await Promise.all([readDiscoveredClick("accept"), readDiscoveredClick("reject")]);
+  const workerDiscoveredClicks = discoveredAccept || discoveredReject ?
+    {parentDispatchSha256:consentParentSha256, accept:discoveredAccept, reject:discoveredReject} : undefined;
   const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({
-    ...(shadow ? { consentGateShadow: {
-      acceptGateShadowReceipt:shadow.acceptGateShadowReceipt, rejectGateShadowReceipt:shadow.rejectGateShadowReceipt,
+    workerDiscoveredClicks,
+    ...(consentActionStages ? { consentGateShadow: {
+      acceptGateShadowReceipt:shadow?.acceptGateShadowReceipt, rejectGateShadowReceipt:shadow?.rejectGateShadowReceipt,
       consentActionStages, acceptClickCheckpoint, rejectClickCheckpoint,
     } } : {}),
     conditionalOptOutDecision,
@@ -4431,6 +4501,14 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     ...shadow.baseline, consentActionStages, acceptClickCheckpoint, rejectClickCheckpoint, manifestUri:artifacts.artifactPointers.manifestUri,
     manifestSha256:artifacts.artifactMetadata.manifestUri?.sha256,
   }));
+  if (discoveryActions.accept || discoveryActions.reject) {
+    console.info(JSON.stringify({
+      event:"consent_worker_discovery.v1", scanId:payload.scanId, region:payload.awsRegion, buildGitSha:process.env.BUILD_GIT_SHA,
+      acceptVerified:discoveredAccept !== undefined, rejectVerified:discoveredReject !== undefined,
+      discoveryActions, consentActionStages,
+      manifestUri:artifacts.artifactPointers.manifestUri, manifestSha256:artifacts.artifactMetadata.manifestUri?.sha256,
+    }));
+  }
   let artifactsWithLaneTimings = { ...artifacts, laneTimingSummary };
   if (postRefusalJoin === "joined" && postRefusalState.result) {
     artifactsWithLaneTimings = attachJoinedPostRefusalArtifactPointer(artifactsWithLaneTimings, postRefusalState.result);
@@ -4780,10 +4858,12 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const workerLane = input.workerLane;
   const enforceWorker = input.acceptFirstLayerProof !== undefined || input.rejectFirstLayerProof !== undefined ||
     input.rejectPreparationId !== undefined || input.actionPreparation !== undefined;
+  const discoveryWorker = (workerLane === "accept_observation" && californiaWorkerConsentDiscoveryEnabled(input.parentPayload, "accept")) ||
+    (workerLane === "reject_observation" && californiaWorkerConsentDiscoveryEnabled(input.parentPayload, "reject"));
   const lambdaClient = input.rejectPreparationId
     ? new LambdaClient({ region:input.parentPayload.awsRegion, maxAttempts:1 })
     : input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion,
-    ...(enforceWorker || input.parentPayload.saleSharingOptOut?.canaryAuthorization ||
+    ...(enforceWorker || discoveryWorker || input.parentPayload.saleSharingOptOut?.canaryAuthorization ||
       input.parentPayload.privacyCaptureProfile===CONDITIONAL_OPT_OUT_CAPTURE_PROFILE ? {maxAttempts:1} : {}) });
   const { gpcObservation: parentGpcObservation, acceptFirstLayerProof: _acceptProof, rejectFirstLayerProof: _rejectProof,
     actionPreparation: _preparation, rejectPreparationId: _rejectPreparationId,
@@ -5602,6 +5682,53 @@ export function deriveConsentActionAvailability(bundle: CanonicalEvidenceBundle,
   };
 }
 
+// Keep the checksum-verified packet bytes for the short coordinator receipt check.
+const verifiedActionPacketBytes = new WeakMap<PostAcceptEvidencePacket | PostRefusalEvidencePacket, Buffer>();
+
+async function readJoinedWorkerDiscoveredClick(input: {
+  payload: LocalV2DagLambdaDispatchPayload;
+  action: "accept" | "reject";
+  packet?: PostAcceptEvidencePacket | PostRefusalEvidencePacket;
+  result?: LocalV2DagLambdaShardResult;
+  parentDispatchSha256: string;
+  workerDispatchedAtMs?: number;
+  deadlineAtMs: number;
+  s3GetClient?: S3GetClient;
+  signal?: AbortSignal;
+}) {
+  const { payload, action, packet, result, workerDispatchedAtMs, parentDispatchSha256 } = input;
+  if (!packet || packet.interactionDiagnostics?.click.outcome !== "completed" || !workerDispatchedAtMs ||
+      result?.status !== "completed" || result.workerLane !== `${action}_observation` ||
+      result.scanId !== payload.scanId || result.parentDispatchSha256 !== parentDispatchSha256 || input.signal?.aborted) return;
+  const packetKey = action === "accept" ? "postAcceptPacketUri" : "postRefusalPacketUri";
+  const bucket = requireArtifactBucket();
+  const prefix = `${artifactKeyPrefix(payload)}/lanes/${action}_observation`;
+  const packetFile = action === "accept" ? "PostAcceptEvidencePacket.json" : "PostRefusalEvidencePacket.json";
+  const packetSha256 = result.artifactMetadata?.[packetKey]?.sha256;
+  const packetBytes = verifiedActionPacketBytes.get(packet);
+  if (!packetBytes || !packetSha256 || result.artifactPointers?.[packetKey] !== s3Uri(bucket, `${prefix}/${packetFile}`)) return;
+  const remaining = Math.min(250, input.deadlineAtMs - Date.now());
+  if (remaining <= 0) return;
+  const cancellation = AbortSignal.timeout(remaining);
+  const signal = input.signal ? AbortSignal.any([cancellation, input.signal]) : cancellation;
+  try {
+    return await withHandlerSafetyTimeout((async () => {
+      const { Body, ContentLength, ContentRange, Metadata } = await (input.s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion, 1)).send(new GetObjectCommand({
+        Bucket:bucket, Key:`${prefix}/${WORKER_DISCOVERED_CLICK_FILE}`, Range:`bytes=0-${WORKER_DISCOVERED_CLICK_MAX_BYTES - 1}`,
+      }), { abortSignal:signal });
+      if (!ContentLength || ContentLength > WORKER_DISCOVERED_CLICK_MAX_BYTES ||
+          ContentRange !== `bytes 0-${ContentLength - 1}/${ContentLength}`) return;
+      const body = await streamToBuffer(Body);
+      const readAtMs = Date.now();
+      if (signal.aborted || body.length !== ContentLength || readAtMs >= input.deadlineAtMs) return;
+      return verifyWorkerDiscoveredClick({
+        body, metadataSha256:Metadata?.sha256, packetBytes, packetSha256, workerDispatchedAtMs, readAtMs,
+        binding:{action, scanId:payload.scanId, parentDispatchSha256, requestedUrl:payload.targetUrl},
+      });
+    })(), remaining);
+  } catch { return; }
+}
+
 type RejectPacketReadOptions = {
   awsRegion?: LocalV2DagLambdaAwsRegion;
   s3GetClient?: S3GetClient;
@@ -5645,7 +5772,7 @@ export function startRejectPacketVerification(
 
 async function readPostRefusalPacketFromArtifactResult(
   result: Pick<LocalV2DagLambdaShardResult, "scanId" | "artifactPointers" | "artifactMetadata">,
-  options: RejectPacketReadOptions,
+  options: RejectPacketReadOptions & { retainWorkerDiscoveredBytes?: boolean },
 ) {
   const uri = result.artifactPointers?.postRefusalPacketUri;
   if (!uri) {
@@ -5669,6 +5796,7 @@ async function readPostRefusalPacketFromArtifactResult(
   if (packet.parentScanId !== result.scanId) {
     throw new Error("Local v2 DAG Lambda post-refusal packet parent scan identity mismatch.");
   }
+  if (options.retainWorkerDiscoveredBytes) verifiedActionPacketBytes.set(packet, body);
   return packet;
 }
 
@@ -5678,6 +5806,7 @@ async function readPostAcceptPacketFromArtifactResult(
     awsRegion?: LocalV2DagLambdaAwsRegion;
     s3GetClient?: S3GetClient;
     signal?: AbortSignal;
+    retainWorkerDiscoveredBytes?: boolean;
   },
 ) {
   const uri = result.artifactPointers?.postAcceptPacketUri;
@@ -5702,6 +5831,7 @@ async function readPostAcceptPacketFromArtifactResult(
   if (packet.parentScanId !== result.scanId) {
     throw new Error("Local v2 DAG Lambda post-accept packet parent scan identity mismatch.");
   }
+  if (options.retainWorkerDiscoveredBytes) verifiedActionPacketBytes.set(packet, body);
   return packet;
 }
 
@@ -7087,6 +7217,7 @@ export async function uploadArtifactFiles(input: {
 }
 
 async function writeManifest(input: {
+  workerDiscoveredClicks?: WorkerDiscoveredClickManifest;
   consentGateShadow?: ProductionConsentGateShadowFields;
   conditionalOptOutDecision?: ConditionalOptOutDecision;
   executedSaleSharingOptOut?: SaleSharingOptOutDispatch;
@@ -7105,6 +7236,7 @@ async function writeManifest(input: {
   await writeFile(manifestPath, `${JSON.stringify({
     artifactOnly: true,
     ...input.consentGateShadow,
+    ...(input.workerDiscoveredClicks ? {workerDiscoveredClicks:input.workerDiscoveredClicks} : {}),
     ...(input.conditionalOptOutDecision ? {conditionalOptOutDecision:input.conditionalOptOutDecision} : {}),
     ...(input.executedSaleSharingOptOut?{executedSaleSharingOptOut:input.executedSaleSharingOptOut}:{}),
     ...(input.artifactMetadata ? { artifactMetadata: input.artifactMetadata } : {}),

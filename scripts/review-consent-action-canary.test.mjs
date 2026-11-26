@@ -95,3 +95,39 @@ test("a matched checkpoint counts the click separately and leaves observation co
   event.rejectClickCheckpoint.verifiedAtMs = manifest.rejectClickCheckpoint.verifiedAtMs = 9000;
   assert.ok(reviewConsentActionCanary(plan, [observation]).failures.some(row => row.reason === "invalid_click_checkpoint"));
 });
+
+test("worker-discovered canary counts only joined receipts bound to the same scan, dispatch, and packet", () => {
+  const {plan, observation} = fixture();
+  const {event, manifest} = observation;
+  plan.executionMode = "worker_discovery";
+  event.event = "consent_worker_discovery.v1";
+  event.discoveryActions = {accept:true,reject:true};
+  event.acceptVerified = event.rejectVerified = true;
+  const parentDispatchSha256 = "1".repeat(64);
+  manifest.workerDiscoveredClicks = {parentDispatchSha256};
+  manifest.pointers = {};
+  manifest.artifactMetadata = {};
+  manifest.laneTimingSummary = {acceptLaneJoin:"joined",rejectLaneJoin:"joined"};
+  for (const action of ["accept", "reject"]) {
+    const label = action === "accept" ? "PostAccept" : "PostRefusal";
+    const key = action === "accept" ? "postAcceptPacketUri" : "postRefusalPacketUri";
+    const packetSha256 = (action === "accept" ? "a" : "b").repeat(64);
+    manifest.pointers[key] = `s3://retained/fixture/${manifest.scanId}/lanes/${action}_observation/${label}EvidencePacket.json`;
+    manifest.artifactMetadata[key] = {sha256:packetSha256,sizeBytes:1500};
+    manifest.workerDiscoveredClicks[action] = {
+      version:"certscore.worker-discovered-click.v1", scanId:manifest.scanId, action, packetSha256, parentDispatchSha256,
+      receiptSha256:"c".repeat(64),controlSha256:"d".repeat(64),
+      requestedTargetSha256:createHash("sha256").update(manifest.targetUrl).digest("hex"),
+      workerDispatchedAtMs:1100,recheckedAtMs:1200,dispatchedAtMs:1201,completedAtMs:1202,
+      verifiedAtMs:1300,deadlineAtMs:1402,reserveMs:200,
+    };
+  }
+  const checked = reviewConsentActionCanary(plan,[observation]);
+  assert.equal(checked.status,"passed");
+  assert.equal(checked.actions.accept.completed,1);
+  assert.equal(checked.actions.reject.completed,1);
+  manifest.workerDiscoveredClicks.reject.packetSha256 = "e".repeat(64);
+  const tampered = reviewConsentActionCanary(plan,[observation]);
+  assert.equal(tampered.actions.reject.completed,0);
+  assert.ok(tampered.failures.some(failure => failure.reason === "invalid_worker_discovered_receipt"));
+});

@@ -54,3 +54,45 @@ test('daily retained-evidence audit decodes the lossless artifact only after ori
  event.artifactMetadata.scanArtifactUri!.sha256='a'.repeat(64);
  assert.throws(()=>retainedArtifactContext(payload,scanId,ref),/ancestry/);
 });
+
+test('worker-discovered receipts count once per action from a sealed scan and joined packet', () => {
+ const scanId='67d8e4f0-fcb4-42fb-a57a-0b096e393d2c',targetUrl='https://example.com/';
+ const parentDispatchSha256='a'.repeat(64),packetSha256='b'.repeat(64);
+ const receipt={
+  version:'certscore.worker-discovered-click.v1',scanId,action:'accept',
+  parentDispatchSha256,packetSha256,controlSha256:'c'.repeat(64),receiptSha256:'d'.repeat(64),
+  requestedTargetSha256:createHash('sha256').update(targetUrl).digest('hex'),
+  workerDispatchedAtMs:100,recheckedAtMs:102,dispatchedAtMs:103,completedAtMs:104,deadlineAtMs:304,
+  verifiedAtMs:310,reserveMs:200,
+ };
+ const packetUri=`s3://retained/v2-dag-lambda/local/${scanId}/lanes/accept_observation/PostAcceptEvidencePacket.json`;
+ const manifest={
+  scanId,targetUrl,targetEnvironment:'production',laneTimingSummary:{acceptLaneJoin:'joined'},
+  artifactMetadata:{postAcceptPacketUri:{sha256:packetSha256,sizeBytes:1234}},
+  pointers:{postAcceptPacketUri:packetUri},
+  workerDiscoveredClicks:{parentDispatchSha256,accept:receipt},
+ };
+ const check='sealed.detail.accept.coordinator.click_checkpoint';
+ assert.deepEqual(retainedConsentActionStates(manifest,scanId),{[check]:'verified'});
+ const bothFormats={
+  ...manifest,
+  consentActionStages:{version:'certscore.consent-action-stages.v1',scanId,accept:'packet_joined'},
+  acceptGateShadowReceipt:{version:'certscore.accept-gate-shadow-receipt.v1',scanId,enforcementActive:true,
+   passive:{outcome:'qualified'},dispatch:{outcome:'would_allow'},timing:{dispatchObservedAtMs:100,proofExpiresAtMs:304}},
+  acceptClickCheckpoint:{version:'certscore.accept-click-checkpoint.v1',scanId,receiptSha256:'e'.repeat(64),gateProofSha256:'f'.repeat(64),
+   recheckedAtMs:102,dispatchedAtMs:103,completedAtMs:104,verifiedAtMs:110},
+ };
+ assert.equal(Object.keys(retainedConsentActionStates(bothFormats,scanId)).filter(key=>key===check).length,1);
+ const invalid = [
+  {...manifest,scanId:'another scan'},
+  {...manifest,targetUrl:'https://changed.example/'},
+  {...manifest,artifactMetadata:{}},
+  {...manifest,laneTimingSummary:{acceptLaneJoin:'timed_out'}},
+  {...manifest,pointers:{postAcceptPacketUri:packetUri.replace('/accept_observation/','/reject_observation/')}},
+  ...[
+   {scanId:'another scan'}, {action:'reject'}, {packetSha256:'f'.repeat(64)}, {parentDispatchSha256:'f'.repeat(64)},
+   {deadlineAtMs:303,reserveMs:199}, {workerDispatchedAtMs:103}, {verifiedAtMs:103}, {reserveMs:300},
+  ].map(changed=>({...manifest,workerDiscoveredClicks:{parentDispatchSha256,accept:{...receipt,...changed}}})),
+ ];
+ for (const changed of invalid) assert.equal(retainedConsentActionStates(changed,scanId)[check],undefined);
+});

@@ -1,3 +1,4 @@
+import { dispatchWorkerDiscoveredConsentControl } from "./cmp-action-control-proof.js";
 import { takePreparedConsentActionPage, type PreparedConsentActionPage, type DeferredConsentProof } from "./consent-action-browser";
 import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
@@ -231,6 +232,13 @@ export interface PostAcceptObserverInput {
   allowCanonicalAcceptDiscovery?: boolean;
   /** Default-off exact-element proof/dispatch hardening for paired calibration. */
   boundControlDispatch?: boolean;
+  onWorkerDiscoveredClick?: (event: {
+    control: ConsentActionControlProof;
+    recheckedAtMs: number;
+    dispatchedAtMs: number;
+    completedAtMs: number;
+    deadlineAtMs: number;
+  }) => void;
   /** Local coordinator proof for the fail-closed pre-click prototype. */
   firstLayerProof?: AcceptFirstLayerProof;
   onAcceptGateFinalRecheck?: (outcome: "passed" | "failed") => void;
@@ -489,7 +497,7 @@ export async function runPostAcceptObserver(
   let activeRequestIdsAtAcceptanceRegistration: string[] = [];
   let actionDispatched = false;
   const boundControlDispatch = initialFirstLayerProof !== undefined || deferredProof !== undefined ||
-    (input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1");
+    (!!input.onWorkerDiscoveredClick || (input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1"));
   let boundControlElement: import("playwright").ElementHandle<HTMLElement | SVGElement> | undefined;
   let cancellationObservedAtMs: number | undefined;
   let observationCoverageSufficient = false;
@@ -1560,6 +1568,20 @@ export async function runPostAcceptObserver(
             return element.click({ timeout, ...(noWaitAfter ? { noWaitAfter } : {}) });
           },
         });
+      } else if (input.onWorkerDiscoveredClick) {
+        if (confirmationScope !== page || selectedRecipe.accessibleControl || selectedRecipe.customControlBinding) {
+          throw new Error("worker_consent_control_scope_unsupported");
+        }
+        const deadlineAtMs = Math.min(Date.now() + 2_000,
+          (resultBudgetDeadlineAtMs ?? Infinity) - observationWindowMs - ACCEPT_RESULT_FINALIZATION_RESERVE_MS);
+        notifyBeforeDispatch();
+        const click = await dispatchWorkerDiscoveredConsentControl({
+          page, control: boundControlElement, proof: actionControlProof, deadlineAtMs,
+          signal: effectiveSignal, assertCurrent: () => assertDispatch(deadlineAtMs), commit,
+        });
+        actionControlProof = click.control;
+        try { input.onWorkerDiscoveredClick({ dispatchedAtMs: actionDispatchedAtEpochMs,
+          deadlineAtMs, ...click }); } catch { limitations.push("lifecycle_listener_failed"); }
       } else {
         await dispatchAcceptControl(
           page, control, selectedRecipe, useVerifiedGeometryDispatch, () => assertDispatch(),

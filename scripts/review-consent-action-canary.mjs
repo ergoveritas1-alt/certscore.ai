@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { retainedWorkerDiscoveredClick } from "./lib/retained-worker-discovered-click.mjs";
 
 const actions = ["accept", "reject"];
 const regions = ["eu-west-1", "us-west-1", "eu-central-1"];
@@ -14,6 +15,8 @@ const stages = new Set(["not_started", "gate_declined", "not_dispatched", "worke
 export function reviewConsentActionCanary(plan, observations) {
   assert.equal(plan.version, "certscore.consent-action-canary-review.v1");
   assert.match(plan.buildGitSha, /^[a-f0-9]{40}$/);
+  assert.ok([undefined, "worker_discovery"].includes(plan.executionMode), "Unsupported canary execution mode");
+  const workerDiscovery = plan.executionMode === "worker_discovery";
   assert.ok(Array.isArray(plan.cases) && plan.cases.length > 0 && plan.cases.length <= 24);
   assert.ok(Array.isArray(observations) && observations.length === plan.cases.length);
   const known = new Map();
@@ -34,7 +37,8 @@ export function reviewConsentActionCanary(plan, observations) {
     const entry = known.get(item.scanId);
     assert.ok(entry);
     const { event, manifest } = entry;
-    assert.equal(event.event, "consent_gate_enforced.v1");
+    assert.equal(event.event, workerDiscovery ? "consent_worker_discovery.v1" : "consent_gate_enforced.v1");
+    if (workerDiscovery) assert.equal(item.region, "us-west-1");
     assert.equal(event.buildGitSha, plan.buildGitSha);
     assert.equal(event.region, item.region);
     assert.equal(event.manifestSha256, entry.manifestSha256);
@@ -52,6 +56,31 @@ export function reviewConsentActionCanary(plan, observations) {
     assert.equal(stage.scanId, item.scanId);
     assert.deepEqual(event.consentActionStages, stage);
     for (const action of actions) {
+      if (workerDiscovery) {
+        const eligible = item.eligible.includes(action);
+        const enabled = event.discoveryActions?.[action];
+        const reported = event[action + "Verified"];
+        const receipt = manifest.workerDiscoveredClicks?.[action];
+        const verified = retainedWorkerDiscoveredClick(manifest, item.scanId, action);
+        assert.equal(typeof enabled, "boolean");
+        assert.equal(typeof reported, "boolean");
+        if (eligible || reported || receipt !== undefined) assert.equal(enabled, true);
+        if (!enabled) continue;
+        assert.ok(stages.has(stage[action]), "Unknown action stage");
+        const out = summaries[action];
+        cases.push({scanId:item.scanId,action,eligible,stage:stage[action],click:verified ? "completed" : "unverified"});
+        if (eligible) {
+          out.eligible++;
+          out.terminalStages[stage[action]] = (out.terminalStages[stage[action]] ?? 0) + 1;
+        }
+        if ((receipt !== undefined && !verified) || reported !== verified || (verified && stage[action] !== "packet_joined")) {
+          out.missingProof++;
+          failures.push({scanId:item.scanId,action,reason:"invalid_worker_discovered_receipt"});
+        } else if (verified && !eligible) {
+          failures.push({scanId:item.scanId,action,reason:"completed_outside_eligible_cohort"});
+        } else if (verified) out.completed++;
+        continue;
+      }
       const actual = event[action];
       const eligible = item.eligible.includes(action);
       const checkpoint = manifest[action + "ClickCheckpoint"];

@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {extractProgressRow,type Metric,type ProgressRow} from './audit-progress';
 import {sealedSource} from './audit-progress-contracts';
-import {retainedArtifactContext,retainedConsentActionStates} from './audit-progress-retained-artifacts';
+import {retainedArtifactContext,retainedConsentActionStates,retainedWorkerDiscoveredClick} from './audit-progress-retained-artifacts';
 import type {OptOutReceipt} from './audit-progress-opt-out';
 import {retainedInputCoverage,type RetainedReportInputState} from './audit-progress-input-coverage';
 import {retainedCaliforniaPostReject} from '../../apps/web/lib/scans/california-post-reject-policy';
@@ -23,7 +23,7 @@ const coordinatorFields = {
  passive: 'passive eligibility',
  dispatch: 'dispatch guard outcome',
  exact_recheck: 'final exact-control recheck',
- click_checkpoint: 'verified click checkpoint',
+ click_checkpoint: 'verified click receipt',
 } as const;
 
 export function retainedConsentActionMetrics(rows: ProgressRow[]): Metric[] {
@@ -131,7 +131,10 @@ export function applyRetainedReports(rows:ProgressRow[],receipts:(OptOutReceipt&
    const consentStates=retainedConsentActionStates(context.manifest,row.scanId);
    Object.assign(row.states,consentStates);
    for(const key of Object.keys(consentStates)){
-    (row.metricSources??={})[key]='verified_original_manifest/certscore.consent-action-stages.v1';
+    const action = actions.find(value => key === `sealed.detail.${value}.coordinator.click_checkpoint`);
+    (row.metricSources??={})[key]=action&&retainedWorkerDiscoveredClick(context.manifest,row.scanId,action)
+     ? 'verified_original_manifest/certscore.worker-discovered-click.v1'
+     : 'verified_original_manifest/certscore.consent-action-stages.v1';
    }
    const policy=context.policy,privacy=policy.documents.filter(d=>d.surfaceType==='privacy_policy');
    raw.states.policy_fetch=policy.policyFetches===null?'unavailable':policy.policyFetches>0?'fetched':policy.inspection?.retrievalCoverage==='complete'?'no_fetch_returned':'unknown';

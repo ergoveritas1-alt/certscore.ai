@@ -5,6 +5,8 @@ import {createHash} from 'node:crypto';
 import {inspectPolicyCapture} from './daily-policy-audit';
 import {sourceFacets} from './daily-reliability-scorecard';
 import type {OptOutReceipt} from './audit-progress-opt-out';
+import {retainedWorkerDiscoveredClick} from './retained-worker-discovered-click.mjs';
+export {retainedWorkerDiscoveredClick} from './retained-worker-discovered-click.mjs';
 export function verifiedReceipt(ref:OptOutReceipt,max=20_000_000):Buffer {
  const b=readFileSync(ref.file);if(b.length>max||b.length!==ref.bytes||createHash('sha256').update(b).digest('hex')!==ref.sha256)throw Error('Retained artifact checksum/size mismatch');return b;
 }
@@ -50,13 +52,14 @@ const sha256Pattern = /^[0-9a-f]{64}$/;
 export function retainedConsentActionStates(manifest: Record<string, any>, scanId: string): Record<string, string> {
  const stages = manifest.consentActionStages;
  const states: Record<string, string> = {};
- if (manifest.scanId !== scanId || stages?.scanId !== scanId ||
-     stages.version !== 'certscore.consent-action-stages.v1') return states;
+ if (manifest.scanId !== scanId) return states;
+ const hasStages = stages?.scanId === scanId && stages.version === 'certscore.consent-action-stages.v1';
  for (const action of ['accept', 'reject'] as const) {
-  const gate = manifest[action+'GateShadowReceipt'];
-  if (gate?.scanId !== scanId || gate.version !== `certscore.${action}-gate-shadow-receipt.v1` ||
-      gate.enforcementActive !== true || !consentActionStages.has(stages[action])) continue;
   const prefix = `sealed.detail.${action}.coordinator.`;
+  if (retainedWorkerDiscoveredClick(manifest,scanId,action)) states[prefix+'click_checkpoint'] = 'verified';
+  const gate = manifest[action+'GateShadowReceipt'];
+  if (!hasStages || gate?.scanId !== scanId || gate.version !== `certscore.${action}-gate-shadow-receipt.v1` ||
+      gate.enforcementActive !== true || !consentActionStages.has(stages[action])) continue;
   states[prefix+'stage'] = stages[action];
   const {outcome, blockReason} = gate.passive ?? {};
   if (outcome === 'qualified') states[prefix+'passive'] = outcome;
