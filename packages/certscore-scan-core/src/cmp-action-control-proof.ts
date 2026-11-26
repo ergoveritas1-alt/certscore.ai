@@ -1,5 +1,5 @@
 import { verifyCaiaAcceptListeners } from "./caia-accept-control.js";
-import { hubSpotHrefLessConsentSelector } from "./exact-native-consent-button-selector.js";
+import { hubSpotHrefLessConsentSelector, reviewedConsentAnchor } from "./exact-native-consent-button-selector.js";
 import { DRUPAL_ACCEPT_BANNER_SELECTOR, DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP } from "./drupal-consent-overflow-geometry.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import {
@@ -459,12 +459,19 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     const roleButtonIds = input.cmpId === "CookieScript" && input.expectedNativeSelector === cookieScriptSelector
       ? (input.action === "accept" ? COOKIE_SCRIPT_ACCEPT_IDS : COOKIE_SCRIPT_REJECT_IDS) : undefined;
     const hubSpotAnchor = input.expectedNativeSelector === hubSpotHrefLessConsentSelector(input.action);
-    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, italianAcceptScope, drupalBannerSelector, caiaBannerSelector}) => {
+    const reviewedAnchor = reviewedConsentAnchor(input.action, input.expectedNativeSelector);
+    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, italianAcceptScope, drupalBannerSelector, caiaBannerSelector}) => {
       if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
       if (passiveSelector) {
         const document = exact?.ownerDocument;
         const view = document?.defaultView;
-        const buttonLink = exact?.localName === "a" && exact.getAttribute("role") === "button" &&
+        const exactReviewedAnchor = reviewedAnchor && exact?.localName === "a" &&
+          view?.location.href === reviewedAnchor.documentUrl && exact.matches(passiveSelector) &&
+          document?.querySelectorAll(reviewedAnchor.banner).length === 1 && !document.querySelector("base[target]") &&
+          (!reviewedAnchor.id || document.querySelectorAll("#" + reviewedAnchor.id).length === 1) &&
+          !exact.closest("form,button,label,[contenteditable]") && !exact.querySelector("a,button,input,[role=button]");
+        if (reviewedAnchor && !exactReviewedAnchor) return null;
+        const buttonLink = exactReviewedAnchor || exact?.localName === "a" && exact.getAttribute("role") === "button" &&
           !exact.hasAttribute("target") && !exact.hasAttribute("download") &&
           (hubSpotAnchor ? !exact.hasAttribute("href") &&
             document?.querySelectorAll("#hs-eu-cookie-confirmation").length === 1 &&
@@ -505,7 +512,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
       return { selectorMatchCount: elements.length, labels };
-    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor,
+    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor,
       italianAcceptScope: oneTrustItalianAccept ? italianAccept : undefined,
       drupalBannerSelector: drupalScope?.bannerSelector,
       caiaBannerSelector: caiaAccept ? caia.bannerSelector : undefined}).catch(() => null));

@@ -1,5 +1,5 @@
 import { scopedConsentActionWindowMs } from "./scoped-consent-action-window.js";
-import { geometryConsentButtonLinkMatches } from "./exact-native-consent-button-selector.js";
+import { geometryConsentButtonLinkMatches, reviewedConsentAnchor } from "./exact-native-consent-button-selector.js";
 import { consentGateDocument } from "./consent-gate-document.js";
 import { DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP, drupalOverflowObservationMatches,
   hasVerifiedDrupalOverflowGeometry } from "./drupal-consent-overflow-geometry.js";
@@ -204,10 +204,13 @@ function exactGeometryAccept(
     candidate.containerSelectorHint === adopt.bannerSelector && Array.isArray(geometry.containers) &&
     geometry.containers.some(container => container.selectorHint === adopt.bannerSelector &&
       container.containerId === candidate.containerId && container.layer === "first_layer" && container.intersectsViewport);
-  const binding = { cookieScriptRole,
+  const reviewedAnchor = reviewedConsentAnchor("accept", candidate.selectorHint);
+  const navigraphCaption = reviewedAnchor && !reviewedAnchor.id && reviewedAnchor.documentUrl === document.url &&
+    candidate.label === "ACCEPT ALL COOKIES" ? "Accept all cookies" : undefined;
+  const binding = { cookieScriptRole, reviewedAnchor,
     selector: cookieScriptRole ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : candidate.selectorHint, inventorySelector: candidate.selectorHint,
     sourceLabel: cookieScriptRole && !candidate.ariaLabel && candidate.cookieScriptUppercaseSourceLabel?.toUpperCase() === candidate.label
-      ? candidate.cookieScriptUppercaseSourceLabel : undefined, tagName: candidate.tagName, separateConflicts, oneTrustItalianAccept, dafitiAdoptAccept, caiaAccept };
+      ? candidate.cookieScriptUppercaseSourceLabel : navigraphCaption, tagName: candidate.tagName, separateConflicts, oneTrustItalianAccept, dafitiAdoptAccept, caiaAccept };
   if (candidate.ariaLabel) {
     // AX inventory can report the accessible name while geometry records the
     // rendered caption. Both must independently support Accept. The receipt
@@ -332,7 +335,8 @@ export function deriveAcceptFirstLayerProof(input: {
         (control.layer === undefined || control.layer === "first_layer") &&
         (control.consentContextEvidence === undefined || control.consentContextEvidence === "local_surface") &&
         (control.label === nativeAccept.label || control.label === nativeAccept.sourceLabel) &&
-        (!(nativeAccept.cookieScriptRole || nativeAccept.tagName === "a") || control.role === "button") &&
+        (!(nativeAccept.cookieScriptRole || nativeAccept.tagName === "a") || control.role === "button" ||
+          (nativeAccept.reviewedAnchor !== undefined && !nativeAccept.reviewedAnchor.id)) &&
         control.tagName === nativeAccept.tagName &&
         passiveButtonSelectorMatches(control, nativeAccept.inventorySelector, "accept", committedDocument.url, documentToken);
       if ((!direct || input.requireExactSelector) && !handoff) {
