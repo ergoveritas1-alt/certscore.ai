@@ -42,7 +42,7 @@ export interface ConsentGeometryPageAccessInput {
 const ACCESS_NO_GO_PATTERNS: Array<{ code: string; pattern: RegExp }> = [
   { code: "access_denied_text", pattern: /\baccess denied\b/i },
   { code: "temporarily_restricted", pattern: /\baccess is temporarily restricted\b/i },
-  { code: "forbidden_text", pattern: /\b(?:403|forbidden)\b/i },
+  { code: "forbidden_text", pattern: /\b(?:403[\s:–—-]+forbidden|access (?:to (?:this|the requested) (?:page|resource) )?is forbidden)\b/i },
   { code: "bot_security_check", pattern: /\b(?:additional security check|security verification|security check|security checkpoint|browser verification|verify you are not a bot|checking your browser|human verification|captcha|hcaptcha|i am human|robot or human|press\s*&\s*hold|press and hold|confirm that you'?re human|failed to verify your browser|unable to give you access|detected unusual activity)\b/i },
   // A bare Cloudflare mention is common on healthy sites hosted by Cloudflare
   // Pages and is not challenge evidence. Keep this limited to challenge/error
@@ -92,6 +92,13 @@ export function classifyConsentGeometryAccess(input: ConsentGeometryPageAccessIn
     if (entry.pattern.test(text)) {
       reasonCodes.push(entry.code);
     }
+  }
+  // A standalone error heading is evidence. The word “forbidden” and the
+  // number 403 also occur in ordinary titles, catalogues, and page copy.
+  const forbiddenHeading = /^(?:403|forbidden)[.!]?$/i;
+  if (forbiddenHeading.test(compactText(input.title ?? "")) ||
+      forbiddenHeading.test(compactText(input.bodyText ?? ""))) {
+    reasonCodes.push("forbidden_text");
   }
   const status = classifyAccessStatus({
     errorMessage: input.errorMessage,

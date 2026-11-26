@@ -8,6 +8,11 @@ import { installWebBotAuthRoute } from "./web-bot-auth-routing";
 type BlankConsentPage = { context: BrowserContext; page: Page };
 type ConsentAction = "accept" | "reject";
 
+export type DeferredConsentProof<Proof> = {
+  parentDispatchSha256: string;
+  take: (signal: AbortSignal) => Promise<Proof>;
+};
+
 // The mark belongs to the exact prepared object and cannot be supplied by a
 // worker dispatch. It allows only separately owned contexts on this browser.
 const sharedActionPages = new WeakMap<PreparedConsentActionPage, ConsentAction>();

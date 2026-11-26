@@ -19,6 +19,15 @@ const sitsBorlabsControls = [
 
 const slowControls = [
   ...sitsBorlabsControls,
+  // The California recordings exhausted the exact proof during late control binding.
+  verifiedControl("accept", ["https://casadellibro.com/"], "https://www.casadellibro.com/",
+    "#onetrust-accept-btn-handler", "Aceptar", 10_000),
+  verifiedControl("reject", ["https://casadellibro.com/"], "https://www.casadellibro.com/",
+    "#onetrust-reject-all-handler", "Rechazar", 10_000),
+  verifiedControl("accept", ["https://fictionzone.net/"], "https://fictionzone.net/",
+    "div.cookieControl__BarButtons > button:nth-of-type(1)", "Accept", 10_000),
+  verifiedControl("reject", ["https://fictionzone.net/"], "https://fictionzone.net/",
+    "div.cookieControl__BarButtons > button:nth-of-type(2)", "Essential only", 10_000),
   // Retained clicks at these exact controls were lost at the six-second cutoff.
   verifiedControl("accept", ["https://weedmaps.com/"], "https://weedmaps.com/",
     'button[data-testid="cookie-banner-accept"]', "Accept", 10_000),

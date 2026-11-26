@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { chromium, type Locator } from "playwright";
-import { deriveAcceptFirstLayerProof, type AcceptFirstLayerProof } from "@certscore/scan-core/accept-first-layer-gate";
+import { deriveAcceptFirstLayerProof, scopedConsentActionWindowMs, type AcceptFirstLayerProof } from "@certscore/scan-core/accept-first-layer-gate";
 import { type RejectFirstLayerProof } from "@certscore/scan-core/reject-gate-shadow-receipt";
 import { runPostAcceptObserver } from "@certscore/scan-core/post-accept-observer";
 import { runPostRefusalObserver } from "@certscore/scan-core/post-refusal-observer";
@@ -25,10 +25,20 @@ for (const example of [
     selector: "#banner-reject", label: "Reject all", attribute: 'id="banner-reject"' },
   { action: "accept", url: "https://ilmattino.it/", documentUrl: "https://www.ilmattino.it/",
     selector: "button.iubenda-cs-accept-btn", label: "ACCETTA E CONTINUA", attribute: 'class="iubenda-cs-accept-btn"' },
+  { action: "accept", url: "https://casadellibro.com/", documentUrl: "https://www.casadellibro.com/",
+    selector: "#onetrust-accept-btn-handler", label: "Aceptar", attribute: 'id="onetrust-accept-btn-handler"' },
+  { action: "reject", url: "https://casadellibro.com/", documentUrl: "https://www.casadellibro.com/",
+    selector: "#onetrust-reject-all-handler", label: "Rechazar", attribute: 'id="onetrust-reject-all-handler"' },
+  { action: "accept", url: "https://fictionzone.net/", documentUrl: "https://fictionzone.net/",
+    selector: "div.cookieControl__BarButtons > button:nth-of-type(1)", label: "Accept", attribute: "" },
+  { action: "reject", url: "https://fictionzone.net/", documentUrl: "https://fictionzone.net/",
+    selector: "div.cookieControl__BarButtons > button:nth-of-type(2)", label: "Essential only", attribute: "" },
   { action: "accept", url: "https://bt.com/", documentUrl: "https://www.bt.com/",
     selector: "#onetrust-accept-btn-handler", label: "Accept all", attribute: 'id="onetrust-accept-btn-handler"' },
 ] as const) {
   const rerender = example.url === "https://bt.com/";
+  const oneTrust = example.selector.startsWith("#onetrust-");
+  const fictionZone = example.url === "https://fictionzone.net/";
   test(`${example.url} retains its exact ${example.action} click ${rerender ? "after a transient element-read failure" : "after the old deadline"}`, { timeout: 30_000 }, async t => {
     const browser = await chromium.launch({ args: ["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"] });
     t.after(() => browser.close());
@@ -56,9 +66,15 @@ for (const example of [
           return route.fulfill({ contentType: "text/html", body: `<script>location.replace(${JSON.stringify(example.documentUrl)})</script>` });
         }
         if (url === example.documentUrl) {
-          return route.fulfill({ contentType: "text/html", body: `<!doctype html><body><script src="/late-consent.js"></script>
-            <section id="${rerender ? "onetrust-banner-sdk" : example.url === "https://ilmattino.it/" ? "iubenda-cs-banner" : "cookie-banner"}" role="dialog" aria-label="Cookie consent"><p>Choose which optional cookies are allowed.</p>
-            <button type="button" ${example.attribute} onclick="if(event.isTrusted) {fetch('/clicked');this.closest('section').hidden=true}">${example.label}</button></section></body>` });
+          const button = `<button type="button" ${example.attribute}
+            onclick="if(event.isTrusted) {fetch('/clicked');this.closest('section').hidden=true}">${example.label}</button>`;
+          const buttons = fictionZone
+            ? `<div class="cookieControl__BarContainer"><div class="cookieControl__BarButtons">${example.action === "reject" ? "<button>Accept</button>" : ""}${button}</div></div>`
+            : button;
+          const bannerId = oneTrust ? "onetrust-banner-sdk" : example.url === "https://ilmattino.it/" ? "iubenda-cs-banner" : "cookie-banner";
+          return route.fulfill({ contentType: "text/html", body: `<!doctype html><meta charset="utf-8"><body><script src="/late-consent.js"></script>
+            <section id="${bannerId}" role="dialog" aria-label="Cookie consent"><p>Choose which optional cookies are allowed.</p>
+            ${buttons}</section></body>` });
         }
         if (url === example.documentUrl + "late-consent.js") {
           if (!rerender) await new Promise(resolve => setTimeout(resolve, 6_500));
@@ -85,6 +101,12 @@ for (const example of [
           outcome: "qualified", scanId, exactSelector: example.selector, ...timing,
           binding: { ...source, documentTokenSha256: hash("loader"), selectorEvidence: "verified_geometry", labelMatch: "exact" },
         }, Infinity) };
+    if (example.url === "https://casadellibro.com/" || fictionZone) {
+      assert.equal(binding.proof.expiresAtMs - binding.proof.issuedAtMs, 10_000);
+      assert.equal(scopedConsentActionWindowMs(example.action, example.selector, { ...source, labelSha256: hash("Changed label") }), undefined);
+      assert.equal(scopedConsentActionWindowMs(example.action, example.selector, { ...source, documentSha256: hash(example.documentUrl + "changed") }), undefined);
+      assert.equal(scopedConsentActionWindowMs(example.action, example.selector, { ...source, geometrySha256: undefined }), undefined);
+    }
     let recheckedAtMs: number | undefined;
     let verifiedClickAtMs: number | undefined;
     const recheck = (outcome: "passed" | "failed") => { recheckedAtMs = outcome === "passed" ? Date.now() : undefined; };

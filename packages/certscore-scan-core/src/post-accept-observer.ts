@@ -1,4 +1,4 @@
-import { takePreparedConsentActionPage, type PreparedConsentActionPage } from "./consent-action-browser";
+import { takePreparedConsentActionPage, type PreparedConsentActionPage, type DeferredConsentProof } from "./consent-action-browser";
 import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
 import { observeCookieScriptReload } from "./cookiescript-reload-persistence.js";
@@ -250,6 +250,7 @@ export interface PostAcceptObserverInput {
   resultBudgetMs?: number;
   browser?: Browser;
   preparedActionPage?: PreparedConsentActionPage;
+  deferredProof?: DeferredConsentProof<AcceptFirstLayerProof>;
   signal?: AbortSignal;
   /** Legacy preparation notification; it does not establish input dispatch. */
   onLifecycleEvent?: (event: { type: "action_dispatched"; atMs: number }) => void;
@@ -353,9 +354,14 @@ export async function runPostAcceptObserver(
   const recipes = validatedRecipes(input);
   const recipeSetId = input.recipeSetId?.slice(0, 160) || recipes[0]!.recipeId;
   const authorizationScanId = input.parentScanId ?? input.scanId;
-  const firstLayerProof = input.firstLayerProof;
-  if (firstLayerProof && (!firstLayerProof.exactSelector ||
-    !acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, Date.now()))) {
+  const initialFirstLayerProof = input.firstLayerProof;
+  const deferredProof = input.deferredProof;
+  if (deferredProof && (initialFirstLayerProof || !input.preparedActionPage || !input.signal ||
+      input.interactionAuthorization.kind !== "scan_target_resolution")) {
+    throw new Error("accept_early_navigation_not_authorized");
+  }
+  if (initialFirstLayerProof && (!initialFirstLayerProof.exactSelector ||
+    !acceptFirstLayerProofMatches(initialFirstLayerProof, authorizationScanId, input.url, Date.now()))) {
     throw new Error("accept_first_layer_proof_missing_invalid_or_expired");
   }
   let effectiveAuthorization:
@@ -379,7 +385,7 @@ export async function runPostAcceptObserver(
   const branchStartedAtMs = Date.now();
   const parentScanStartedAtMs = input.scanStartedAtMs ?? branchStartedAtMs;
   const resultBudgetMs = boundedMs(input.resultBudgetMs, 0, 0, 30_000);
-  let resultBudgetDeadlineAtMs = resultBudgetMs > 0
+  let resultBudgetDeadlineAtMs = resultBudgetMs > 0 && !deferredProof
     ? branchStartedAtMs + resultBudgetMs
     : undefined;
   const resultBudgetAbortController = new AbortController();
@@ -408,7 +414,7 @@ export async function runPostAcceptObserver(
   };
   let deferredPrimingController: AbortController | undefined;
   const sourceFrameBinding = createConsentActionFrameBinding();
-  const baseSignal = resultBudgetDeadlineAtMs === undefined
+  const baseSignal = resultBudgetMs === 0
     ? input.signal
     : input.signal
       ? AbortSignal.any([input.signal, resultBudgetAbortController.signal])
@@ -482,7 +488,7 @@ export async function runPostAcceptObserver(
   let acceptanceRegisteredAtEpochMs: number | undefined;
   let activeRequestIdsAtAcceptanceRegistration: string[] = [];
   let actionDispatched = false;
-  const boundControlDispatch = firstLayerProof !== undefined ||
+  const boundControlDispatch = initialFirstLayerProof !== undefined || deferredProof !== undefined ||
     (input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1");
   let boundControlElement: import("playwright").ElementHandle<HTMLElement | SVGElement> | undefined;
   let cancellationObservedAtMs: number | undefined;
@@ -721,7 +727,7 @@ export async function runPostAcceptObserver(
     receiptCapture = installConsentReceiptCapture(page,{scanId:input.scanId,action:'accept',clockOriginAtEpochMs:parentScanStartedAtMs,signal:effectiveSignal});
     oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
     await installDeferredConsentReadiness(page);
-    await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
+    if (!deferredProof) await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
     originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl, undefined, {
       onSession: session => oneTrustSdkCapture?.bindNativeSession(session, {
         deadlineAtEpochMs: resultBudgetDeadlineAtMs, signal: effectiveSignal,
@@ -837,10 +843,26 @@ export async function runPostAcceptObserver(
     }
     timing.navigationMs = Math.max(0, Date.now() - navigationStartedAtMs);
 
+    // Discovery hooks have been observing this isolated page since commit.
+    // Cross the proof boundary before any target-specific resolver or input.
+    const firstLayerProof = deferredProof ? await operation(async () => {
+      const proof = await deferredProof.take(effectiveSignal);
+      if (!proof.exactSelector || proof.parentDispatchSha256 !== deferredProof.parentDispatchSha256 ||
+          !acceptFirstLayerProofMatches(proof, authorizationScanId, input.url, Date.now())) {
+        throw new Error("accept_first_layer_proof_missing_invalid_or_expired");
+      }
+      // The outer worker signal still bounds preparation and observation.
+      // Charge the observer's action budget from proof release.
+      if (resultBudgetMs > 0) {
+        resultBudgetDeadlineAtMs = Date.now() + resultBudgetMs;
+        scheduleResultBudget();
+      }
+      return proof;
+    }) : initialFirstLayerProof;
     stage("target_binding");
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const resolutionStartedAtMs = Date.now();
-      const expectedLanding = expectedMoodMediaLanding(input.url, input.firstLayerProof?.exactSelector, firstLayerProof?.documentSha256);
+      const expectedLanding = expectedMoodMediaLanding(input.url, firstLayerProof?.exactSelector, firstLayerProof?.documentSha256);
       const redirectCount = Math.max(0, mainNavigationRequestCount - 1);
       const exactServerCommit = committedConsentServerRedirect({
         page, response: navigationResponse, requestedUrl: input.url, redirectCount, signal: effectiveSignal,
@@ -895,7 +917,7 @@ export async function runPostAcceptObserver(
       });
     }
     diagnostics.navigation.finalUrlAuthorized = true;
-    if (authorizedExactTargetUrl && normalizeTargetUrl(input.url) !== authorizedExactTargetUrl && !effectiveSignal?.aborted) {
+    if (authorizedExactTargetUrl && (deferredProof || normalizeTargetUrl(input.url) !== authorizedExactTargetUrl) && !effectiveSignal?.aborted) {
       // Start the passive reveal alongside resolution. The page-side exact URL
       // check prevents a subsequent navigation from inheriting this setup.
       void armResolvedBorlabsDeferredDialogReveal(page, authorizedExactTargetUrl);
@@ -1467,7 +1489,7 @@ export async function runPostAcceptObserver(
           : undefined);
         actionDispatched = true;
         graphCapture?.dispatchAction(actionDispatchedAtEpochMs);
-        if (input.firstLayerProof?.exactSelector === COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR &&
+        if (firstLayerProof?.exactSelector === COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR &&
             actionControlProof?.cmpId === "CookieScript" && actionControlProof.authorizedTargetSha256 && !selectedRecipe?.controlFrameUrl && authorizedExactTargetUrl) {
           cookieScriptReload = observeCookieScriptReload(page!, context!, authorizedExactTargetUrl,
             actionControlProof.authorizedTargetSha256, parentScanStartedAtMs, actionDispatchedAtMs,

@@ -14,7 +14,7 @@ import { isRejectPreparationId, newRejectPreparationId, rejectPreparationCanaryE
   prepareRejectProofSender, takeRejectPreparationRelease, warmRejectPreparationClassifier, withPreparedRejectBrowser,
   type RejectPreparationGate } from "./reject-preparation-canary.js";
 import type { Browser } from "playwright";
-import { prepareConsentActionPage, shareConsentActionBrowser, type PreparedConsentActionPage } from "@certscore/scan-core/consent-action-browser";
+import { prepareConsentActionPage, shareConsentActionBrowser, type PreparedConsentActionPage, type DeferredConsentProof } from "@certscore/scan-core/consent-action-browser";
 import type { PostRefusalObserverInput } from "@certscore/scan-core/post-refusal-observer";
 import { retainRuntimeCmsMetadataSnapshot, type VerifiedChoiceClickReceipt } from "@certscore/contracts";
 import { CANONICAL_ARTIFACT_MAX_DECODED_BYTES, parseCanonicalEvidenceArtifact, serializeCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
@@ -614,7 +614,7 @@ type InlineConsentBrowser = {
   onObservedAction?: (action: ActionLane) => void;
 };
 
-// This signal starts preparation only. Exact proof releases a worker to navigate.
+// A first-layer hint reserves one worker. Only the sealed proof can authorize a click.
 export function notifyObservedActionLanes(
   inline: Pick<InlineConsentBrowser, "onObservedAction">,
   payload: LocalV2DagLambdaDispatchPayload,
@@ -1104,6 +1104,14 @@ function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
 function productionConsentGateEnforced(payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject") {
   return payload.targetEnvironment === "production" &&
     process.env[action === "accept" ? "CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE" : "CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE"] === "1";
+}
+
+function earlyConsentNavigationEnabled(payload: LocalV2DagLambdaDispatchPayload, action: ActionLane) {
+  if (process.env.CERTSCORE_EARLY_CONSENT_NAVIGATION_ENABLED !== "1" || payload.awsRegion !== "us-west-1" ||
+      !payload.actionPreparation || !productionConsentGateEnforced(payload, action) ||
+      rejectPreparationCanaryEnabled(payload)) return false;
+  const config = action === "accept" ? payload.postAcceptObservation : payload.postRefusalObservation;
+  return config?.rolloutMode === "all_eligible" && config.interactionAuthorization.kind === "scan_target_resolution";
 }
 
 function productionConsentGateShadowEnabled(payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject") {
@@ -2637,6 +2645,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   options: {
     artifactRoot: string;
     earlyActionPage?: Promise<PreparedConsentActionPage>;
+    deferredProof?: DeferredConsentProof<RejectFirstLayerProof>;
     onRejectPacketReady?: (receipt: RejectPacketReady) => void;
     prepared?: { browser: Browser; gate: RejectPreparationGate };
     s3Client?: S3PutClient;
@@ -2685,7 +2694,9 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   if (prepared && (!enforce || firstLayerProof || !payload.parentDispatchSha256 || !rejectPreparationCanaryEnabled(payload))) {
     throw new Error("reject_preparation_canary_not_authorized");
   }
-  if (!prepared && (enforce || firstLayerProof) && (!enforce || !rejectFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,payload.parentDispatchSha256,Date.now()))) {
+  if (options.deferredProof && (!enforce || firstLayerProof || !options.earlyActionPage ||
+      !earlyConsentNavigationEnabled(payload, "reject"))) throw new Error("reject_early_navigation_not_allowed");
+  if (!prepared && !options.deferredProof && (enforce || firstLayerProof) && (!enforce || !rejectFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,payload.parentDispatchSha256,Date.now()))) {
     throw new Error("reject_gate_worker_proof_missing_invalid_or_expired");
   }
   let gateRecheck: {outcome:"passed" | "failed"; observedAtMs:number} | undefined;
@@ -2759,6 +2770,15 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     return runPostRefusalObserver({
       ...(preparedActionPage ? { preparedActionPage } : {}),
       ...(firstLayerProof ? { firstLayerProof } : {}),
+      ...(options.deferredProof ? { deferredProof: {
+        parentDispatchSha256: options.deferredProof.parentDispatchSha256,
+        take: async (signal: AbortSignal) => {
+          const proof = await options.deferredProof!.take(signal);
+          firstLayerProof = proof;
+          onExactRejectClickCompleted = clickSink(proof);
+          return proof;
+        },
+      } } : {}),
       ...(prepared ? { browser: prepared.browser, preparedFirstLayer: {
         parentDispatchSha256: payload.parentDispatchSha256!,
         signal: prepared.gate.signal,
@@ -2847,6 +2867,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
   options: {
     artifactRoot: string;
     earlyActionPage?: Promise<PreparedConsentActionPage>;
+    deferredProof?: DeferredConsentProof<AcceptFirstLayerProof>;
     s3Client?: S3PutClient;
     signal?: AbortSignal;
   },
@@ -2861,9 +2882,11 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
   if (config.interactionAuthorization.kind === "loopback" && payload.targetEnvironment !== "local") {
     throw new Error("Loopback post-accept authorization requires the local target environment.");
   }
-  const firstLayerProof = payload.acceptFirstLayerProof;
+  let firstLayerProof = payload.acceptFirstLayerProof;
   const enforce = productionConsentGateEnforced(payload,"accept");
-  if ((enforce || firstLayerProof) && (!enforce || (!firstLayerProof?.exactSelector || firstLayerProof.parentDispatchSha256 !== payload.parentDispatchSha256 ||
+  if (options.deferredProof && (!enforce || firstLayerProof || !options.earlyActionPage ||
+      !earlyConsentNavigationEnabled(payload, "accept"))) throw new Error("accept_early_navigation_not_allowed");
+  if (!options.deferredProof && (enforce || firstLayerProof) && (!enforce || (!firstLayerProof?.exactSelector || firstLayerProof.parentDispatchSha256 !== payload.parentDispatchSha256 ||
         !acceptFirstLayerProofMatches(firstLayerProof,payload.scanId,payload.targetUrl,Date.now())))) {
     throw new Error("accept_gate_worker_proof_missing_invalid_or_expired");
   }
@@ -2888,15 +2911,25 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
       });
     }
     const { runPostAcceptObserver } = await import("@certscore/scan-core/post-accept-observer");
+    const clickSink = (proof: AcceptFirstLayerProof) =>
+      consentClickCheckpointSink(payload, { action: "accept", proof }, options, () => gateRecheck);
+    let onExactAcceptClickCompleted = firstLayerProof ? clickSink(firstLayerProof) : undefined;
     const preparedActionPage = await options.earlyActionPage;
     return runPostAcceptObserver({
       ...(preparedActionPage ? { preparedActionPage } : {}),
-      ...(firstLayerProof ? {firstLayerProof, onAcceptGateFinalRecheck: (outcome:"passed" | "failed") => {
-        gateRecheck = {outcome,observedAtMs:Date.now()};
-      }} : {}),
-      ...(enforce && firstLayerProof ? {
-        onExactAcceptClickCompleted: consentClickCheckpointSink(payload, { action: "accept", proof: firstLayerProof },
-          options, () => gateRecheck),
+      ...(firstLayerProof ? { firstLayerProof } : {}),
+      ...(options.deferredProof ? { deferredProof: {
+        parentDispatchSha256: options.deferredProof.parentDispatchSha256,
+        take: async (signal: AbortSignal) => {
+          const proof = await options.deferredProof!.take(signal);
+          firstLayerProof = proof;
+          onExactAcceptClickCompleted = clickSink(proof);
+          return proof;
+        },
+      } } : {}),
+      ...(enforce ? {
+        onAcceptGateFinalRecheck: (outcome: "passed" | "failed") => { gateRecheck = { outcome, observedAtMs: Date.now() }; },
+        onExactAcceptClickCompleted: (click: ExactClick) => { onExactAcceptClickCompleted?.(click); },
       } : {}),
       onDiagnosticStage: stage => { void checkpoint.stage(stage); },
       formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
@@ -7670,6 +7703,7 @@ async function replayCompletedSqsDispatch(input: {
 
 export async function handler(event: unknown, options: HandlerOptions = {}) {
   let earlyActionPage: Promise<PreparedConsentActionPage> | undefined;
+  let takeEarlyProof: ((signal: AbortSignal) => Promise<AcceptFirstLayerProof | RejectFirstLayerProof>) | undefined;
   let ownedConsentBrowser: InlineConsentBrowser | undefined;
   let payload: LocalV2DagLambdaDispatchPayload | null = null;
   let handlerOutcome: "completed" | "failed" | "unknown" = "unknown";
@@ -7720,21 +7754,46 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       const safetyBudget = options.handlerSafetyTimeoutMs ?? (Number(process.env.CERTSCORE_V2_DAG_LAMBDA_HANDLER_SAFETY_TIMEOUT_MS) ||
         LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS);
       const workBudget = Math.min(options.scannerWorkTimeoutMs ?? EVIDENCE_WORKER_SCAN_BUDGET_MS, Math.max(10, safetyBudget - 7_000));
-      const { page, proof } = await prepareDedicatedConsentWorker({
-        action, deadlineAtMs: Math.min(attempt.waitUntilMs, handlerStartedAtMs + workBudget),
-        signal: options.callerSignal, launch: startBlankExactActionBrowser,
-        onReady: signal => store.markReady(options.s3GetClient ?? client, signal),
-        take: signal => store.take(options.s3GetClient ?? client, {
+      const navigateEarly = earlyConsentNavigationEnabled(payload, action);
+      const take = async (signal: AbortSignal) => {
+        const proof = await store.take(options.s3GetClient ?? client, {
           action, scanId: dispatched.scanId, targetUrl: dispatched.targetUrl,
           parentDispatchSha256: dispatched.parentDispatchSha256!,
-        }, signal),
-      });
-      earlyActionPage = Promise.resolve(page);
-      console.info(JSON.stringify({event: "consent_action_preparation_released.v1", action, scanId: payload.scanId,
-        awsRequestId: options.awsRequestId, elapsedMs: Date.now() - handlerStartedAtMs,
-        proofRemainingMs: proof.expiresAtMs - Date.now()}));
-      if ("binding" in proof) payload.rejectFirstLayerProof = proof;
-      else payload.acceptFirstLayerProof = proof;
+        }, signal);
+        console.info(JSON.stringify({event: "consent_action_preparation_released.v1", action, scanId: dispatched.scanId,
+          awsRequestId: options.awsRequestId, elapsedMs: Date.now() - handlerStartedAtMs,
+          proofRemainingMs: proof.expiresAtMs - Date.now(), earlyNavigation: navigateEarly}));
+        return proof;
+      };
+      const deadlineAtMs = Math.min(attempt.waitUntilMs, handlerStartedAtMs + workBudget);
+      if (navigateEarly) {
+        const remaining = deadlineAtMs - Date.now();
+        if (remaining <= 0) throw new Error("action_preparation_timeout");
+        const preparationSignal = AbortSignal.any([AbortSignal.timeout(remaining),
+          ...(options.callerSignal ? [options.callerSignal] : [])]);
+        earlyActionPage = startBlankExactActionBrowser(remaining).then(async browser => {
+          try {
+            preparationSignal.throwIfAborted();
+            const page = await prepareConsentActionPage(browser, true, action);
+            await store.markReady(options.s3GetClient ?? client, preparationSignal);
+            return page;
+          } catch (error) {
+            await browser.close().catch(() => undefined);
+            throw error;
+          }
+        });
+        void earlyActionPage.catch(() => undefined);
+        takeEarlyProof = signal => take(AbortSignal.any([signal, preparationSignal]));
+      } else {
+        const { page, proof } = await prepareDedicatedConsentWorker({
+          action, deadlineAtMs, signal: options.callerSignal, launch: startBlankExactActionBrowser,
+          onReady: signal => store.markReady(options.s3GetClient ?? client, signal),
+          take,
+        });
+        earlyActionPage = Promise.resolve(page);
+        if ("binding" in proof) payload.rejectFirstLayerProof = proof;
+        else payload.acceptFirstLayerProof = proof;
+      }
     }
     if (!earlyActionPage && !options.runArtifactChain && payload.orchestrationMode === "worker") {
       const accept = payload.workerLane === "accept_observation" && isPostAcceptWorkerEnabled(payload)
@@ -7828,8 +7887,16 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         ? runLocalV2DagLambdaPostRefusalArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
             earlyActionPage,
+            ...(takeEarlyProof ? { deferredProof: {
+              parentDispatchSha256: dispatchPayload.parentDispatchSha256!,
+              take: async (signal: AbortSignal) => {
+                const proof = await takeEarlyProof!(signal);
+                if (!("binding" in proof)) throw new Error("action_preparation_wrong_action");
+                return proof;
+              },
+            } } : {}),
             onRejectPacketReady: dispatchPayload.targetEnvironment === "production" &&
-              dispatchPayload.rejectFirstLayerProof && productionConsentGateEnforced(dispatchPayload, "reject")
+              (dispatchPayload.rejectFirstLayerProof || takeEarlyProof) && productionConsentGateEnforced(dispatchPayload, "reject")
               ? options.onRejectPacketReady : undefined,
             s3Client: options.s3Client,
             signal: runOptions.signal,
@@ -7838,6 +7905,14 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         ? runLocalV2DagLambdaPostAcceptArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
             earlyActionPage,
+            ...(takeEarlyProof ? { deferredProof: {
+              parentDispatchSha256: dispatchPayload.parentDispatchSha256!,
+              take: async (signal: AbortSignal) => {
+                const proof = await takeEarlyProof!(signal);
+                if ("binding" in proof) throw new Error("action_preparation_wrong_action");
+                return proof;
+              },
+            } } : {}),
             s3Client: options.s3Client,
             signal: runOptions.signal,
           })

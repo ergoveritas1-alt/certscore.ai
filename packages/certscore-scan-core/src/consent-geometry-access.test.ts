@@ -139,6 +139,27 @@ test("classifyConsentGeometryAccess leaves ordinary pages eligible for A/R/O", (
   assert.deepEqual(diagnostic.reasonCodes, []);
 });
 
+test("ordinary titles and catalog counts do not make a loaded consent page forbidden", () => {
+  const diagnostic = classifyConsentGeometryAccess({
+    httpStatus: 200,
+    title: "ReelShort: Every Second Is Drama",
+    bodyText: "Home Categories Play The Dragon King's Forbidden Maid. 403 views. Accept All.",
+  });
+  assert.equal(diagnostic.status, "loaded");
+  assert.deepEqual(diagnostic.reasonCodes, []);
+});
+
+test("forbidden error headings and HTTP 403 still mark consent access no-go", () => {
+  for (const input of [
+    { httpStatus: 200, title: "Forbidden", bodyText: "The server rejected the request." },
+    { httpStatus: 200, title: "Error", bodyText: "403 Forbidden. nginx" },
+    { httpStatus: 200, title: "Error", bodyText: "Access to this resource is forbidden." },
+    { httpStatus: 403, title: "Example" },
+  ]) {
+    assert.equal(classifyConsentGeometryAccess(input).status, "access_no_go");
+  }
+});
+
 test("classifyConsentGeometryAccess does not treat ordinary Cloudflare Pages attribution as a challenge", () => {
   const diagnostic = classifyConsentGeometryAccess({
     httpStatus: 200,

@@ -1,4 +1,4 @@
-import { takePreparedConsentActionPage, type PreparedConsentActionPage } from "./consent-action-browser";
+import { takePreparedConsentActionPage, type PreparedConsentActionPage, type DeferredConsentProof } from "./consent-action-browser";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
 import { observeCookieScriptReload } from "./cookiescript-reload-persistence.js";
 import { observeTrustArcReload } from "./trustarc-terminal-reload.js";
@@ -268,6 +268,7 @@ export interface PostRefusalObserverInput {
   browserMode?: "headless" | "headed";
   browser?: Browser;
   preparedActionPage?: PreparedConsentActionPage;
+  deferredProof?: DeferredConsentProof<RejectFirstLayerProof>;
   signal?: AbortSignal;
   /** Legacy preparation notification; it does not establish input dispatch. */
   onLifecycleEvent?: (event: {
@@ -424,6 +425,11 @@ export async function runPostRefusalObserver(
     "initialStorageAtMs" | "actionabilityFinishedAtMs" | "confirmationBaselineAtMs" |
     "storageReadyAtMs" | "liveProofReadyAtMs" | "clickDispatchedAtMs" | "clickCompletedAtMs", number>>;
   let firstLayerProof = input.firstLayerProof;
+  const deferredProof = input.deferredProof;
+  if (deferredProof && (prepared || firstLayerProof || !input.preparedActionPage || !input.signal ||
+      input.interactionAuthorization.kind !== "scan_target_resolution")) {
+    throw new Error("reject_early_navigation_not_authorized");
+  }
   if (prepared && (firstLayerProof || !input.browser || input.browser.contexts().length !== 0 ||
       (input.interactionAuthorization.kind !== "owned_canary" && input.interactionAuthorization.kind !== "loopback"))) {
     throw new Error("reject_blank_setup_not_authorized");
@@ -454,10 +460,10 @@ export async function runPostRefusalObserver(
   const branchStartedAtMs = Date.now();
   const parentScanStartedAtMs = input.scanStartedAtMs ?? branchStartedAtMs;
   const resultBudgetMs = boundedMs(input.resultBudgetMs, 0, 0, 30_000);
-  const resultBudgetDeadlineAtMs = resultBudgetMs > 0 ? branchStartedAtMs + resultBudgetMs : undefined;
+  let resultBudgetDeadlineAtMs = resultBudgetMs > 0 && !deferredProof ? branchStartedAtMs + resultBudgetMs : undefined;
   const budgetController = new AbortController();
   const sourceFrameBinding = createConsentActionFrameBinding();
-  const baseSignal = resultBudgetDeadlineAtMs === undefined ? input.signal
+  const baseSignal = resultBudgetMs === 0 ? input.signal
     : input.signal ? AbortSignal.any([input.signal, budgetController.signal]) : budgetController.signal;
   const effectiveSignal = AbortSignal.any([sourceFrameBinding.signal, ...(baseSignal ? [baseSignal] : [])]);
   const preparationSignal = prepared && AbortSignal.any([effectiveSignal, prepared.signal]);
@@ -476,10 +482,15 @@ export async function runPostRefusalObserver(
   };
   const remainingResultBudgetMs = (requested: number) => resultBudgetDeadlineAtMs === undefined ? requested
     : Math.max(0, Math.min(requested, resultBudgetDeadlineAtMs - Date.now()));
-  const budgetTimer = resultBudgetDeadlineAtMs === undefined ? undefined : setTimeout(() => {
-    budgetController.abort(new Error("Post-refusal observer result budget exhausted."));
-  }, resultBudgetMs);
-  budgetTimer?.unref?.();
+  const scheduleResultBudget = () => {
+    if (resultBudgetDeadlineAtMs === undefined) return undefined;
+    const timer = setTimeout(() => {
+      budgetController.abort(new Error("Post-refusal observer result budget exhausted."));
+    }, Math.max(0, resultBudgetDeadlineAtMs - Date.now()));
+    timer.unref?.();
+    return timer;
+  };
+  let budgetTimer = scheduleResultBudget();
   const normalizedUrl = input.normalizedUrl ?? normalizeTargetUrl(input.url);
   const observationWindowMs = boundedMs(input.observationWindowMs, DEFAULT_OBSERVATION_WINDOW_MS, 0, 30_000);
   const confirmationTimeoutMs = boundedMs(
@@ -535,7 +546,7 @@ export async function runPostRefusalObserver(
   let actionDiscovery: ConsentActionDiscovery | undefined;
   let cancellationObservedAtMs: number | undefined;
   let actionDispatched = false;
-  const recheckExactReject = !!(firstLayerProof || prepared) || (input.interactionAuthorization.kind === "loopback" &&
+  const recheckExactReject = !!(firstLayerProof || prepared || deferredProof) || (input.interactionAuthorization.kind === "loopback" &&
     localExactRejectControlEnabled());
   const boundControlDispatch = recheckExactReject ||
     (input.boundControlDispatch ?? process.env.CERTSCORE_AR_BOUND_CONTROL_DISPATCH_ENABLED === "1");
@@ -802,7 +813,7 @@ export async function runPostRefusalObserver(
     passiveCmpCapture = installCmpPassiveDiagnostics(page);
     receiptCapture = installConsentReceiptCapture(page,{scanId:input.scanId,action:'reject',clockOriginAtEpochMs:parentScanStartedAtMs,signal:effectiveSignal});
     oneTrustSdkCapture = installOneTrustSdkSourceCapture(page);
-    await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
+    if (!deferredProof) await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
     const preparedStorageSession = input.preparedActionPage?.rejectStorageSession;
     originDomStorageCapture = await installActionDomStorageCapture(
       page, observationTargetUrl, preparedStorageSession ? () => preparedStorageSession : undefined, {
@@ -1124,6 +1135,19 @@ export async function runPostRefusalObserver(
     }
     timing.navigationMs = Math.max(0, Date.now() - navigationStartedAtMs);
 
+    // Wait for the sealed passive proof before resolving or acting on a choice.
+    if (deferredProof) {
+      const proof = await operation(() => deferredProof.take(effectiveSignal));
+      if (!rejectFirstLayerProofMatches(proof, authorizationScanId, input.url, deferredProof.parentDispatchSha256, Date.now())) {
+        throw new Error("reject_first_layer_proof_missing_invalid_or_expired");
+      }
+      firstLayerProof = proof;
+      // Early navigation is already bounded by the outer worker signal.
+      if (resultBudgetMs > 0) {
+        resultBudgetDeadlineAtMs = Date.now() + resultBudgetMs;
+        budgetTimer = scheduleResultBudget();
+      }
+    }
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const passiveResolutionStartedAtMs = navigationStartedAtMs;
       const expectedLanding = expectedMoodMediaLanding(input.url, firstLayerProof?.exactSelector, firstLayerProof?.binding.documentSha256);
@@ -1199,7 +1223,7 @@ export async function runPostRefusalObserver(
     }
     interactionDiagnostics.navigation.documentCommitted = true;
     interactionDiagnostics.navigation.finalUrlAuthorized = true;
-    if (authorizedExactTargetUrl && normalizeTargetUrl(input.url) !== authorizedExactTargetUrl && !effectiveSignal?.aborted) {
+    if (authorizedExactTargetUrl && (deferredProof || normalizeTargetUrl(input.url) !== authorizedExactTargetUrl) && !effectiveSignal?.aborted) {
       // Start the passive reveal alongside resolution. The page-side exact URL
       // check prevents a subsequent navigation from inheriting this setup.
       void armResolvedBorlabsDeferredDialogReveal(page, authorizedExactTargetUrl);
