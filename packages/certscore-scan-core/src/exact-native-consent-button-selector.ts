@@ -8,10 +8,15 @@ export function hubSpotHrefLessConsentSelector(action: "accept" | "reject"): str
 const adikteevDocument = "https://www.adikteev.com/";
 const navigraphDocument = "https://navigraph.com/";
 const navigraphSelector = '#consent a[data-testid="acceptAllCookies"]:not([href], [target], [download])';
+const iobitDocument = "https://www.iobit.com/en/index.php?s";
+const iobitSelector = "div.float-bar a:not([href], [target], [download])";
 
 export function reviewedConsentAnchor(action: "accept" | "reject", selector?: string) {
   if (action === "accept" && selector === navigraphSelector) {
-    return { documentUrl: navigraphDocument, banner: "#consent" };
+    return { documentUrl: navigraphDocument, banner: "#consent", labels: ["ACCEPT ALL COOKIES", "Accept all cookies"] };
+  }
+  if (action === "accept" && selector === iobitSelector) {
+    return { documentUrl: iobitDocument, banner: "div.float-bar", labels: ["I Accept"] };
   }
   const id = action === "accept" ? "hs-eu-confirmation-button" : "hs-eu-decline-button";
   if (selector === `#hs-eu-cookie-confirmation a#${id}[role="button"][href="javascript:void(0);"]:not([target], [download])`) {
@@ -28,8 +33,7 @@ export function geometryConsentButtonLinkMatches(
   if (reviewed && candidate.tagName === "a" && candidate.frameContext.frameUrl === reviewed.documentUrl) {
     return reviewed.id
       ? candidate.role === "button" && cmp?.detections?.some(detection => detection.canonicalName === "HubSpot Consent Banner") === true
-      : candidate.semanticallyInteractive === true &&
-        (candidate.label === "ACCEPT ALL COOKIES" || candidate.label === "Accept all cookies");
+      : candidate.semanticallyInteractive === true && reviewed.labels?.includes(candidate.label) === true;
   }
   return candidate.tagName === "a" && candidate.role === "button" &&
     (candidate.linkDestination === "same_document" ||
@@ -79,14 +83,23 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
       ? selector : undefined;
   }
   // Only the observed literal no-op or href-less anchor can qualify. This
-  // browser function is serialized, so keep its two scope declarations local.
-  const reviewedSelector = element.localName !== "a" ? undefined
-    : view.location.href === "https://www.adikteev.com/" && anchor && hubSpotId &&
-      element.getAttribute("href") === "javascript:void(0);" && element.closest("#hs-eu-cookie-confirmation")
-      ? `#hs-eu-cookie-confirmation a#${element.id}[role="button"][href="javascript:void(0);"]:not([target], [download])`
-      : view.location.href === "https://navigraph.com/" &&
-        element.matches('#consent a[data-testid="acceptAllCookies"]:not([href], [target], [download])')
-        ? '#consent a[data-testid="acceptAllCookies"]:not([href], [target], [download])' : undefined;
+  // browser function is serialized, so keep its scope declarations local.
+  let reviewedSelector: string | undefined;
+  let reviewedBanner: string | undefined;
+  if (element.localName === "a") {
+    if (view.location.href === "https://www.adikteev.com/" && anchor && hubSpotId &&
+        element.getAttribute("href") === "javascript:void(0);" && element.closest("#hs-eu-cookie-confirmation")) {
+      reviewedBanner = "#hs-eu-cookie-confirmation";
+      reviewedSelector = `${reviewedBanner} a#${element.id}[role="button"][href="javascript:void(0);"]:not([target], [download])`;
+    } else if (view.location.href === "https://navigraph.com/") {
+      reviewedBanner = "#consent";
+      reviewedSelector = '#consent a[data-testid="acceptAllCookies"]:not([href], [target], [download])';
+    } else if (view.location.href === "https://www.iobit.com/en/index.php?s") {
+      reviewedBanner = "div.float-bar";
+      reviewedSelector = "div.float-bar a:not([href], [target], [download])";
+    }
+    if (reviewedSelector && !element.matches(reviewedSelector)) reviewedSelector = undefined;
+  }
   if (element.localName !== "button" && !buttonLink && !reviewedSelector) return undefined;
 
   const resolvesOnly = (selector: string, expected: Element) => {
@@ -113,9 +126,8 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
     return hints;
   };
 
-  if (reviewedSelector) {
-    const banner = view.location.href === "https://navigraph.com/" ? "#consent" : "#hs-eu-cookie-confirmation";
-    return root.querySelectorAll(banner).length === 1 && !root.querySelector("base[target]") &&
+  if (reviewedSelector && reviewedBanner) {
+    return root.querySelectorAll(reviewedBanner).length === 1 && !root.querySelector("base[target]") &&
       (!element.id || resolvesOnly("#" + CSS.escape(element.id), element)) &&
       !element.closest("form,button,label,[contenteditable]") && !element.querySelector("a,button,input,[role=button]") &&
       resolvesOnly(reviewedSelector, element) ? reviewedSelector : undefined;

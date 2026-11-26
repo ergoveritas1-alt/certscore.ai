@@ -18,6 +18,7 @@ import { proofForReadyAction } from "./dedicated-action-release.js";
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const adikteev = "https://www.adikteev.com/";
 const navigraph = "https://navigraph.com/";
+const iobit = "https://www.iobit.com/en/index.php?s";
 const hubSpot = `<div id="hs-eu-cookie-confirmation" role="dialog" aria-label="Cookie preferences">
   <p>Choose whether to allow optional cookies for analytics and marketing.</p>
   <div id="hs-eu-cookie-confirmation-button-group">
@@ -29,7 +30,15 @@ const consent = `<section id="consent" role="dialog" aria-label="Cookie preferen
     <a class="btn cta" data-testid="acceptAllCookies" data-choice="accept" style="text-transform: uppercase">Accept all cookies</a>
   </div></div></section>`;
 
-for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigraph, "accept"]] as const) {
+// The retained snapshot identifies these two anchors and the final route
+// but omits the Accept link destination. This fixture supplies the safe shape
+// that a future capture must independently verify.
+const iobitNotice = `<div class="float-bar" role="dialog" aria-label="Cookie consent">
+  <div>We use optional cookies. Read our <a href="/privacy">privacy policy</a>.
+    <a data-choice="accept">I Accept</a>
+  </div></div>`;
+
+for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigraph, "accept"], [iobit, "accept"]] as const) {
   test(`${new URL(url).hostname} binds and retains the reviewed ${action} click`, {timeout: 20_000}, async t => {
     for (const flag of ["CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE", "CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE"]) {
       const previous = process.env[flag];
@@ -38,7 +47,8 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
     }
     const browser = await chromium.launch({args: ["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
     t.after(() => browser.close());
-    const requested = url === adikteev ? "https://adikteev.com/" : url;
+    const requested = url === adikteev ? "https://adikteev.com/" : url === iobit ? "https://iobit.com/" : url;
+    const clickPrefix = new URL("/clicked/", url).href;
     const clicks: string[] = [];
     let changedDestination = false;
     const open = browser.newContext.bind(browser);
@@ -48,7 +58,7 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
         const target = route.request().url();
         if (target === requested && requested !== url) return route.fulfill({ contentType: "text/html", body: `<script>location.replace(${JSON.stringify(url)})</script>` });
         if (target === url) return route.fulfill({ contentType: "text/html", body: `<!doctype html><style>a{display:inline-block;padding:12px}</style>
-          ${url === adikteev ? hubSpot : consent}
+          ${url === adikteev ? hubSpot : url === iobit ? iobitNotice : consent}
           <script>
           if (${changedDestination}) document.querySelector('[data-choice="${action}"]').setAttribute('href','/changed-destination');
           document.querySelector('[role=dialog]').addEventListener('click',event=>{
@@ -57,7 +67,7 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
             fetch('/clicked/' + choice);
             event.target.closest('[role=dialog]').hidden = true;
           });</script>` });
-        if (target.startsWith(url + "clicked/")) {
+        if (target.startsWith(clickPrefix)) {
           clicks.push(new URL(target).pathname);
           return route.fulfill({status: 200, body: ""});
         }
@@ -100,6 +110,16 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
     await page.evaluate(() => document.head.insertAdjacentHTML("beforeend", '<base target="_blank">'));
     assert.equal(await candidate.evaluate(exactNativeConsentButtonSelector), undefined);
     await page.locator("base").evaluate(element => element.remove());
+    if (url === iobit) {
+      await candidate.evaluate(element => {
+        const duplicate = element.cloneNode(true) as HTMLElement;
+        duplicate.removeAttribute("data-choice");
+        duplicate.setAttribute("data-test-duplicate", "");
+        element.after(duplicate);
+      });
+      assert.equal(await candidate.evaluate(exactNativeConsentButtonSelector), undefined);
+      await page.locator("[data-test-duplicate]").evaluate(element => element.remove());
+    }
     await candidate.evaluate(element => element.setAttribute("href", "/changed-destination"));
     assert.equal(await candidate.evaluate(exactNativeConsentButtonSelector), undefined);
     await passive.close();

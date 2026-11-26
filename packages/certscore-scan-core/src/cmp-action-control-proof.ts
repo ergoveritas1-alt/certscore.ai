@@ -467,6 +467,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         const view = document?.defaultView;
         const exactReviewedAnchor = reviewedAnchor && exact?.localName === "a" &&
           view?.location.href === reviewedAnchor.documentUrl && exact.matches(passiveSelector) &&
+          (!reviewedAnchor.labels || reviewedAnchor.labels.includes((exact as HTMLElement).innerText.trim())) &&
           document?.querySelectorAll(reviewedAnchor.banner).length === 1 && !document.querySelector("base[target]") &&
           (!reviewedAnchor.id || document.querySelectorAll("#" + reviewedAnchor.id).length === 1) &&
           !exact.closest("form,button,label,[contenteditable]") && !exact.querySelector("a,button,input,[role=button]");
