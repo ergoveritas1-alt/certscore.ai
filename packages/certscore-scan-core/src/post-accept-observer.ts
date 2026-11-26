@@ -30,6 +30,7 @@ import { createActionRequestRetention } from "./action-request-retention.js";
 import { LATE_FORM_CAPTURE_EXTENSION_MS, startAfterAcceptClickFormSnapshots, startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 import { startPostAcceptFormCapture } from "./post-accept-form-capture.js";
+import { isScopedSitsBorlabsControl } from "./scoped-consent-action-window.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { genericConsentActionLabelSupported } from "./consent-action-label-eligibility.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
@@ -1531,7 +1532,10 @@ export async function runPostAcceptObserver(
             const timeout = deadline - Date.now();
             if (timeout <= 0) throw new Error("accept_first_layer_proof_expired");
             commit();
-            return element.click({ timeout });
+            // The exact Borlabs input can finish while a subsequent navigation is still pending.
+            // Keep the original-document guard and observation independent of Playwright's navigation wait.
+            const noWaitAfter = isScopedSitsBorlabsControl("accept", firstLayerProof.exactSelector, firstLayerProof);
+            return element.click({ timeout, ...(noWaitAfter ? { noWaitAfter } : {}) });
           },
         });
       } else {

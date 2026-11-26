@@ -10,6 +10,7 @@ import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBa
 import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
 import {readWithinActionBoundary} from "./action-operation-boundary.js";
 import { createConsentActionFrameBinding } from "./consent-action-frame-binding.js";
+import { isScopedSitsBorlabsControl } from "./scoped-consent-action-window.js";
 import type { CookieYesLegacyBaseline } from "./cookieyes-legacy-consent-state.js";
 import {installConsentReceiptCapture,receiptCaptureToken,retainReceiptCookies,retainTrustArcReceiptCookies} from './consent-receipt-capture.js';
 import { isComplianzControl } from "./complianz-consent-state.js";
@@ -1865,6 +1866,7 @@ export async function runPostRefusalObserver(
         recheckExactReject,
         input.onRejectGateFinalRecheck,
         passiveProof?.exactSelector,
+        isScopedSitsBorlabsControl("reject", passiveProof?.exactSelector, passiveProof?.binding),
       );
     } catch (error) {
       clickError = error;
@@ -3045,6 +3047,7 @@ async function dispatchRejectControl(
   recheckExactReject = false,
   onExactRecheck?: (outcome: "passed" | "failed") => void,
   exactSelector?: string,
+  skipPostClickNavigationWait = false,
 ) {
   assertDispatchAllowed?.();
   const boundControl = readOptions?.boundElement ?? control;
@@ -3077,7 +3080,7 @@ async function dispatchRejectControl(
     if (timeout <= 0) throw new Error("reject_exact_control_recheck_expired");
     recordRecheck?.("passed");
     onDispatch?.();
-    await element.click({ timeout });
+    await element.click({ timeout, ...(skipPostClickNavigationWait ? { noWaitAfter: true } : {}) });
     return;
   }
   if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {

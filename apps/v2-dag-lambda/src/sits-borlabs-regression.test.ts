@@ -44,6 +44,7 @@ document.querySelector('section').addEventListener('click', event => {
   if (action === 'accept') {
     const script = document.createElement('script'); script.src = '${formsScript}'; document.head.append(script);
   } else if (action === 'reject') setTimeout(() => fetch('https://track.hubspot.com/__ptq.gif?k=1'), 6500);
+  if (action === 'accept' || action === 'reject') location.reload();
 });
 </script>`;
 const init = `window.grants={essential:false,analytics:false};
@@ -82,13 +83,25 @@ test("SITS mixed-language close, late Borlabs choices and post-choice report evi
   t.after(() => browser.close());
   let passive = true;
   const clicks: string[] = [];
+  let pendingReloads = 0;
   const open = browser.newContext.bind(browser);
   t.mock.method(browser,"newContext",async (...args: Parameters<typeof open>) => {
     const context = await open({...args[0], serviceWorkers:"block"});
+    let initialDocumentServed = false;
     await context.route("**/*",async route => {
       const u = route.request().url();
       if (u === url) return route.fulfill({contentType:"text/html",body:`<script>location.replace(${JSON.stringify(target)})</script>`});
-      if (u === target) return route.fulfill({contentType:"text/html",body:html});
+      if (u === target) {
+        if (!initialDocumentServed) {
+          initialDocumentServed = true;
+          return route.fulfill({contentType:"text/html",body:html});
+        }
+        // The trusted click has already run. Keep the original document active
+        // while Chromium waits for the pending navigation to finish.
+        pendingReloads += 1;
+        await new Promise(resolve => setTimeout(resolve, 1250));
+        return route.abort("aborted");
+      }
       if (u === url+"borlabs-cookie.js") {
         if (!passive) await new Promise(resolve => setTimeout(resolve,10_000));
         return route.fulfill({contentType:"text/javascript",body:init});
@@ -198,5 +211,7 @@ test("SITS mixed-language close, late Borlabs choices and post-choice report evi
   assert.ok(rejected.network.requests.some(req=>req.hostname==="track.hubspot.com" && req.startedAtMs! > rejected.refusalRegistration.actionDispatchedAtMs!));
   t.diagnostic(`Accept receipt at ${acceptReceipt.completedAtMs - a.issuedAtMs} ms, Reject receipt at ${rejectReceipt.completedAtMs - r.issuedAtMs} ms`);
   assert.deepEqual(clicks,["/clicked/accept","/clicked/reject"]);
+  assert.equal(pendingReloads,2);
+  t.diagnostic(`EU-IE replay: 1 verified Accept receipt, 1 verified Reject receipt, ${rows.length} after-Accept forms, ${rows.reduce((count, row) => count + row.form.fields.length, 0)} fields`);
   assert.ok(rejectReceipt.completedAtMs <= r.expiresAtMs-200 && rejectReceipt.completedAtMs > r.issuedAtMs+6000);
 });

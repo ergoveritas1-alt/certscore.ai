@@ -9,12 +9,16 @@ function verifiedControl(
   return { action, requestedTargets: requestedUrls.map(hash), document: hash(documentUrl), selector, label: hash(label), windowMs };
 }
 
-const slowControls = [
+const sitsBorlabsControls = [
   // The original SITS visit verified its visible control at 11.81 s.
   verifiedControl("accept", ["https://sits.com/", "https://sits.com/en/"], "https://sits.com/en/",
     "button.brlbs-btn-accept-all", "Accept all", 16_000),
   verifiedControl("reject", ["https://sits.com/", "https://sits.com/en/"], "https://sits.com/en/",
     "button.brlbs-btn-accept-only-essential", "Accept essential cookies", 16_000),
+];
+
+const slowControls = [
+  ...sitsBorlabsControls,
   // Retained clicks at these exact controls were lost at the six-second cutoff.
   verifiedControl("accept", ["https://weedmaps.com/"], "https://weedmaps.com/",
     'button[data-testid="cookie-banner-accept"]', "Accept", 10_000),
@@ -31,15 +35,27 @@ const slowControls = [
     "button.iubenda-cs-accept-btn", "ACCETTA E CONTINUA", 10_000),
 ];
 
+type RetainedBinding = {
+  requestedTargetSha256?: string;
+  documentSha256?: string;
+  labelSha256?: string;
+  geometrySha256?: string;
+  labelSource?: string;
+};
+
+function matchesVerifiedControl(control: typeof slowControls[number], action: Action, selector: unknown,
+  binding?: RetainedBinding): boolean {
+  return Boolean(binding?.geometrySha256 && !binding.labelSource && binding.requestedTargetSha256 &&
+    control.action === action && control.selector === selector && control.document === binding.documentSha256 &&
+    control.label === binding.labelSha256 && control.requestedTargets.includes(binding.requestedTargetSha256));
+}
+
 /** A longer release requires a fresh qualification tied to the exact retained
  * document, selector and label. All live recheck and action constraints apply. */
-export function scopedConsentActionWindowMs(action: Action, selector: unknown, binding?: {
-  requestedTargetSha256?: string; documentSha256?: string; labelSha256?: string;
-  geometrySha256?: string; labelSource?: string;
-}): number | undefined {
-  if (!binding?.geometrySha256 || binding.labelSource || !binding.requestedTargetSha256) return;
-  const requested = binding.requestedTargetSha256;
-  return slowControls.find(control => control.action === action && control.selector === selector &&
-    control.document === binding.documentSha256 && control.label === binding.labelSha256 &&
-    control.requestedTargets.includes(requested))?.windowMs;
+export function scopedConsentActionWindowMs(action: Action, selector: unknown, binding?: RetainedBinding): number | undefined {
+  return slowControls.find(control => matchesVerifiedControl(control, action, selector, binding))?.windowMs;
+}
+
+export function isScopedSitsBorlabsControl(action: Action, selector: unknown, binding?: RetainedBinding): boolean {
+  return sitsBorlabsControls.some(control => matchesVerifiedControl(control, action, selector, binding));
 }
