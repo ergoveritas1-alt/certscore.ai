@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium, type CDPSession } from "playwright";
-import { bindAccessibilityNodesToDom, passiveButtonSelectorMatches, AX_DOM_BINDING_MAX_NODES } from "./consent-accessibility-dom-binding.js";
+import { bindAccessibilityNodesToDom, passiveButtonSelectorMatches, resideoTrustArcSourceLabel, AX_DOM_BINDING_MAX_NODES } from "./consent-accessibility-dom-binding.js";
 import { consentControlsFromAccessibilityTree, filterAccessibilityTreeToFirstLayer, type ConsentAccessibilityTreeNode } from "./scanners/pre-consent-runtime-scanner.js";
 import {buildConsentUiObservationFromEvidence,mergeConsentUiObservations} from "./scanners/pre-consent-runtime-scanner.js";
 import {consentUiObservationSchema} from "@certscore/contracts";
+import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 
 const document = {url: "https://fixture.certscore.ai/", identity: {source: "cdp_loader_id" as const, token: "loader-1"}};
 const node = (id = 1): ConsentAccessibilityTreeNode => ({nodeId: String(id), backendDOMNodeId: id,
@@ -137,4 +138,30 @@ test("local Chromium verifies only unique same-document native button IDs agains
     assert.ok(duplicate.every(entry => entry.domBinding?.verifiedButtonSelector !== "#acceptAll"));
     await client.detach();
   } finally { await browser.close(); }
+});
+
+test("Resideo TrustArc caption reconciliation requires the exact native control and banner evidence", () => {
+  const pageUrl = "https://www.resideo.com/us/en/resideo-home/";
+  const group = "#truste-consent-buttons div.consent-buttons-2";
+  const geometry = {
+    pageUrl,
+    containers: [{ containerId: "group", selectorHint: group, layer: "first_layer", intersectsViewport: true }],
+    cmp: { detections: [{ canonicalName: "TrustArc", matchedSignals: [
+      { source: "dom", value: "#truste-consent-track" }, { source: "host", value: "consent.trustarc.com" },
+    ] }] },
+  } as ConsentControlGeometryArtifact;
+  for (const [action, id, caption] of [
+    ["accept", "#truste-consent-button", "Agree"], ["reject", "#truste-consent-required", "Decline All"],
+  ] as const) {
+    const candidate = {
+      label: caption.toUpperCase(), tagName: "button", selectorHint: id, containerId: "group",
+      containerSelectorHint: group, frameContext: { frameKind: "main_frame", frameUrl: pageUrl },
+    } as ConsentControlCandidateEvidence;
+    assert.equal(resideoTrustArcSourceLabel(candidate, geometry, action), caption);
+    assert.equal(resideoTrustArcSourceLabel(candidate, { ...geometry, pageUrl: document.url }, action), undefined);
+    assert.equal(resideoTrustArcSourceLabel(candidate, { ...geometry, containers: [] }, action), undefined);
+    for (const changed of [
+      { label: "ACCEPT ALL" }, { tagName: "a" }, { selectorHint: "#different" }, { ariaLabel: caption },
+    ]) assert.equal(resideoTrustArcSourceLabel({ ...candidate, ...changed }, geometry, action), undefined);
+  }
 });

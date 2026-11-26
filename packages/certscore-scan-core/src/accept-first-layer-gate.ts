@@ -3,7 +3,7 @@ import { geometryConsentButtonLinkMatches, reviewedConsentAnchor } from "./exact
 import { consentGateDocument } from "./consent-gate-document.js";
 import { DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP, drupalOverflowObservationMatches,
   hasVerifiedDrupalOverflowGeometry } from "./drupal-consent-overflow-geometry.js";
-import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
+import { cookieInformationRenderedLabel, passiveButtonSelectorMatches, resideoTrustArcSourceLabel } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { createHash } from "node:crypto";
 import type { CanonicalEvidenceBundle, ConsentActionControlProof, ConsentUiObservation } from "@certscore/contracts";
@@ -207,10 +207,12 @@ function exactGeometryAccept(
   const reviewedAnchor = reviewedConsentAnchor("accept", candidate.selectorHint);
   const navigraphCaption = reviewedAnchor && !reviewedAnchor.id && reviewedAnchor.documentUrl === document.url &&
     candidate.label === "ACCEPT ALL COOKIES" ? "Accept all cookies" : undefined;
+  const starfieldCaption = reviewedAnchor?.starfield && reviewedAnchor.documentUrl === document.url &&
+    candidate.label === "ACCEPT" && !candidate.ariaLabel ? "Accept" : undefined;
   const binding = { cookieScriptRole, reviewedAnchor,
     selector: cookieScriptRole ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : candidate.selectorHint, inventorySelector: candidate.selectorHint,
     sourceLabel: cookieScriptRole && !candidate.ariaLabel && candidate.cookieScriptUppercaseSourceLabel?.toUpperCase() === candidate.label
-      ? candidate.cookieScriptUppercaseSourceLabel : navigraphCaption, tagName: candidate.tagName, separateConflicts, oneTrustItalianAccept, dafitiAdoptAccept, caiaAccept };
+      ? candidate.cookieScriptUppercaseSourceLabel : navigraphCaption ?? starfieldCaption ?? resideoTrustArcSourceLabel(candidate, geometry, "accept"), tagName: candidate.tagName, separateConflicts, oneTrustItalianAccept, dafitiAdoptAccept, caiaAccept };
   if (candidate.ariaLabel) {
     // AX inventory can report the accessible name while geometry records the
     // rendered caption. Both must independently support Accept. The receipt

@@ -11,7 +11,25 @@ const navigraphSelector = '#consent a[data-testid="acceptAllCookies"]:not([href]
 const iobitDocument = "https://www.iobit.com/en/index.php?s";
 const iobitSelector = "div.float-bar a:not([href], [target], [download])";
 
+export { TOOM_ACCEPT_SELECTOR } from "@certscore/contracts";
+
+const mistDocument = "https://www.mist.com/";
+const mistBanner = "#truste-consent-buttons";
+const mistSelector = '#truste-consent-buttons a#truste-consent-button:not([href], [target], [download])';
+
+const starfieldDocument = "https://starfieldtech.com/";
+const starfieldId = "28171fad-c63e-45f9-b528-cdc4dc2813bf";
+const starfieldBanner = `[id="${starfieldId}-banner"]`;
+
 export function reviewedConsentAnchor(action: "accept" | "reject", selector?: string) {
+  const actionId = action === "accept" ? "accept" : "decline";
+  if (selector === `${starfieldBanner} a[id="${starfieldId}-${actionId}"][href=""]:not([target], [download])`) {
+    return { documentUrl: starfieldDocument, banner: starfieldBanner,
+      labels: action === "accept" ? ["ACCEPT", "Accept"] : ["DECLINE", "Decline"], starfield: true as const };
+  }
+  if (action === "accept" && selector === mistSelector) {
+    return { documentUrl: mistDocument, banner: mistBanner, labels: ["Accept All"] };
+  }
   if (action === "accept" && selector === navigraphSelector) {
     return { documentUrl: navigraphDocument, banner: "#consent", labels: ["ACCEPT ALL COOKIES", "Accept all cookies"] };
   }
@@ -68,7 +86,21 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
     element.closest("#hs-eu-cookie-confirmation") !== null;
   const buttonLink = hubSpotAnchor || anchor && element.getAttribute("href") === "#" &&
     !root.querySelector("base[href], base[target]");
-  if (!view || view !== view.top || element.getRootNode() !== root) return undefined;
+  if (!view || view !== view.top) return undefined;
+  // The production inventory and worker both bind this open shadow root.
+  const elementRoot = element.getRootNode();
+  if (view.location.href === "https://toom.de/" && elementRoot instanceof ShadowRoot &&
+      element.localName === "button" && elementRoot.mode === "open" && elementRoot.host.shadowRoot === elementRoot &&
+      elementRoot.host.matches("div#usercentrics-root") && elementRoot.host.getRootNode() === root &&
+      root.querySelectorAll("#usercentrics-root").length === 1 &&
+      element.matches('#uc-center-container button[data-testid="uc-accept-all-button"]') &&
+      elementRoot.querySelectorAll("#uc-center-container").length === 1 &&
+      elementRoot.querySelectorAll('button[data-testid="uc-accept-all-button"]').length === 1 &&
+      (element as HTMLElement).innerText.trim() === "Alle erlauben" && !element.closest("form") &&
+      !element.hasAttribute("form") && !element.hasAttribute("formaction") && !element.hasAttribute("aria-label")) {
+    return '#usercentrics-root #uc-center-container button[data-testid="uc-accept-all-button"]';
+  }
+  if (elementRoot !== root) return undefined;
   // This function is serialized into the page. These two original CAIA
   // controls are spans with directly attached listeners, not native buttons.
   if (view.location.href === "https://caiacosmetics.se/" && element.localName === "span" &&
@@ -91,6 +123,15 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
         element.getAttribute("href") === "javascript:void(0);" && element.closest("#hs-eu-cookie-confirmation")) {
       reviewedBanner = "#hs-eu-cookie-confirmation";
       reviewedSelector = `${reviewedBanner} a#${element.id}[role="button"][href="javascript:void(0);"]:not([target], [download])`;
+    } else if (view.location.href === "https://starfieldtech.com/" && !root.querySelector("base[href]")) {
+      const id = "28171fad-c63e-45f9-b528-cdc4dc2813bf";
+      if (element.id === id + "-accept" || element.id === id + "-decline") {
+        reviewedBanner = `[id="${id}-banner"]`;
+        reviewedSelector = `${reviewedBanner} a[id="${element.id}"][href=""]:not([target], [download])`;
+      }
+    } else if (view.location.href === "https://www.mist.com/") {
+      reviewedBanner = "#truste-consent-buttons";
+      reviewedSelector = '#truste-consent-buttons a#truste-consent-button:not([href], [target], [download])';
     } else if (view.location.href === "https://navigraph.com/") {
       reviewedBanner = "#consent";
       reviewedSelector = '#consent a[data-testid="acceptAllCookies"]:not([href], [target], [download])';

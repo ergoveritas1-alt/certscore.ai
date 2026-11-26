@@ -11,13 +11,17 @@ import { readRapidFirstLayerConsentUiObservation, reconcileConsentUiObservationW
 import { buildCanonicalPostAcceptActionRecipes } from "../../../packages/certscore-scan-core/src/post-accept-cmp-recipes.js";
 import { buildCanonicalPostRefusalActionRecipes } from "../../../packages/certscore-scan-core/src/post-refusal-cmp-recipes.js";
 import { RESOLVED_SCAN_TARGET_AUTHORIZATION_ID } from "../../../packages/certscore-scan-core/src/post-refusal-target-authorization.js";
-import { exactNativeConsentButtonSelector } from "../../../packages/certscore-scan-core/src/exact-native-consent-button-selector.js";
+import { bindAccessibilityNodesToDom } from "../../../packages/certscore-scan-core/src/consent-accessibility-dom-binding.js";
+import { exactNativeConsentButtonSelector, TOOM_ACCEPT_SELECTOR } from "../../../packages/certscore-scan-core/src/exact-native-consent-button-selector.js";
 import { buildConsentClickCheckpoint, verifyConsentClickCheckpoint } from "./reject-click-checkpoint.js";
 import { proofForReadyAction } from "./dedicated-action-release.js";
 
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const adikteev = "https://www.adikteev.com/";
 const navigraph = "https://navigraph.com/";
+const starfield = "https://starfieldtech.com/";
+const toom = "https://toom.de/";
+const mist = "https://www.mist.com/";
 const iobit = "https://www.iobit.com/en/index.php?s";
 const hubSpot = `<div id="hs-eu-cookie-confirmation" role="dialog" aria-label="Cookie preferences">
   <p>Choose whether to allow optional cookies for analytics and marketing.</p>
@@ -38,7 +42,38 @@ const iobitNotice = `<div class="float-bar" role="dialog" aria-label="Cookie con
     <a data-choice="accept">I Accept</a>
   </div></div>`;
 
-for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigraph, "accept"], [iobit, "accept"]] as const) {
+const mistNotice = `<div id="truste-consent-track" role="dialog" aria-label="Cookie consent">
+  <p>Choose whether to allow optional cookies.</p>
+  <div id="truste-consent-buttons"><a id="truste-consent-button" data-choice="accept">Accept All</a></div>
+</div>`;
+
+const toomNotice = `<div id="usercentrics-root"></div><script>
+  const toomFixtureRoot = document.querySelector("#usercentrics-root").attachShadow({ mode: "open" });
+  toomFixtureRoot.innerHTML = '<div id="uc-center-container" role="dialog" aria-label="Cookie preferences"><p>Wir verwenden Cookies.</p><div data-testid="uc-footer"><button type="button" data-choice="accept" data-testid="uc-accept-all-button">Alle erlauben</button></div></div>';
+  </script>`;
+
+const starfieldId = "28171fad-c63e-45f9-b528-cdc4dc2813bf";
+const starfieldNotice = `<section class="widget-cookie-banner" id="${starfieldId}-banner" role="dialog" aria-label="Cookie consent">
+  <p>We use cookies and optional analytics. Choose whether to accept.</p>
+  <a href="" id="${starfieldId}-accept" data-choice="accept" style="text-transform:uppercase">Accept</a>
+  <a href="" id="${starfieldId}-decline" data-choice="reject" style="text-transform:uppercase">Decline</a>
+</section>`;
+const starfieldHandlers = `
+  const t = "accepted", o = "dismissed";
+  function p() {}
+  function l() {}
+  function s() { return false; }
+  function r() {}
+  function c() { document.querySelector("[role=dialog]").hidden = true; }
+  function d(e){e.preventDefault(),p(),l(o),l(t),c()}
+  function u(e){e.preventDefault(),l(o),s(t)&&r(t),c()}
+  if (!changedDestination) {
+    document.getElementById("${starfieldId}-accept").addEventListener("click", d);
+    document.getElementById("${starfieldId}-decline").addEventListener("click", u);
+  }
+`;
+
+for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigraph, "accept"], [iobit, "accept"], [mist, "accept"], [toom, "accept"], [starfield, "accept"], [starfield, "reject"]] as const) {
   test(`${new URL(url).hostname} binds and retains the reviewed ${action} click`, {timeout: 20_000}, async t => {
     for (const flag of ["CERTSCORE_ACCEPT_GATE_PRODUCTION_ENFORCE", "CERTSCORE_REJECT_GATE_PRODUCTION_ENFORCE"]) {
       const previous = process.env[flag];
@@ -58,10 +93,16 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
         const target = route.request().url();
         if (target === requested && requested !== url) return route.fulfill({ contentType: "text/html", body: `<script>location.replace(${JSON.stringify(url)})</script>` });
         if (target === url) return route.fulfill({ contentType: "text/html", body: `<!doctype html><style>a{display:inline-block;padding:12px}</style>
-          ${url === adikteev ? hubSpot : url === iobit ? iobitNotice : consent}
+          ${url === adikteev ? hubSpot : url === iobit ? iobitNotice : url === mist ? mistNotice : url === toom ? toomNotice : url === starfield ? starfieldNotice : consent}
           <script>
-          if (${changedDestination}) document.querySelector('[data-choice="${action}"]').setAttribute('href','/changed-destination');
-          document.querySelector('[role=dialog]').addEventListener('click',event=>{
+          const root = document.querySelector("#usercentrics-root")?.shadowRoot ?? document;
+          if (${changedDestination} && root !== document) {
+            root.querySelector("[data-choice]").setAttribute("formaction", "/changed");
+          }
+          const changedDestination = ${changedDestination};
+          ${url === starfield ? starfieldHandlers : ""}
+          if (changedDestination && root === document && ${url !== starfield}) document.querySelector('[data-choice="${action}"]').setAttribute('href','/changed-destination');
+          root.querySelector('[role=dialog]').addEventListener('click',event=>{
             if (!event.isTrusted || !event.target.dataset.choice) return;
             const choice = event.target.dataset.choice;
             fetch('/clicked/' + choice);
@@ -107,21 +148,33 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
     const rejectProof = reject?.outcome === "qualified" ? readRejectFirstLayerProof({...reject, scanId}) : undefined;
     const candidate = page.locator(`[data-choice="${action}"]`);
     assert.ok(await candidate.evaluate(exactNativeConsentButtonSelector));
-    await page.evaluate(() => document.head.insertAdjacentHTML("beforeend", '<base target="_blank">'));
-    assert.equal(await candidate.evaluate(exactNativeConsentButtonSelector), undefined);
-    await page.locator("base").evaluate(element => element.remove());
-    if (url === iobit) {
-      await candidate.evaluate(element => {
-        const duplicate = element.cloneNode(true) as HTMLElement;
-        duplicate.removeAttribute("data-choice");
-        duplicate.setAttribute("data-test-duplicate", "");
-        element.after(duplicate);
-      });
+    if (url === toom) {
+      const ax = (await client.send("Accessibility.getFullAXTree")).nodes.find(node => node.name?.value === "Alle erlauben" && node.role?.value === "button");
+      assert.ok(ax);
+      const [bound] = await bindAccessibilityNodesToDom(client, [{...ax, visibilityEvidence:"box_model_verified"}], {url, identity:documentIdentity});
+      assert.equal(bound?.domBinding?.verifiedButtonSelector, TOOM_ACCEPT_SELECTOR);
+      const axControl = reconciled.controls.find(control => control.actionType === "accept_all");
+      assert.ok(axControl && bound?.domBinding);
+      const axObservation = {...reconciled, controls: reconciled.controls.map(control =>
+        control === axControl ? {...control, selectorHint:`ax:${ax.nodeId}`, domBinding:bound.domBinding} : control)};
+      assert.ok(deriveAcceptFirstLayerProof({...input, bundle:{...input.bundle, consentUiObservations:[axObservation]}, nowMs:original}));
+    } else {
+      await page.evaluate(() => document.head.insertAdjacentHTML("beforeend", '<base target="_blank">'));
       assert.equal(await candidate.evaluate(exactNativeConsentButtonSelector), undefined);
-      await page.locator("[data-test-duplicate]").evaluate(element => element.remove());
+      await page.locator("base").evaluate(element => element.remove());
+      if (url === iobit) {
+        await candidate.evaluate(element => {
+          const duplicate = element.cloneNode(true) as HTMLElement;
+          duplicate.removeAttribute("data-choice");
+          duplicate.setAttribute("data-test-duplicate", "");
+          element.after(duplicate);
+        });
+        assert.equal(await candidate.evaluate(exactNativeConsentButtonSelector), undefined);
+        await page.locator("[data-test-duplicate]").evaluate(element => element.remove());
+      }
+      await candidate.evaluate(element => element.setAttribute("href", "/changed-destination"));
+      assert.equal(await candidate.evaluate(exactNativeConsentButtonSelector), undefined);
     }
-    await candidate.evaluate(element => element.setAttribute("href", "/changed-destination"));
-    assert.equal(await candidate.evaluate(exactNativeConsentButtonSelector), undefined);
     await passive.close();
 
     assert.ok(accept || rejectProof, JSON.stringify({failure,reject,choices:reconciled.controls,geometry:geometry.summary}));

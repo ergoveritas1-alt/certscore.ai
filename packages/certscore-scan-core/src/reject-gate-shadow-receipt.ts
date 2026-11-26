@@ -1,8 +1,8 @@
 import { scopedConsentActionWindowMs } from "./scoped-consent-action-window.js";
-import { geometryConsentButtonLinkMatches } from "./exact-native-consent-button-selector.js";
+import { geometryConsentButtonLinkMatches, reviewedConsentAnchor } from "./exact-native-consent-button-selector.js";
 import { consentGateDocument } from "./consent-gate-document.js";
 import { STALE_CONSENT_GEOMETRY_BASIS } from "./consent-geometry-inventory-coverage.js";
-import { cookieInformationRenderedLabel, passiveButtonSelectorMatches } from "./consent-accessibility-dom-binding.js";
+import { cookieInformationRenderedLabel, passiveButtonSelectorMatches, resideoTrustArcSourceLabel } from "./consent-accessibility-dom-binding.js";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR } from "./cookiescript-reject-selector.js";
 import { drupalOverflowObservationMatches, drupalScopedCandidate, hasVerifiedDrupalOverflowGeometry } from "./drupal-consent-overflow-geometry.js";
 import { createHash } from "node:crypto";
@@ -180,11 +180,16 @@ export function evaluateRejectGate(input: {
   // DOM inventory can read source text while geometry and the worker read rendered text.
   const exactUppercaseLabel = cookieScriptRole && !candidate.ariaLabel &&
     control.label === candidate.cookieScriptUppercaseSourceLabel && control.label.toUpperCase() === candidate.label;
+  const starfield = reviewedConsentAnchor("reject", candidate?.selectorHint);
+  const exactStarfieldLabel = starfield?.starfield && document.url === starfield.documentUrl &&
+    candidate?.label === "DECLINE" && !candidate.ariaLabel && control?.label === "Decline";
   const nativeControl = candidate?.exactNativeRejectSelectorVerified === true && candidate.tagName === control?.tagName &&
-    (candidate.tagName === "button" || control?.role === "button" &&
+    (candidate.tagName === "button" || (control?.role === "button" || starfield?.starfield) &&
       geometryConsentButtonLinkMatches(candidate, artifact.cmp, "reject"));
   const borlabsEssentials = candidate?.selectorHint === "button.brlbs-btn-accept-only-essential" &&
     candidate.label === "Accept essential cookies" && artifact.cmp?.detections?.some(cmp => cmp.canonicalName === "Borlabs Cookie");
+  const resideoSourceLabel = candidate && resideoTrustArcSourceLabel(candidate, artifact, "reject");
+  const exactResideoLabel = resideoSourceLabel !== undefined && control?.label === resideoSourceLabel;
   const cookieInformationLabel = candidate && cookieInformationRenderedLabel(candidate, artifact.cmp);
   if (!control || !candidate || candidate.frameContext?.frameKind !== "main_frame" ||
       candidate.frameContext.frameUrl !== document.url || (!nativeControl && !cookieScriptRole) ||
@@ -194,7 +199,7 @@ export function evaluateRejectGate(input: {
       !inspection.candidates.some(row => row.candidateId === candidate.candidateId && row.role === "decision" &&
         !row.unresolvedIntents.includes("reject")) ||
       !passiveButtonSelectorMatches(control, candidate.selectorHint, "reject", document.url, identity.token) ||
-      (!exactUppercaseLabel && control.label !== (candidate.ariaLabel ?? candidate.label) && control.label !== cookieInformationLabel) ||
+      (!exactUppercaseLabel && !exactResideoLabel && !exactStarfieldLabel && control.label !== (candidate.ariaLabel ?? candidate.label) && control.label !== cookieInformationLabel) ||
       !candidate.label || (!drupalNoThanks && ![candidate.label,candidate.ariaLabel,candidate.title,candidate.value].every(label =>
         label === undefined || (typeof label === "string" && (!label || directReject(label) || borlabsEssentials && label === candidate.label))))) {
     return block("control_binding_unverified");
@@ -212,7 +217,7 @@ export function evaluateRejectGate(input: {
   return {outcome:"qualified",exactSelector,issuedAtMs:nowMs,expiresAtMs,binding:{
     parentDispatchSha256:input.parentDispatchSha256,sourceSha256:input.sourceSha256,geometrySha256:geometry.sha256,
     requestedTargetSha256:target,documentSha256,documentTokenSha256:sha(identity.token),selectorSha256:sha(exactSelector),
-    selectorEvidence:"verified_geometry",labelSha256:sha(candidate.ariaLabel ?? (exactUppercaseLabel ? candidate.label : control.label)),labelMatch:"exact",
+    selectorEvidence:"verified_geometry",labelSha256:sha(candidate.ariaLabel ?? (exactUppercaseLabel || exactResideoLabel || exactStarfieldLabel ? candidate.label : control.label)),labelMatch:"exact",
     ...(candidate.ariaLabel ? {labelSource:"aria_label" as const} : {}),
     ...(drupalNoThanks ? {drupalNoThanks:true as const} : {}),
   }};

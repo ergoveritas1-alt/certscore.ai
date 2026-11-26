@@ -1,4 +1,4 @@
-import { exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled } from "./exact-native-consent-button-selector.js";
+import { exactAcceptSelectorCaptureEnabled, exactRejectSelectorCaptureEnabled, exactNativeConsentButtonSelector, TOOM_ACCEPT_SELECTOR } from "./exact-native-consent-button-selector.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import type { CDPSession } from "playwright";
 import { consentAccessibilityDomBindingSchema, boundOptOutControlFromAttributes, classifyConsentControlLabel, type BrowserDocumentIdentity, type ConsentAccessibilityDomBinding } from "@certscore/contracts";
@@ -42,6 +42,23 @@ export async function bindAccessibilityNodesToDom(client: CDPSession, nodes: Con
     const id = index >= 0 ? node.attributes[index + 1] : undefined;
     const cookieScript = node.localName === "div" && (id === "cookiescript_accept" || id === "cookiescript_reject");
     const native = intent && node.localName === "button" && typeof id === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(id);
+    const toom = intent === "accept" && document.url === "https://toom.de/" && node.localName === "button" &&
+      node.attributes.some((name, i, attributes) => i % 2 === 0 && name === "data-testid" &&
+        attributes[i + 1] === "uc-accept-all-button");
+    if (toom && !nativeLookups.has("accept") && Date.now() < deadline) {
+      nativeLookups.add("accept");
+      const {object} = await client.send("DOM.resolveNode", {backendNodeId: node.backendNodeId});
+      if (!object.objectId) return;
+      try {
+        if (Date.now() >= deadline) return;
+        const checked = await client.send("Runtime.callFunctionOn", {objectId: object.objectId, returnByValue: true,
+          functionDeclaration: `function() { const __name = fn => fn; return (${exactNativeConsentButtonSelector.toString()})(this); }`});
+        if (Date.now() <= deadline && !checked.exceptionDetails && checked.result.value === TOOM_ACCEPT_SELECTOR) {
+          return {version:"ax_backend_dom_binding.v6" as const, verifiedButtonSelector: TOOM_ACCEPT_SELECTOR};
+        }
+        return;
+      } finally { void client.send("Runtime.releaseObject", {objectId: object.objectId}).catch(() => undefined); }
+    }
     if (!cookieScript && (!native || nativeLookups.has(intent))) return;
     if (native) nativeLookups.add(intent);
     const selector = cookieScript
@@ -94,7 +111,8 @@ export function passiveButtonSelectorMatches(control: {
 }, selector: string, action: "accept" | "reject", documentUrl: string, loader: string): boolean {
   const binding = control.domBinding;
   if (!binding) return control.selectorHint === selector;
-  const expected = binding.version === "ax_backend_dom_binding.v5" && control.tagName === "button" && binding.tagName === "button"
+  const expected = (binding.version === "ax_backend_dom_binding.v5" ||
+    binding.version === "ax_backend_dom_binding.v6" && action === "accept" && documentUrl === "https://toom.de/" && selector === TOOM_ACCEPT_SELECTOR) && control.tagName === "button" && binding.tagName === "button"
     ? binding.verifiedButtonSelector
     : binding.version === "ax_backend_dom_binding.v4" && control.tagName === "div" && binding.tagName === "div"
     ? (action === "accept" ? "#cookiescript_accept" : "#cookiescript_reject")
@@ -119,4 +137,27 @@ export function cookieInformationRenderedLabel(
         detection.matchedSignals.some(signal => signal.source === "dom" && signal.value === "#coiOverlay") &&
         detection.matchedSignals.some(signal => signal.source === "global" && signal.value === "CookieInformation"))) return undefined;
   return label;
+}
+
+/** The retained Resideo TrustArc buttons use uppercase rendering over the
+ * source caption. Accept only those two caption pairs on the verified banner. */
+export function resideoTrustArcSourceLabel(
+  candidate: ConsentControlCandidateEvidence,
+  geometry: ConsentControlGeometryArtifact,
+  action: "accept" | "reject",
+): string | undefined {
+  const sourceLabel = action === "accept" ? "Agree" : "Decline All";
+  const selector = action === "accept" ? "#truste-consent-button" : "#truste-consent-required";
+  const group = "#truste-consent-buttons div.consent-buttons-2";
+  if (geometry.pageUrl !== "https://www.resideo.com/us/en/resideo-home/" ||
+      candidate.frameContext.frameUrl !== geometry.pageUrl || candidate.frameContext.frameKind !== "main_frame" ||
+      candidate.tagName !== "button" || candidate.selectorHint !== selector ||
+      candidate.label !== sourceLabel.toUpperCase() || candidate.ariaLabel || candidate.title || candidate.value ||
+      candidate.containerSelectorHint !== group ||
+      !Array.isArray(geometry.containers) || !geometry.containers.some(container => container?.containerId === candidate.containerId &&
+        container.selectorHint === group && container.layer === "first_layer" && container.intersectsViewport) ||
+      !geometry.cmp?.detections?.some(detection => detection.canonicalName === "TrustArc" &&
+        detection.matchedSignals.some(signal => signal.source === "dom" && signal.value === "#truste-consent-track") &&
+        detection.matchedSignals.some(signal => signal.source === "host" && signal.value === "consent.trustarc.com"))) return undefined;
+  return sourceLabel;
 }

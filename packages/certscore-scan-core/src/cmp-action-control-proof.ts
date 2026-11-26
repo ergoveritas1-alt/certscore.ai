@@ -1,5 +1,6 @@
+import { verifyStarfieldConsentListener } from "./starfield-consent-listener.js";
 import { verifyCaiaAcceptListeners } from "./caia-accept-control.js";
-import { hubSpotHrefLessConsentSelector, reviewedConsentAnchor } from "./exact-native-consent-button-selector.js";
+import { hubSpotHrefLessConsentSelector, reviewedConsentAnchor, TOOM_ACCEPT_SELECTOR } from "./exact-native-consent-button-selector.js";
 import { DRUPAL_ACCEPT_BANNER_SELECTOR, DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP } from "./drupal-consent-overflow-geometry.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import {
@@ -460,7 +461,12 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       ? (input.action === "accept" ? COOKIE_SCRIPT_ACCEPT_IDS : COOKIE_SCRIPT_REJECT_IDS) : undefined;
     const hubSpotAnchor = input.expectedNativeSelector === hubSpotHrefLessConsentSelector(input.action);
     const reviewedAnchor = reviewedConsentAnchor(input.action, input.expectedNativeSelector);
-    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, italianAcceptScope, drupalBannerSelector, caiaBannerSelector}) => {
+    if (reviewedAnchor?.starfield &&
+        !await verifyStarfieldConsentListener(input.page, input.expectedNativeSelector!, input.action, guard)) {
+      return { status: "label_unverifiable", reason: "starfield_click_handler_unverified" };
+    }
+    const toomShadow = input.action === "accept" && input.expectedNativeSelector === TOOM_ACCEPT_SELECTOR;
+    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, italianAcceptScope, drupalBannerSelector, caiaBannerSelector, toomShadow}) => {
       if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
       if (passiveSelector) {
         const document = exact?.ownerDocument;
@@ -468,7 +474,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         const exactReviewedAnchor = reviewedAnchor && exact?.localName === "a" &&
           view?.location.href === reviewedAnchor.documentUrl && exact.matches(passiveSelector) &&
           (!reviewedAnchor.labels || reviewedAnchor.labels.includes((exact as HTMLElement).innerText.trim())) &&
-          document?.querySelectorAll(reviewedAnchor.banner).length === 1 && !document.querySelector("base[target]") &&
+          document?.querySelectorAll(reviewedAnchor.banner).length === 1 && !document.querySelector(reviewedAnchor.starfield ? "base[href],base[target]" : "base[target]") &&
           (!reviewedAnchor.id || document.querySelectorAll("#" + reviewedAnchor.id).length === 1) &&
           !exact.closest("form,button,label,[contenteditable]") && !exact.querySelector("a,button,input,[role=button]");
         if (reviewedAnchor && !exactReviewedAnchor) return null;
@@ -480,10 +486,23 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
             exact.getAttribute("href") === "#" && !document?.querySelector("base[href], base[target]"));
         if (hubSpotAnchor && !buttonLink) return null;
         if (!exact?.isConnected || !(caiaBannerSelector ? exact.localName === "span" : roleButtonIds ? exact.localName === "div" : exact.localName === "button" || buttonLink) ||
-            !document || exact.getRootNode() !== document || !view || view !== view.top) return null;
+            !document || (!toomShadow && exact.getRootNode() !== document) || !view || view !== view.top) return null;
         if (roleButtonIds && document.querySelectorAll(roleButtonIds).length !== 2) return null;
-        const matches = document.querySelectorAll(passiveSelector);
-        if (matches.length !== 1 || matches[0] !== exact) return null;
+        const matches = toomShadow
+          ? document.querySelector("#usercentrics-root")?.shadowRoot?.querySelectorAll('#uc-center-container button[data-testid="uc-accept-all-button"]')
+          : document.querySelectorAll(passiveSelector);
+        if (matches?.length !== 1 || matches[0] !== exact) return null;
+        if (toomShadow) {
+          const root = exact.getRootNode();
+          if (view.location.href !== "https://toom.de/" || !(root instanceof ShadowRoot) ||
+              root.mode !== "open" || !root.host.matches("div#usercentrics-root") ||
+              root.host.getRootNode() !== document || root.host.shadowRoot !== root ||
+              document.querySelectorAll("#usercentrics-root").length !== 1 ||
+              root.querySelectorAll("#uc-center-container").length !== 1 ||
+              root.querySelectorAll('button[data-testid="uc-accept-all-button"]').length !== 1 ||
+              (exact as HTMLElement).innerText.trim() !== "Alle erlauben" || exact.closest("form") ||
+              exact.hasAttribute("form") || exact.hasAttribute("formaction") || exact.hasAttribute("aria-label")) return null;
+        }
         if (caiaBannerSelector && (document.querySelectorAll(caiaBannerSelector).length !== 1 ||
             !exact.closest(caiaBannerSelector) || exact.childElementCount ||
             exact.closest("form,a,button,label,[contenteditable],[inert],[aria-hidden='true'],[aria-disabled='true']") ||
@@ -513,7 +532,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
       return { selectorMatchCount: elements.length, labels };
-    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor,
+    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, toomShadow,
       italianAcceptScope: oneTrustItalianAccept ? italianAccept : undefined,
       drupalBannerSelector: drupalScope?.bannerSelector,
       caiaBannerSelector: caiaAccept ? caia.bannerSelector : undefined}).catch(() => null));
