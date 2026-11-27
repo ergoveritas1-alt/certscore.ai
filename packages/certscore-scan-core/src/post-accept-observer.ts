@@ -868,10 +868,19 @@ export async function runPostAcceptObserver(
       }
       return proof;
     }) : initialFirstLayerProof;
+    const adopt = DAFITI_ADOPT_ACCEPT_CONTROL;
+    const dafitiApex = "https://dafiti.com.br/";
+    const workerDiscovery = Boolean(input.onWorkerDiscoveredClick) && !firstLayerProof;
     stage("target_binding");
     if (input.interactionAuthorization.kind === "scan_target_resolution") {
       const resolutionStartedAtMs = Date.now();
-      const expectedLanding = expectedMoodMediaLanding(input.url, firstLayerProof?.exactSelector, firstLayerProof?.documentSha256);
+      // The reviewed AdOpt control lives on the exact www homepage. An apex
+      // document can commit before that redirect, so keep the original
+      // resolution deadline while waiting for the registered destination.
+      const expectedDafitiLanding = workerDiscovery && input.allowCanonicalAcceptDiscovery && input.url === dafitiApex
+        ? adopt.targetUrl : undefined;
+      const expectedLanding = expectedMoodMediaLanding(input.url, firstLayerProof?.exactSelector, firstLayerProof?.documentSha256)
+        ?? expectedDafitiLanding;
       const redirectCount = Math.max(0, mainNavigationRequestCount - 1);
       const exactServerCommit = committedConsentServerRedirect({
         page, response: navigationResponse, requestedUrl: input.url, redirectCount, signal: effectiveSignal,
@@ -961,11 +970,9 @@ export async function runPostAcceptObserver(
       firstLayerProof.documentSha256 === hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) &&
       acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
       ? recipes.find(recipe => recipe.recipeId === DRUPAL_ACCEPT_RECIPE) : undefined;
-    const adopt = DAFITI_ADOPT_ACCEPT_CONTROL;
-    const workerDiscovery = Boolean(input.onWorkerDiscoveredClick) && !firstLayerProof;
     const workerAdopt = workerDiscovery && input.allowCanonicalAcceptDiscovery &&
       authorizedExactTargetUrl === adopt.targetUrl && page.url() === adopt.targetUrl &&
-      [adopt.targetUrl, "https://dafiti.com.br/"].includes(input.url);
+      (input.url === adopt.targetUrl || input.url === dafitiApex);
     const passiveAdopt = firstLayerProof?.exactSelector === adopt.controlSelector &&
       firstLayerProof.geometrySha256 && firstLayerProof.labelSha256 === hashValue(adopt.label) &&
       authorizedExactTargetUrl === adopt.targetUrl && firstLayerProof.documentSha256 === hashValue(adopt.targetUrl) &&

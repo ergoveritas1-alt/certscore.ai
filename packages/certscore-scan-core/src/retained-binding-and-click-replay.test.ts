@@ -69,7 +69,8 @@ const oneTrustMarkup = `<section role="dialog" id="onetrust-banner-sdk" aria-lab
   document.cookie='OptanonConsent=groups=C0001:1,C0002:0;path=/';
 </script>` + choiceScript([{selector: oneTrust, action: "accept"}]);
 
-async function replayFixture(t: TestContext, url: string, passiveMarkup: string, workerMarkup = passiveMarkup, requestedUrl = url) {
+async function replayFixture(t: TestContext, url: string, passiveMarkup: string, workerMarkup = passiveMarkup,
+  requestedUrl = url, redirectDelayMs = 0) {
   for (const flag of ["CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW", "CERTSCORE_REJECT_GATE_PRODUCTION_SHADOW"]) {
     const previous = process.env[flag];
     process.env[flag] = "1";
@@ -92,7 +93,9 @@ async function replayFixture(t: TestContext, url: string, passiveMarkup: string,
     await context.route("**/*", async route => {
       const request = route.request();
       if (requestedUrl !== url && request.url() === requestedUrl) {
-        await route.fulfill({contentType: "text/html", body: "<script>location.replace(" + JSON.stringify(url) + ")</script>"});
+        const redirect = "location.replace(" + JSON.stringify(url) + ")";
+        const script = redirectDelayMs ? "setTimeout(() => " + redirect + ", " + redirectDelayMs + ")" : redirect;
+        await route.fulfill({contentType: "text/html", body: "<script>" + script + "</script>"});
       } else if (request.url() === url) {
         await route.fulfill({contentType: "text/html", body: '<meta charset="utf-8"><main>Local fixture</main>' +
           (passive ? passiveMarkup : workerMarkup)});
@@ -446,20 +449,23 @@ for (const site of ["babycenter.com", "whattoexpect.com"]) {
 
 const italianOneTrustMarkup = oneTrustMarkup.replace("Allow all</button>",
   ONETRUST_ITALIAN_ACCEPT_CONTROL.label + "</button>");
+const retainedAdoptMarkup = adoptMarkup.replace("Usamos cookies para melhorar sua experiência. Você pode configurar cookies.",
+  "Controle sua privacidade AdOpt. Nosso site usa cookies para melhorar a navegação. " +
+  "Usamos cookies para compartilhar dados de análise, publicidade, dados de usuários e personalização de anúncios com o Google. " +
+  "Política de Privacidade. Política de Cookies. Desenvolvido por AdOpt.");
 const contextualOneTrustMarkup = oneTrustMarkup.replace("Allow all</button>", "I Consent</button>");
 const ungroupedOneTrustMarkup = contextualOneTrustMarkup.replace(
   '<div id="onetrust-button-group"><button id="onetrust-accept-btn-handler">I Consent</button></div>',
   '<div id="onetrust-button-group"></div><button id="onetrust-accept-btn-handler">I Consent</button>',
 );
 
-for (const {url, requestedUrl, markup, recipeId} of [
+for (const {url, requestedUrl, markup, recipeId, redirectDelayMs, blockedReason} of [
   {url: "https://www.lafeltrinelli.it/", markup: italianOneTrustMarkup, recipeId: ONETRUST_ITALIAN_ACCEPT_CONTROL.recipeId},
   {url: "https://www.libraccio.it/", markup: italianOneTrustMarkup, recipeId: ONETRUST_ITALIAN_ACCEPT_CONTROL.recipeId},
   {url: adopt.targetUrl, requestedUrl: "https://dafiti.com.br/", recipeId: adopt.recipeId,
-    markup: adoptMarkup.replace("Usamos cookies para melhorar sua experiência. Você pode configurar cookies.",
-      "Controle sua privacidade AdOpt. Nosso site usa cookies para melhorar a navegação. " +
-      "Usamos cookies para compartilhar dados de análise, publicidade, dados de usuários e personalização de anúncios com o Google. " +
-      "Política de Privacidade. Política de Cookies. Desenvolvido por AdOpt.")},
+    markup: retainedAdoptMarkup, redirectDelayMs: 250},
+  {url: "https://www.dafiti.com.br/other", requestedUrl: "https://dafiti.com.br/", markup: retainedAdoptMarkup,
+    redirectDelayMs: 250, blockedReason: "redirect_target_not_authorized"},
   {url: "https://www.babycenter.com/", requestedUrl: "https://babycenter.com/",
     markup: contextualOneTrustMarkup, recipeId: ONETRUST_ITALIAN_ACCEPT_CONTROL.recipeId},
   {url: "https://www.whattoexpect.com/", requestedUrl: "https://whattoexpect.com/",
@@ -468,7 +474,7 @@ for (const {url, requestedUrl, markup, recipeId} of [
   {url: "https://www.nrdc.org/", markup: contextualOneTrustMarkup},
 ]) {
   test(`independent Accept worker ${recipeId ? "binds" : "blocks"} the registered control on ${url}`, async t => {
-    const fixture = await replayFixture(t, url, markup, markup, requestedUrl);
+    const fixture = await replayFixture(t, url, markup, markup, requestedUrl, redirectDelayMs);
     const recipes = buildCanonicalPostAcceptActionRecipes();
     type WorkerReceipt = Parameters<NonNullable<Parameters<typeof runPostAcceptObserver>[0]["onWorkerDiscoveredClick"]>>[0];
     const receipts: WorkerReceipt[] = [];
@@ -479,6 +485,7 @@ for (const {url, requestedUrl, markup, recipeId} of [
     assert.deepEqual(fixture.clicks, recipeId ? ["accept"] : [], JSON.stringify({resolver:packet.resolver, limitations:packet.limitations}));
     assert.equal(receipts.length, recipeId ? 1 : 0, JSON.stringify(packet.resolver));
     assert.equal(packet.interactionDiagnostics?.click.outcome === "completed", !!recipeId);
+    if (blockedReason) assert.equal(packet.resolver.reason, blockedReason);
     if (recipeId) {
       const [receipt] = receipts;
       assert.ok(receipt);
