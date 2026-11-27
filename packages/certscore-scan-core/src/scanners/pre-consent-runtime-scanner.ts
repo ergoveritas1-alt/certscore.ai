@@ -1292,6 +1292,43 @@ export async function preConsentRuntimeScanner(
   let retainedGpcOptOutObservation: GpcOptOutObservation | undefined;
   let retainedGpcObservationSession: GpcObservationSession | undefined;
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
+  // Boot Barn can replace the storefront with a challenge in the same tab.
+  // Preserve the first live DOM inventory independently of terminal geometry.
+  const bootBarnStorefront = "https://www.bootbarn.com/";
+  const bootBarnConsentProof = captureScope === "consent_proof" &&
+    (input.normalizedUrl === "https://bootbarn.com/" || input.normalizedUrl === bootBarnStorefront);
+  let bootBarnOriginalToken: string | undefined;
+  let originalBanner: ConsentUiObservation | undefined;
+  const captureOriginalBanner = async (read: () => Promise<ConsentUiObservation>) => {
+    if (!bootBarnConsentProof || originalBanner || page.url() !== bootBarnStorefront) return read();
+    const readBinding = () => ({url: page.url(), documentIdentity: currentBrowserDocumentIdentity(page),
+      revision: browserDocumentIdentityState.routeRevision});
+    const before = readBinding();
+    if (before.documentIdentity?.source !== "cdp_loader_id") return read();
+    bootBarnOriginalToken ??= before.documentIdentity.token;
+    const observation = await read();
+    if (!originalBanner && !effectiveSignal?.aborted && bootBarnOriginalToken === before.documentIdentity.token &&
+        sameDocumentCaptureBinding(before, readBinding()) && observation.documentUrl === before.url &&
+        observation.documentIdentity?.source === "cdp_loader_id" && observation.documentIdentity.token === bootBarnOriginalToken &&
+        observation.layerInspected === "first_layer" && observation.captureDiagnostics?.completedChannels.includes("dom_inventory") &&
+        observation.inventoryDiagnostics?.inventorySources.includes("viewport") &&
+        !observation.basis.includes("inventory:rapid_child_frame_controls") &&
+        observation.controls.some(control => control.visible === true &&
+          control.actionType === "accept_all" && control.label === "Accept All" && control.selectorHint === "#onetrust-accept-btn-handler")) {
+      originalBanner = {...observation, observationId: "consent_ui_pre_consent_original_banner"};
+    }
+    return observation;
+  };
+  const readFirstLayerInventory = (timeoutMs: number, phase: "initial" | "post_settle") =>
+    captureOriginalBanner(() => readRapidFirstLayerConsentUiObservation(page, input.scanStartedAtMs, timeoutMs, phase));
+  const retainOriginalBanner = (rows: ConsentUiObservation[]) => {
+    const early = originalBanner;
+    if (!early || rows.some(row => row.documentUrl === early.documentUrl &&
+        row.documentIdentity?.token === early.documentIdentity?.token && row.acceptControlObserved &&
+        (!early.managePreferencesControlObserved || row.managePreferencesControlObserved))) return rows;
+    return [early, ...rows];
+  };
+
   let retainedCmpBasicEvidence: CmpBasicEvidence | undefined;
   let cmpBasicCaptureStarted = false;
   let cmpBasicLateInspectionComplete = false;
@@ -1472,13 +1509,13 @@ export async function preConsentRuntimeScanner(
           "pre_consent_soft_deadline_before_observation_retained",
         )
       : undefined;
-    const retainedConsentUiObservations = (captureConsentEvidence
+    const retainedConsentUiObservations = retainOriginalBanner((captureConsentEvidence
       ? retainedConsentUiObservation
         ? [retainedConsentUiObservation, ...fallbackConsentUiObservations]
         : deadlineConsentUiObservation
           ? [deadlineConsentUiObservation]
           : [...fallbackConsentUiObservations]
-      : []).map(finalizeConsentCaptureDiagnostic);
+      : []).map(finalizeConsentCaptureDiagnostic));
     const retainedEvidence =
       networkEvents.length > 0 ||
       networkResponseEvents.length > 0 ||
@@ -1626,7 +1663,7 @@ export async function preConsentRuntimeScanner(
             committedConsentInventory = recordBoundedTiming(timingBreakdown,
               "consent inventory during document loading",
               "Read-only rapid control inventory overlaps DOMContentLoaded; loading-document absence is never reused.",
-              750, () => readRapidFirstLayerConsentUiObservation(page, input.scanStartedAtMs, 750, "initial"),
+              750, () => readFirstLayerInventory(750, "initial"),
               () => emptyConsentUiObservation(input.scanStartedAtMs, page.url())).then(observation=>{
                 if(observation.controls.some(control=>control.visible!==false) &&
                     observation.documentUrl===page.url() && observation.documentIdentity?.token===currentBrowserDocumentIdentity(page)?.token && !effectiveSignal?.aborted) {
@@ -2009,11 +2046,11 @@ export async function preConsentRuntimeScanner(
         "page evidence: consent UI",
         "First-layer consent surface/control inventory starts immediately after DOMContentLoaded alongside visual capture, so a slow screenshot cannot consume the structured-evidence window.",
         consentUiCaptureTimeoutMs,
-        async () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
+        () => captureOriginalBanner(async () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
           returnAfterRapidSnapshot: true,
           waitForCompleteChoiceControls: true,
           initialObservation: await committedConsentInventory,
-        }),
+        })),
         () => emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
       );
     };
@@ -2372,12 +2409,7 @@ export async function preConsentRuntimeScanner(
           "page evidence: post-settle consent inventory",
           "Bounded canonical first-layer DOM inventory retained before consolidated page evidence can exhaust the module budget.",
           postSettleInventoryBudgetMs,
-          () => readRapidFirstLayerConsentUiObservation(
-            page,
-            input.scanStartedAtMs,
-            postSettleInventoryBudgetMs,
-            "post_settle",
-          ),
+          () => readFirstLayerInventory(postSettleInventoryBudgetMs, "post_settle"),
           () => emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
         );
         preScreenshotConsentObservation = reconcilePostSettleConsentUiObservation({
@@ -2765,6 +2797,8 @@ export async function preConsentRuntimeScanner(
           : consentUiObservationPromise,
         lateAccessibilityObservationPromise,
         deferPairedReadback ? Promise.resolve(undefined) : readGpcSignal(),
+        bootBarnConsentProof && !originalBanner && page.url() === bootBarnStorefront && remainingModuleBudgetMs() >= 350
+          ? readFirstLayerInventory(350, "post_settle") : undefined,
       ]),
     );
     if (runtimeDocumentSettle && !["already_ready", "settled"].includes(runtimeDocumentSettle.status)) {
@@ -5173,7 +5207,7 @@ export async function preConsentRuntimeScanner(
       ...(retainedGpcOptOutObservation ? { gpcOptOutObservation: retainedGpcOptOutObservation } : {}),
       ...(retainedGpcObservationSession ? { gpcObservationSession: retainedGpcObservationSession } : {}),
       iframeEvents,
-      consentUiObservations: captureConsentEvidence ? [consentObservation] : [],
+      consentUiObservations: retainOriginalBanner(captureConsentEvidence ? [consentObservation] : []),
       ...("siteIntegrityObservation" in pageEvidence && pageEvidence.siteIntegrityObservation &&
         baselineDocumentIdentity?.token === pageEvidence.siteIntegrityObservation.documentToken &&
         !input.signal?.aborted ? { siteIntegrityObservation: pageEvidence.siteIntegrityObservation } : {}),
@@ -5257,11 +5291,11 @@ export async function preConsentRuntimeScanner(
         }
       }
     }
-    const retainedConsentUiObservations = (captureConsentEvidence
+    const retainedConsentUiObservations = retainOriginalBanner((captureConsentEvidence
       ? retainedConsentUiObservation
         ? [retainedConsentUiObservation, ...fallbackConsentUiObservations]
         : fallbackConsentUiObservations
-      : []).map(finalizeConsentCaptureDiagnostic);
+      : []).map(finalizeConsentCaptureDiagnostic));
     const retainedEvidence =
       networkEvents.length > 0 ||
       networkResponseEvents.length > 0 ||
