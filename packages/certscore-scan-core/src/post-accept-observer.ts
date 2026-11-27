@@ -1,4 +1,4 @@
-import { REGISTERED_ONETRUST_ACCEPT_CONTROLS, REVIEWED_COOKIE_ACCEPT_CONTROLS } from "@certscore/contracts";
+import { ALMA_AXEPTIO_ACCEPT_CONTROL, REGISTERED_ONETRUST_ACCEPT_CONTROLS, REVIEWED_COOKIE_ACCEPT_CONTROLS } from "@certscore/contracts";
 import { dispatchWorkerDiscoveredConsentControl } from "./cmp-action-control-proof.js";
 import { takePreparedConsentActionPage, type PreparedConsentActionPage, type DeferredConsentProof } from "./consent-action-browser";
 import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
@@ -1004,7 +1004,18 @@ export async function runPostAcceptObserver(
         }]},
       }
       : undefined;
-    const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe ?? exactDrupalRecipe ?? exactAdoptRecipe ?? exactCaiaRecipe;
+    const alma = ALMA_AXEPTIO_ACCEPT_CONTROL;
+    const exactAlmaRecipe: PostAcceptActionRecipe | undefined = workerDiscovery && input.allowCanonicalAcceptDiscovery &&
+      input.url === alma.requestedUrl && authorizedExactTargetUrl === alma.documentUrl && page.url() === alma.documentUrl
+      ? {
+        artifactVersion: "certscore.post_accept_action_recipe.v1",
+        recipeId: alma.recipeId, resolverMethod: "canonical_consent_control_registry_recipe",
+        controlSelector: alma.controlSelector, controlExpectedNormalizedLabel: normalizeAcceptControlLabel(alma.label),
+        bannerSelector: alma.bannerSelector,
+        confirmation: {kind: "canonical_accept_transition", controlSelector: alma.controlSelector, bannerSelector: alma.bannerSelector},
+      } : undefined;
+    const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe ?? exactDrupalRecipe ??
+      exactAdoptRecipe ?? exactCaiaRecipe ?? exactAlmaRecipe;
     const exactActionDeadline = firstLayerProof && (exactNativeRecipe || exactCookieInformation)
       ? firstLayerProof.expiresAtMs : Infinity;
     const searchDeadline = Math.min(resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs), exactActionDeadline);
@@ -1154,7 +1165,7 @@ export async function runPostAcceptObserver(
       return named ? {...named, controlExpectedNormalizedLabel: recipe.controlExpectedNormalizedLabel} : recipe;
     };
     const nativeSelectorFor = (recipe: PostAcceptActionRecipe) => firstLayerProof?.exactSelector ??
-      (workerDiscovery && (recipe.recipeId === adopt.recipeId ||
+      (workerDiscovery && (recipe.recipeId === adopt.recipeId || recipe.recipeId === alma.recipeId ||
         REGISTERED_ONETRUST_ACCEPT_CONTROLS.some(scope => scope.recipeId === recipe.recipeId &&
           scope.cmpId === recipe.cmpId && scope.controlSelector === recipe.controlSelector))
         ? recipe.controlSelector : undefined);

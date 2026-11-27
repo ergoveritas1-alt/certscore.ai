@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { chromium } from "playwright";
-import { classifyConsentControlLabel, consentActionControlProofSchema, REVIEWED_COOKIE_ACCEPT_CONTROLS, REVIEWED_COOKIE_REJECT_CONTROLS, UNSW_NECESSARY_ONLY_REJECT } from "@certscore/contracts";
+import { ALMA_AXEPTIO_ACCEPT_CONTROL, classifyConsentControlLabel, consentActionControlProofSchema, REVIEWED_COOKIE_ACCEPT_CONTROLS, REVIEWED_COOKIE_REJECT_CONTROLS, UNSW_NECESSARY_ONLY_REJECT } from "@certscore/contracts";
 import { assertReviewedRejectDispatchAllowed, buildConsentActionControlProof, dispatchWorkerDiscoveredConsentControl } from "./cmp-action-control-proof.js";
 import { buildCanonicalPostRefusalActionRecipes, CANONICAL_POST_REFUSAL_RECIPE_SET_ID } from "./post-refusal-cmp-recipes.js";
 import { runPostRefusalObserver } from "./post-refusal-observer.js";
@@ -274,7 +274,8 @@ test("reviewed worker cookie controls require a visible notice and a unique non-
     for (const scope of controls) {
       const labelAttribute = "labelSource" in scope && scope.labelSource === "aria_label" ? ` aria-label="${scope.label}"` : "";
       const button = `<button type="button" id="${scope.controlSelector.slice(1)}"${labelAttribute}>${scope.label}</button>`;
-      const html = `<meta charset="utf-8"><section id="${scope.bannerSelector.slice(1)}"><p>${scope.notice}</p>${button}</section>`;
+      const bannerAttribute = scope.bannerSelector.startsWith(".") ? "class" : "id";
+      const html = `<meta charset="utf-8"><section ${bannerAttribute}="${scope.bannerSelector.slice(1)}"><p>${scope.notice}</p>${button}</section>`;
       await context.route("**/*", route => route.request().url() === scope.documentUrl
         ? route.fulfill({contentType: "text/html", body: html}) : route.abort("blockedbyclient"));
       const getProof = () => buildConsentActionControlProof({
@@ -301,6 +302,34 @@ test("reviewed worker cookie controls require a visible notice and a unique non-
       await context.unroute("**/*");
     }
   }
+});
+
+test("Alma’s scoped Accept uses the retained accessible label and exact route", async t => {
+  const scope = ALMA_AXEPTIO_ACCEPT_CONTROL;
+  const browser = await chromium.launch({args: ["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
+  t.after(() => browser.close());
+  const context = await browser.newContext({serviceWorkers: "block"});
+  const page = await context.newPage();
+  const html = `<section data-testid="widget-container"><p>${scope.notice}</p>
+    <button type="button" id="${scope.controlSelector.slice(1)}" aria-label="${scope.label}">${scope.visibleLabel}</button></section>`;
+  await context.route("**/*", route => route.request().url() === scope.documentUrl
+    ? route.fulfill({contentType: "text/html", body: html}) : route.abort("blockedbyclient"));
+  await page.goto(scope.documentUrl);
+  const control = page.locator(scope.controlSelector);
+  const read = async () => buildConsentActionControlProof({
+    page, control, exactElement: (await control.elementHandle())!, bindElement: true, workerDiscovered: true,
+    action: "accept", observedAtMs: 1, recipeId: scope.recipeId, selectorHint: scope.controlSelector,
+    expectedNativeSelector: scope.controlSelector, authorizedTargetSha256: scope.documentSha256,
+  });
+  const original = await read();
+  assert.ok(original.status === "verified" && original.boundElement);
+  assert.ok(consentActionControlProofSchema.safeParse(original.proof).success);
+  await assert.rejects(dispatchWorkerDiscoveredConsentControl({
+    page, requestedUrl: scope.documentUrl, control: original.boundElement, proof: original.proof,
+    deadlineAtMs: Date.now()+2_000, assertCurrent: () => {}, commit: () => assert.fail("wrong starting route dispatched"),
+  }), /worker_consent_control_unbound/);
+  await control.evaluate(button => button.setAttribute("aria-label", "Learn more"));
+  assert.notEqual((await read()).status, "verified");
 });
 
 test("independent worker separates sibling consent choices while guarding same-intent duplicates", async t => {

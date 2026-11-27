@@ -34,7 +34,7 @@ export function workerDiscoveredFrameMatchesTarget(proof: {
 
 /** Verify the reviewed OneTrust routes allowed to use independent necessary-only dispatch. */
 export function isReviewedWorkerNecessaryOnlyRejectProof(requestedUrl: string, proof: ConsentActionControlProof): boolean {
-  if (isReviewedCookieRejectProof(requestedUrl, proof)) return true;
+  if (proof.actionSemantics === "canonical_necessary_only_recipe" && isReviewedCookieRejectProof(requestedUrl, proof)) return true;
   if (proof.action !== "reject" || proof.actionSemantics !== "canonical_necessary_only_recipe" ||
       proof.cmpId !== "OneTrust" || proof.recipeId !== "canonical-cmp:OneTrust:reject:v3") return false;
   if (requestedUrl === UNSW_NECESSARY_ONLY_REJECT.requestedUrl) return isUnswNecessaryOnlyRejectProof(proof);

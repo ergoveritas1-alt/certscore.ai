@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { consentActionControlProofSchema, type ConsentActionControlProof } from "@certscore/contracts";
+import { consentActionControlProofSchema, reviewedConsentProofMatchesRequestedUrl, type ConsentActionControlProof } from "@certscore/contracts";
 import { canonicalSha256 } from "@certscore/scan-core/post-refusal-reconciliation";
 
 import { isReviewedWorkerNecessaryOnlyRejectProof, workerDiscoveredFrameMatchesTarget } from "@certscore/scan-core/post-refusal-target-authorization";
@@ -80,6 +80,7 @@ export function assessWorkerDiscoveredClick(binding: Binding, click: WorkerDisco
         (exactTargetSha256 !== displayTargetSha256 && !verifiedRedirect)) return {reason: "target_mismatch"};
     if (!consentActionControlProofSchema.safeParse(click.control).success || !packet.actionControlProof ||
         click.control.action !== binding.action ||
+        !reviewedConsentProofMatchesRequestedUrl(binding.requestedUrl, click.control) ||
         (click.control.actionSemantics !== "direct_label" && !isReviewedWorkerNecessaryOnlyRejectProof(binding.requestedUrl, click.control)) ||
         click.control.authorizedTargetSha256 !== exactTargetSha256 ||
         !workerDiscoveredFrameMatchesTarget(click.control) ||

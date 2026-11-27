@@ -50,6 +50,22 @@ export const REGISTERED_ONETRUST_ACCEPT_CONTROLS = [
 
 export const REVIEWED_COOKIE_ACCEPT_CONTROLS = [
   {
+    requestedUrl: "https://helpdeskeddy.com/",
+    documentUrl: "https://helpdeskeddy.ru/",
+    documentSha256: "f6d28adc624ef2c976b3492f4053e7151be1c8132f45cdf61ece5cf9e47f7a30",
+    label: "Принять", locale: "ru", controlSelector: "#cookie-accept", bannerSelector: "#cookie-popup",
+    notice: "Сайт использует cookie. Вы можете отказаться от использования cookie, изменив настройки в браузере.",
+    proofReason: "reviewed_helpdeskeddy_cookie_accept.v1",
+  },
+  {
+    requestedUrl: "https://moevideo.net/",
+    documentUrl: "https://moe.video/",
+    documentSha256: "af8ff4b882adce871ed86e0de720a8ded8d34267655c23185d4a83f7578ed080",
+    label: "Принять", locale: "ru", controlSelector: "#accept-cookies", bannerSelector: "#cookie-consent",
+    notice: "Мы используем cookies для улучшения вашего опыта. Продолжая, вы соглашаетесь с нашей политикой Cookies и политикой конфиденциальности",
+    proofReason: "reviewed_moe_video_cookie_accept.v1",
+  },
+  {
     documentUrl: "https://cpj.org/",
     documentSha256: "d9304fd2d4560fbee06fc3a38b056252f9b9b2d59834c503ae8be4481fdebfa1",
     label: "Aceitar cookies", locale: "pt", controlSelector: "#onetrust-accept-btn-handler",
@@ -75,12 +91,33 @@ export const REVIEWED_COOKIE_ACCEPT_CONTROLS = [
 
 export const REVIEWED_COOKIE_REJECT_CONTROLS = [
   {
+    requestedUrl: "https://helpdeskeddy.com/",
+    documentUrl: "https://helpdeskeddy.ru/",
+    documentSha256: "f6d28adc624ef2c976b3492f4053e7151be1c8132f45cdf61ece5cf9e47f7a30",
+    label: "Отказаться", labelSource: "visible_text", locale: "ru",
+    controlSelector: "#cookie-decline", bannerSelector: "#cookie-popup",
+    notice: "Сайт использует cookie. Вы можете отказаться от использования cookie, изменив настройки в браузере.",
+    actionSemantics: "direct_label",
+    proofReason: "reviewed_helpdeskeddy_cookie_reject.v1",
+  },
+  {
+    requestedUrl: "https://vizor-games.com/",
+    documentUrl: "https://vizor-games.com/",
+    documentSha256: "053dd59f9f0e6c78190cfbf9b740d294d17f680fbd2263d278b2a85082e527cc",
+    label: "Accept only necessary", labelSource: "visible_text", locale: "en",
+    controlSelector: "#acceptNecessaryButton", bannerSelector: ".cookies-content",
+    notice: "We and our partners use tracking technologies like cookies to provide you with personalised functionalities of the Website, to perform analytics to monitor how users use our website and help us improve it.",
+    actionSemantics: "canonical_necessary_only_recipe",
+    proofReason: "reviewed_vizor_cookie_reject.v1",
+  },
+  {
     requestedUrl: "https://virginmediao2.co.uk/",
     documentUrl: "https://www.virginmediao2.co.uk/",
     documentSha256: "b0b285fdba10a77e65999b119a716f42b3f0b019c09c487f9da9afd088bc9ae6",
     label: "Accept essential cookies only", labelSource: "aria_label", locale: "en",
     controlSelector: "#privacy_pref_optout", bannerSelector: "#cookiePrompt",
     notice: "To change your settings and manage any non-essential cookies please open the cookie jar.",
+    actionSemantics: "canonical_necessary_only_recipe",
     proofReason: "reviewed_virginmediao2_cookie_reject.v1",
   },
   {
@@ -90,9 +127,23 @@ export const REVIEWED_COOKIE_REJECT_CONTROLS = [
     label: "Only required", labelSource: "visible_text", locale: "en",
     controlSelector: "#rejectAll", bannerSelector: "#promptLayerContent",
     notice: "By selecting “Only Required”, you only accept cookies that make our website function properly.",
+    actionSemantics: "canonical_necessary_only_recipe",
     proofReason: "reviewed_telekom_cookie_reject.v1",
   },
 ] as const;
+
+export const ALMA_AXEPTIO_ACCEPT_CONTROL = {
+  requestedUrl: "https://getalma.eu/",
+  documentUrl: "https://almapay.com/",
+  documentSha256: "2bcef1352c4827581d36facfce6c6d810e38ba584651ba838753969ba24f4b7f",
+  label: "Accept all cookies",
+  visibleLabel: "OK!",
+  controlSelector: "#axeptio_btn_acceptAll",
+  bannerSelector: '[data-testid="widget-container"]',
+  notice: "Do you agree to be accompanied during your visit?",
+  recipeId: "canonical-control:accept:alma-axeptio:v1",
+  proofReason: "reviewed_alma_axeptio_accept.v1",
+} as const;
 
 export const CAIA_ACCEPT_CONTROL = {
   targetUrl: "https://caiacosmetics.se/",
@@ -252,6 +303,18 @@ export const consentActionControlProofSchema = z.object({
     context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
       message: "The reviewed cookie Reject control requires its exact label, selector, and document."});
   }
+  const alma = ALMA_AXEPTIO_ACCEPT_CONTROL;
+  if (proof.recipeId === alma.recipeId || proof.classifierReasonCodes.includes(alma.proofReason)) {
+    if (proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION || proof.action !== "accept" ||
+      proof.actionSemantics !== "direct_label" || proof.classifierIntent !== "accept" ||
+      proof.accessibleLabel !== alma.label || proof.labelSource !== "aria_label" || proof.matchStrength !== "direct" ||
+      proof.selectorHint !== alma.controlSelector || proof.recipeId !== alma.recipeId ||
+      !proof.classifierReasonCodes.includes(alma.proofReason) ||
+      proof.authorizedTargetSha256 !== alma.documentSha256 || proof.frameIdentitySha256 !== alma.documentSha256) {
+      context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
+        message: "Alma Accept requires its exact accessible label, selector, and document."});
+    }
+  }
   const caia = CAIA_ACCEPT_CONTROL;
   if (proof.recipeId === caia.recipeId || proof.classifierReasonCodes.includes(caia.proofReason)) {
     if (proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION ||
@@ -344,10 +407,16 @@ export const consentActionControlProofSchema = z.object({
 export type ConsentActionControlProof = z.infer<typeof consentActionControlProofSchema>;
 
 function matchesReviewedCookieReject(proof: ConsentActionControlProof, scope: typeof REVIEWED_COOKIE_REJECT_CONTROLS[number]) {
-  return proof.action === "reject" && proof.actionSemantics === "canonical_necessary_only_recipe" &&
+  return proof.action === "reject" && proof.actionSemantics === scope.actionSemantics &&
     proof.classifierIntent === "reject" && proof.accessibleLabel === scope.label && proof.labelSource === scope.labelSource &&
     proof.matchedLocale === scope.locale && proof.selectorHint === scope.controlSelector &&
     proof.authorizedTargetSha256 === scope.documentSha256 && proof.frameIdentitySha256 === scope.documentSha256;
+}
+
+export function reviewedConsentProofMatchesRequestedUrl(requestedUrl: string, proof: ConsentActionControlProof): boolean {
+  const scope = [ALMA_AXEPTIO_ACCEPT_CONTROL, ...REVIEWED_COOKIE_ACCEPT_CONTROLS, ...REVIEWED_COOKIE_REJECT_CONTROLS]
+    .find(control => proof.classifierReasonCodes.includes(control.proofReason));
+  return !scope || !("requestedUrl" in scope) || scope.requestedUrl === requestedUrl;
 }
 
 export function isReviewedCookieRejectProof(requestedUrl: string, proof: ConsentActionControlProof): boolean {

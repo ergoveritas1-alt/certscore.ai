@@ -5,6 +5,7 @@ import { exactNativeConsentButtonSelector, hubSpotHrefLessConsentSelector, revie
 import { DRUPAL_ACCEPT_BANNER_SELECTOR, DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP } from "./drupal-consent-overflow-geometry.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import {
+  ALMA_AXEPTIO_ACCEPT_CONTROL,
   CONSENT_ACTION_CONTROL_PROOF_VERSION,
   classifyConsentControlLabel,
   DRUPAL_NO_THANKS_REJECT_CONTROL,
@@ -13,7 +14,7 @@ import {
   isRegisteredContextualAcceptLabel,
   normalizeConsentControlText,
   REGISTERED_ONETRUST_ACCEPT_CONTROLS,
-  REVIEWED_COOKIE_ACCEPT_CONTROLS, REVIEWED_COOKIE_REJECT_CONTROLS,
+  REVIEWED_COOKIE_ACCEPT_CONTROLS, REVIEWED_COOKIE_REJECT_CONTROLS, reviewedConsentProofMatchesRequestedUrl,
   classifyDafitiAdoptAcceptLabel, DAFITI_ADOPT_ACCEPT_CONTROL, CAIA_ACCEPT_CONTROL,
   type ConsentActionControlProof,
   type PostRefusalInteractionDiagnostics,
@@ -359,6 +360,15 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     reviewedCookieReject)))?.includes(reviewedCookieReject.notice)) {
     return {status: "label_unverifiable", reason: "reviewed_cookie_reject_scope_unverified"};
   }
+  const alma = ALMA_AXEPTIO_ACCEPT_CONTROL;
+  const almaAccept = input.recipeId === alma.recipeId;
+  if (almaAccept && (input.action !== "accept" || !input.workerDiscovered || !input.exactElement ||
+    input.expectedNativeSelector !== alma.controlSelector || input.selectorHint !== alma.controlSelector ||
+    input.page.url() !== alma.documentUrl || input.authorizedTargetSha256 !== alma.documentSha256 ||
+    input.controlFrameUrl || input.expectedAccessibleControl || !matchesAlmaAcceptLabels(bounded) ||
+    !(await guard.read(() => readVisibleConsentBannerText(input.control, alma)))?.includes(alma.notice))) {
+    return {status: "label_unverifiable", reason: "reviewed_alma_axeptio_accept_scope_unverified"};
+  }
   const caia = CAIA_ACCEPT_CONTROL;
   const caiaAccept = input.recipeId === caia.recipeId && input.action === "accept" &&
     input.selectorHint === caia.controlSelector && input.expectedNativeSelector === caia.controlSelector &&
@@ -438,7 +448,8 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     return result;
   };
   const classification = classify(preferredLabel(bounded)?.value);
-  const conflictingIntent = sourceIntentConflict(bounded, classify);
+  // Only the reviewed Axeptio button requires this exact visible and accessible label pair.
+  const conflictingIntent = almaAccept ? undefined : sourceIntentConflict(bounded, classify);
   if (conflictingIntent) {
     return {
       status: "label_mismatch",
@@ -458,7 +469,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
   if (classification.matchedLocale === "mk") {
     return { status: "label_unverifiable", reason: "observation_only_control_locale" };
   }
-  const necessaryOnlyLabelVerified = labelBoundNecessaryOnly || reviewedCookieReject
+  const necessaryOnlyLabelVerified = labelBoundNecessaryOnly || reviewedCookieReject?.actionSemantics === "canonical_necessary_only_recipe"
     ? classification.intent === "reject" && classification.variant === "necessary_only" &&
       (Boolean(reviewedCookieReject) || classification.confidence >= 0.8)
     : input.canonicalNecessaryOnly
@@ -625,6 +636,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       if (registeredOneTrustAccept && !hasExactOneTrustAcceptLabel(labels, registeredOneTrustAccept.label)) return false;
       if (dafitiAdoptAccept) return !!classifyDafitiAdoptAcceptLabel(labels.visibleText) &&
         !labels.ariaLabel && !labels.title && !labels.value;
+      if (almaAccept) return matchesAlmaAcceptLabels(labels);
       if (sourceIntentConflict(labels, classify)) return false;
       if (drupalReject) return liveLabel?.source === "visible_text" &&
         liveLabel.value === DRUPAL_NO_THANKS_REJECT_CONTROL.label && !labels.title && !labels.value;
@@ -703,6 +715,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         ...(registeredOneTrustAccept ? [registeredOneTrustAccept.proofReason] : []),
         ...(reviewedCookieAccept ? [reviewedCookieAccept.proofReason] : []),
         ...(reviewedCookieReject ? [reviewedCookieReject.proofReason] : []),
+        ...(almaAccept ? [alma.proofReason] : []),
         ...(caiaAccept ? [caia.proofReason] : []),
         ...(dafitiAdoptAccept ? [adopt.proofReason] : []),
         ...(drupalReject ? [DRUPAL_NO_THANKS_REJECT_CONTROL.proofReason] : []),
@@ -812,6 +825,11 @@ function preferredLabel(fields: ControlLabelFields): {
   return undefined;
 }
 
+function matchesAlmaAcceptLabels(fields: ControlLabelFields) {
+  const {label, visibleLabel} = ALMA_AXEPTIO_ACCEPT_CONTROL;
+  return fields.ariaLabel === label && fields.visibleText === visibleLabel && !fields.value && !fields.title;
+}
+
 function hasExactOneTrustAcceptLabel(fields: ControlLabelFields, label: string): boolean {
   return fields.visibleText === label && [fields.ariaLabel, fields.value, fields.title].every(value => !value || value === label);
 }
@@ -867,6 +885,7 @@ export async function dispatchWorkerDiscoveredConsentControl(input: {
   const { page, requestedUrl, control, proof, signal, deadlineAtMs } = input;
   const reviewedNecessaryOnly = isReviewedWorkerNecessaryOnlyRejectProof(requestedUrl, proof);
   if (!control || !workerDiscoveredFrameMatchesTarget(proof) || proof.frameIdentitySha256 !== sha256(page.url()) ||
+      !reviewedConsentProofMatchesRequestedUrl(requestedUrl, proof) ||
       (proof.actionSemantics !== "direct_label" && !reviewedNecessaryOnly)) throw new Error("worker_consent_control_unbound");
   input.assertCurrent();
   const selector = await boundedControlProof({page, signal, deadlineAtMs}, guard =>
@@ -885,7 +904,8 @@ export async function dispatchWorkerDiscoveredConsentControl(input: {
   const current = verified.status === "verified" ? verified.proof : undefined;
   if (!current || current.accessibleLabel !== proof.accessibleLabel || current.labelSource !== proof.labelSource ||
       current.actionSemantics !== proof.actionSemantics || current.frameIdentitySha256 !== proof.frameIdentitySha256 ||
-      REVIEWED_COOKIE_ACCEPT_CONTROLS.some(scope => proof.classifierReasonCodes.includes(scope.proofReason) &&
+      [...REVIEWED_COOKIE_ACCEPT_CONTROLS, ...REVIEWED_COOKIE_REJECT_CONTROLS].some(scope =>
+        proof.classifierReasonCodes.includes(scope.proofReason) &&
         !current.classifierReasonCodes.includes(scope.proofReason)) ||
       (reviewedNecessaryOnly && (!isReviewedWorkerNecessaryOnlyRejectProof(requestedUrl, current) ||
         current.labelBoundNecessaryOnly?.contextText !== proof.labelBoundNecessaryOnly?.contextText))) {
