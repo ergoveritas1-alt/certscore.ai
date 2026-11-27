@@ -1,4 +1,4 @@
-import { ALMA_AXEPTIO_ACCEPT_CONTROL, REGISTERED_ONETRUST_ACCEPT_CONTROLS, REVIEWED_COOKIE_ACCEPT_CONTROLS } from "@certscore/contracts";
+import { ALMA_AXEPTIO_ACCEPT_CONTROL, BRADESCO_SEGUROS_ACCEPT_CONTROL, REGISTERED_ONETRUST_ACCEPT_CONTROLS, REVIEWED_COOKIE_ACCEPT_CONTROLS } from "@certscore/contracts";
 import { dispatchWorkerDiscoveredConsentControl } from "./cmp-action-control-proof.js";
 import { takePreparedConsentActionPage, type PreparedConsentActionPage, type DeferredConsentProof } from "./consent-action-browser";
 import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
@@ -104,7 +104,7 @@ import { readCmpApiConsentSnapshot, type CmpApiConsentSnapshot } from "./cmp-api
 import { evaluateCmpApiConfirmation } from "./cmp-api-confirmation.js";
 import { acceptFirstLayerProofMatches, dispatchWithAcceptFirstLayerProof, type AcceptFirstLayerProof } from "./accept-first-layer-gate.js";
 import { DRUPAL_ACCEPT_RECIPE } from "./drupal-consent-overflow-geometry.js";
-import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
+import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, revealBradescoAccept, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
 import { captureCookieYesConfirmationBaseline, matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, verifiedChangedOneTrustDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import {
   captureConsentControlGeometry,
@@ -1004,18 +1004,19 @@ export async function runPostAcceptObserver(
         }]},
       }
       : undefined;
-    const alma = ALMA_AXEPTIO_ACCEPT_CONTROL;
-    const exactAlmaRecipe: PostAcceptActionRecipe | undefined = workerDiscovery && input.allowCanonicalAcceptDiscovery &&
-      input.url === alma.requestedUrl && authorizedExactTargetUrl === alma.documentUrl && page.url() === alma.documentUrl
-      ? {
-        artifactVersion: "certscore.post_accept_action_recipe.v1",
-        recipeId: alma.recipeId, resolverMethod: "canonical_consent_control_registry_recipe",
-        controlSelector: alma.controlSelector, controlExpectedNormalizedLabel: normalizeAcceptControlLabel(alma.label),
-        bannerSelector: alma.bannerSelector,
-        confirmation: {kind: "canonical_accept_transition", controlSelector: alma.controlSelector, bannerSelector: alma.bannerSelector},
-      } : undefined;
+    const reviewedScope = workerDiscovery && input.allowCanonicalAcceptDiscovery
+      ? [ALMA_AXEPTIO_ACCEPT_CONTROL, BRADESCO_SEGUROS_ACCEPT_CONTROL].find(scope =>
+        input.url === scope.requestedUrl && authorizedExactTargetUrl === scope.documentUrl && page!.url() === scope.documentUrl)
+      : undefined;
+    const reviewedRecipe: PostAcceptActionRecipe | undefined = reviewedScope ? {
+      artifactVersion: "certscore.post_accept_action_recipe.v1",
+      recipeId: reviewedScope.recipeId, resolverMethod: "canonical_consent_control_registry_recipe",
+      controlSelector: reviewedScope.controlSelector, controlExpectedNormalizedLabel: normalizeAcceptControlLabel(reviewedScope.label),
+      bannerSelector: reviewedScope.bannerSelector,
+      confirmation: {kind: "canonical_accept_transition", controlSelector: reviewedScope.controlSelector, bannerSelector: reviewedScope.bannerSelector},
+    } : undefined;
     const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe ?? exactDrupalRecipe ??
-      exactAdoptRecipe ?? exactCaiaRecipe ?? exactAlmaRecipe;
+      exactAdoptRecipe ?? exactCaiaRecipe ?? reviewedRecipe;
     const exactActionDeadline = firstLayerProof && (exactNativeRecipe || exactCookieInformation)
       ? firstLayerProof.expiresAtMs : Infinity;
     const searchDeadline = Math.min(resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs), exactActionDeadline);
@@ -1165,7 +1166,7 @@ export async function runPostAcceptObserver(
       return named ? {...named, controlExpectedNormalizedLabel: recipe.controlExpectedNormalizedLabel} : recipe;
     };
     const nativeSelectorFor = (recipe: PostAcceptActionRecipe) => firstLayerProof?.exactSelector ??
-      (workerDiscovery && (recipe.recipeId === adopt.recipeId || recipe.recipeId === alma.recipeId ||
+      (workerDiscovery && (recipe.recipeId === adopt.recipeId || recipe.recipeId === reviewedRecipe?.recipeId ||
         REGISTERED_ONETRUST_ACCEPT_CONTROLS.some(scope => scope.recipeId === recipe.recipeId &&
           scope.cmpId === recipe.cmpId && scope.controlSelector === recipe.controlSelector))
         ? recipe.controlSelector : undefined);
@@ -2189,6 +2190,7 @@ async function waitForDeterministicRecipe(
   // uniqueness sweep. A partial sweep never authorizes dispatch.
   let deadlineAtMs = Date.now() + timeoutMs;
   let prioritizedRecipeId: string | undefined;
+  let scrolledBradescoBanner = false;
   do {
     if (signal?.aborted) return { status: "aborted" };
     const attemptRevision = discovery?.revision ?? 0;
@@ -2298,6 +2300,17 @@ async function waitForDeterministicRecipe(
           if (visible && enabled && expectedLabelPresent) {
             const readiness = retainedReadiness ?? await inspectLocatorConsentReadiness(control, readOptions);
             if (!readiness.scopeInteractive) { scopeNotInteractive = true; continue; }
+            if (recipe.recipeId === BRADESCO_SEGUROS_ACCEPT_CONTROL.recipeId) {
+              const geometry = await readWithinAcceptDeadline(
+                () => revealBradescoAccept(control, !scrolledBradescoBanner && count === 1 && scope === page, deadlineAtMs),
+                {visible: false, moved: false}, deadlineAtMs, signal,
+              );
+              scrolledBradescoBanner ||= geometry.moved;
+              if (!geometry.visible) {
+                viewportPendingRecipeIds.push(recipe.recipeId);
+                continue;
+              }
+            }
             if (locatorActionabilitySupportsVerifiedDispatch(readiness.actionability)) {
               if (outerDeadlineAtMs !== undefined) deadlineAtMs = outerDeadlineAtMs;
               matches.push({ recipe, control, scope });

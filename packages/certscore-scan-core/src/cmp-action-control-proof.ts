@@ -5,7 +5,7 @@ import { exactNativeConsentButtonSelector, hubSpotHrefLessConsentSelector, revie
 import { DRUPAL_ACCEPT_BANNER_SELECTOR, DRUPAL_ACCEPT_RECIPE, DRUPAL_ACCEPT_SELECTOR, DRUPAL_CMP } from "./drupal-consent-overflow-geometry.js";
 import { COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR, COOKIE_SCRIPT_ACCEPT_IDS, COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, COOKIE_SCRIPT_REJECT_IDS } from "./cookiescript-reject-selector.js";
 import {
-  ALMA_AXEPTIO_ACCEPT_CONTROL,
+  ALMA_AXEPTIO_ACCEPT_CONTROL, BRADESCO_SEGUROS_ACCEPT_CONTROL,
   CONSENT_ACTION_CONTROL_PROOF_VERSION,
   classifyConsentControlLabel,
   DRUPAL_NO_THANKS_REJECT_CONTROL,
@@ -347,6 +347,11 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
   if (reviewedCookieAccept && !(await guard.read(() => readVisibleConsentBannerText(input.control,
     reviewedCookieAccept)))?.includes(reviewedCookieAccept.notice)) {
     return {status: "label_unverifiable", reason: "reviewed_cookie_accept_scope_unverified"};
+  }
+  const bradesco = BRADESCO_SEGUROS_ACCEPT_CONTROL;
+  if (reviewedCookieAccept?.proofReason === bradesco.proofReason &&
+      !(await guard.read(() => inspectBradescoAcceptVisibility(input.control, false, input.deadlineAtMs))).visible) {
+    return {status: "label_unverifiable", reason: "reviewed_bradesco_seguros_cookie_accept_clipped"};
   }
   const reviewedCookieReject = input.workerDiscovered && input.action === "reject" &&
     !input.controlFrameUrl && !input.expectedAccessibleControl
@@ -737,9 +742,9 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
 /** Read only visible instructions in the registered first-layer banner. A
  * category heading, hidden copy, another dialog or a form cannot authorize it. */
 async function readVisibleConsentBannerText(control: ConsentActionControl, recipe: {
-  bannerSelector: string; controlSelector: string;
+  bannerSelector: string; controlSelector: string; controlGroupSelector?: string;
 }): Promise<string | undefined> {
-  const read = (element: HTMLElement | SVGElement, selectors: {bannerSelector: string; controlSelector: string}) => {
+  const read = (element: HTMLElement | SVGElement, selectors: typeof recipe) => {
     const root = element.getRootNode() as Document | ShadowRoot;
     const banner = element.closest(selectors.bannerSelector);
     if (!banner || root.querySelectorAll(selectors.bannerSelector).length !== 1 || root.querySelectorAll(selectors.controlSelector).length !== 1 ||
@@ -747,6 +752,10 @@ async function readVisibleConsentBannerText(control: ConsentActionControl, recip
       !(element instanceof HTMLButtonElement) || element.form || element.hasAttribute("form") ||
       element.hasAttribute("formaction") || element.querySelector("a, button, input, [role=button]") ||
       !(element.type === "button" || element.getAttribute("type") === null)) return undefined;
+    if (selectors.controlGroupSelector) {
+      const groups = banner.querySelectorAll(selectors.controlGroupSelector);
+      if (groups.length !== 1 || !groups[0]!.contains(element)) return undefined;
+    }
     const ancestors: Element[] = [];
     for (let current: Element | null = banner; current; current = current.parentElement) ancestors.push(current);
     const descendants = banner.querySelectorAll("*");
@@ -772,6 +781,73 @@ async function readVisibleConsentBannerText(control: ConsentActionControl, recip
     return text.replace(/\s+/g, " ").trim();
   };
   return ("elementHandle" in control ? control.evaluate(read, recipe) : control.evaluate(read, recipe)).catch(() => undefined);
+}
+
+// The retained control is clipped by the right edge of the consent banner.
+// Only its scrollable banner may move. Resolve and prove the exact button again afterward.
+export async function revealBradescoAccept(control: Locator, allowScroll: boolean, deadlineAtMs: number) {
+  const unavailable = {visible: false, moved: false};
+  if (Date.now() >= deadlineAtMs) return unavailable;
+  const button = await control.elementHandle({timeout: Math.max(1, Math.min(100, deadlineAtMs - Date.now()))}).catch(() => null);
+  if (!button) return unavailable;
+  try {
+    if (!(await readVisibleConsentBannerText(button, BRADESCO_SEGUROS_ACCEPT_CONTROL))
+      ?.includes(BRADESCO_SEGUROS_ACCEPT_CONTROL.notice)) return unavailable;
+    return await inspectBradescoAcceptVisibility(button, allowScroll, deadlineAtMs);
+  } finally {
+    void button.dispose().catch(() => undefined);
+  }
+}
+
+async function inspectBradescoAcceptVisibility(control: ConsentActionControl, allowScroll: boolean, deadlineAtMs?: number) {
+  const scope = BRADESCO_SEGUROS_ACCEPT_CONTROL;
+  const read = (button: HTMLElement | SVGElement, args: {
+    scope: typeof scope; allowScroll: boolean; deadlineAtMs?: number;
+  }) => {
+    const unavailable = {visible: false, moved: false};
+    const {scope, allowScroll, deadlineAtMs} = args;
+    const banner = button.closest(scope.bannerSelector);
+    if (document.URL !== scope.documentUrl || !button.isConnected || !(banner instanceof HTMLElement) ||
+        !(button instanceof HTMLButtonElement) || !button.matches(scope.controlSelector) || button.form || button.disabled ||
+        !banner.querySelector(scope.controlGroupSelector)?.contains(button) ||
+        (button.textContent ?? "").replace(/\s+/g, " ").trim() !== scope.label ||
+        [button.getAttribute("aria-label"), button.getAttribute("title")].some(label => label && label !== scope.label) ||
+        document.querySelectorAll(scope.controlSelector).length !== 1 ||
+        document.querySelectorAll(scope.bannerSelector).length !== 1) return unavailable;
+    const hit = (x: number, y: number) => {
+      const top = document.elementFromPoint(x, y);
+      return top === button || (top !== null && button.contains(top));
+    };
+    const points = () => {
+      const rect = button.getBoundingClientRect();
+      return {
+        rect,
+        left: hit(rect.left + 2, rect.top + 2) && hit(rect.left + 2, rect.bottom - 2),
+        center: hit(rect.left + rect.width / 2, rect.top + rect.height / 2),
+        right: hit(rect.right - 2, rect.top + 2) && hit(rect.right - 2, rect.bottom - 2),
+      };
+    };
+    const leftEdge = banner.getBoundingClientRect().left + banner.clientLeft;
+    const rightEdge = leftEdge + banner.clientWidth;
+    const fullyVisible = ({rect, left, center, right}: ReturnType<typeof points>) =>
+      left && center && right && rect.width >= 4 && rect.height >= 4 &&
+      rect.left >= Math.max(0, leftEdge) && rect.right <= Math.min(window.innerWidth, rightEdge) &&
+      rect.top >= 0 && rect.bottom <= window.innerHeight;
+    const before = points();
+    if (fullyVisible(before)) return {visible: true, moved: false};
+    const distance = Math.ceil(before.rect.right - rightEdge);
+    // A 96 px cap covers the retained 61 px clip without moving the page.
+    if (!allowScroll || deadlineAtMs === undefined || Date.now() >= deadlineAtMs - 200 ||
+        !before.left || !before.center || before.right || distance <= 0 || distance > 96 ||
+        !["auto", "scroll", "hidden"].includes(getComputedStyle(banner).overflowX) ||
+        banner.scrollWidth - banner.clientWidth - banner.scrollLeft < distance - 2) return unavailable;
+    const oldPosition = banner.scrollLeft;
+    banner.scrollBy({left: distance, behavior: "instant"});
+    return {visible: fullyVisible(points()), moved: banner.scrollLeft !== oldPosition};
+  };
+  const options = {scope, allowScroll, deadlineAtMs};
+  return ("elementHandle" in control ? control.evaluate(read, options, {timeout: 100}) : control.evaluate(read, options))
+    .catch(() => ({visible: false, moved: false}));
 }
 
 /** Contextual approval is not a blanket license to click “OK”. Verify the

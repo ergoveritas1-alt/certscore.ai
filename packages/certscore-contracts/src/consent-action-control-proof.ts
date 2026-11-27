@@ -48,7 +48,22 @@ export const REGISTERED_ONETRUST_ACCEPT_CONTROLS = [
   ONETRUST_WHAT_TO_EXPECT_ACCEPT_CONTROL,
 ] as const;
 
+export const BRADESCO_SEGUROS_ACCEPT_CONTROL = {
+  requestedUrl: "https://bradescoseguros.com.br/",
+  documentUrl: "https://www.bradescoseguros.com.br/clientes",
+  documentSha256: "6f381f2184283300c5be5272939c69002ff02a0c22c0c4ec53e4a18344aae2ea",
+  label: "Aceitar cookies",
+  locale: "pt",
+  controlSelector: "#adopt-accept-all-button",
+  bannerSelector: "#cookie-banner",
+  controlGroupSelector: ".adopt-c-eHHyAV",
+  notice: "Usamos cookies para oferecer a melhor experiência e analisar o uso de nosso site, direcionar conteúdos e anúncios personalizados e facilitar a navegação de forma segura.",
+  recipeId: "canonical-control:accept:bradesco-seguros:v1",
+  proofReason: "reviewed_bradesco_seguros_cookie_accept.v1",
+} as const;
+
 export const REVIEWED_COOKIE_ACCEPT_CONTROLS = [
+  BRADESCO_SEGUROS_ACCEPT_CONTROL,
   {
     requestedUrl: "https://helpdeskeddy.com/",
     documentUrl: "https://helpdeskeddy.ru/",

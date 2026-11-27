@@ -275,7 +275,9 @@ test("reviewed worker cookie controls require a visible notice and a unique non-
       const labelAttribute = "labelSource" in scope && scope.labelSource === "aria_label" ? ` aria-label="${scope.label}"` : "";
       const button = `<button type="button" id="${scope.controlSelector.slice(1)}"${labelAttribute}>${scope.label}</button>`;
       const bannerAttribute = scope.bannerSelector.startsWith(".") ? "class" : "id";
-      const html = `<meta charset="utf-8"><section ${bannerAttribute}="${scope.bannerSelector.slice(1)}"><p>${scope.notice}</p>${button}</section>`;
+      const group = "controlGroupSelector" in scope
+        ? `<div class="${scope.controlGroupSelector.slice(1)}">${button}</div>` : button;
+      const html = `<meta charset="utf-8"><section ${bannerAttribute}="${scope.bannerSelector.slice(1)}"><p>${scope.notice}</p>${group}</section>`;
       await context.route("**/*", route => route.request().url() === scope.documentUrl
         ? route.fulfill({contentType: "text/html", body: html}) : route.abort("blockedbyclient"));
       const getProof = () => buildConsentActionControlProof({
