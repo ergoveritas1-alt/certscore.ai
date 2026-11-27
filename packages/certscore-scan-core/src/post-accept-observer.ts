@@ -749,6 +749,7 @@ export async function runPostAcceptObserver(
     await installStorageWriteProbe(page);
     });
     let mainNavigationRequestCount = 0;
+    let latestMainNavigationUrl: string | undefined;
     page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
       // Optional form images may continue in this session after the action
@@ -756,6 +757,7 @@ export async function runPostAcceptObserver(
       if (networkObservationClosed || timing.observationEndedAtMs !== undefined) return;
       if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {
         mainNavigationRequestCount += 1;
+        latestMainNavigationUrl = request.url();
       }
       const startedAtEpochMs = request.timing().startTime > 0 ? request.timing().startTime : Date.now();
       requestStartedAtEpochMs.set(request, startedAtEpochMs);
@@ -891,6 +893,8 @@ export async function runPostAcceptObserver(
         remainingResultBudgetMs(input.interactionAuthorization.resolutionTimeoutMs),
         effectiveSignal,
         expectedLanding,
+        workerDiscovery ? () => mainNavigationRequestCount > 1 && latestMainNavigationUrl !== input.url
+          ? latestMainNavigationUrl : undefined : undefined,
       );
       const resolution = settled && (!expectedLanding || page.url() === expectedLanding)
         ? await bindPostRefusalBrowserResolvedExactTarget({
@@ -3841,7 +3845,13 @@ async function visibleAcceptLocatorStateHash(
   return state ? hashValue(state) : undefined;
 }
 
-async function waitForPassiveRedirectSettle(page: Page, timeoutMs: number, signal?: AbortSignal, expectedLanding?: string) {
+async function waitForPassiveRedirectSettle(
+  page: Page,
+  timeoutMs: number,
+  signal?: AbortSignal,
+  expectedLanding?: string,
+  latestRedirectUrl?: () => string | undefined,
+) {
   const deadlineAtMs = Date.now() + timeoutMs;
   let lastUrl = page.url();
   let stableSinceMs = Date.now();
@@ -3852,7 +3862,9 @@ async function waitForPassiveRedirectSettle(page: Page, timeoutMs: number, signa
       lastUrl = currentUrl;
       stableSinceMs = Date.now();
     }
-    if ((!expectedLanding || currentUrl === expectedLanding) && Date.now() - stableSinceMs >= 150) return true;
+    const redirectUrl = latestRedirectUrl?.();
+    const redirectCommitted = !redirectUrl || normalizeTargetUrl(currentUrl) === normalizeTargetUrl(redirectUrl);
+    if (redirectCommitted && (!expectedLanding || currentUrl === expectedLanding) && Date.now() - stableSinceMs >= 150) return true;
     await waitForDelay(25, signal).catch(() => undefined);
   }
   return false;

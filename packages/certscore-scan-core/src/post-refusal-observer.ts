@@ -888,11 +888,13 @@ export async function runPostRefusalObserver(
     const measurementBudget = measurementInspectionBudget({distinctRecipients:true});
     const responseCookieBudget = measurementInspectionBudget();
     let mainNavigationRequestCount = 0;
+    let latestMainNavigationUrl: string | undefined;
     page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
       if (networkObservationClosed || timing.observationEndedAtMs !== undefined) return;
       if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {
         mainNavigationRequestCount += 1;
+        latestMainNavigationUrl = request.url();
       }
       const startedAtEpochMs = request.timing().startTime > 0 ? request.timing().startTime : Date.now();
       const redirectedFromRequest = request.redirectedFrom();
@@ -1166,11 +1168,14 @@ export async function runPostRefusalObserver(
         page, response: navigationResponse, requestedUrl: input.url, redirectCount, signal: effectiveSignal,
         documentSha256: firstLayerProof?.exactSelector ? firstLayerProof.binding.documentSha256 : undefined,
       });
+      const workerDiscovery = !firstLayerProof && Boolean(input.onWorkerDiscoveredClick);
       const settled = exactServerCommit || await waitForPassiveRedirectSettle(
         page,
         input.interactionAuthorization.resolutionTimeoutMs,
         effectiveSignal,
         expectedLanding,
+        workerDiscovery ? () => mainNavigationRequestCount > 1 && latestMainNavigationUrl !== input.url
+          ? latestMainNavigationUrl : undefined : undefined,
       );
       const resolution = settled && (!expectedLanding || page.url() === expectedLanding)
         ? await bindPostRefusalBrowserResolvedExactTarget({
@@ -3350,9 +3355,11 @@ export async function waitForPassiveRedirectSettle(
   timeoutMs: number,
   signal?: AbortSignal,
   expectedLanding?: string,
+  latestRedirectUrl?: () => string | undefined,
 ) {
   const boundedTimeoutMs = Math.max(250, Math.min(timeoutMs, 5_000));
-  const stableWindowMs = Math.min(1_500, Math.max(500, boundedTimeoutMs - 250));
+  const minimumStableWindowMs = 500;
+  const stableWindowMs = Math.min(1_500, Math.max(minimumStableWindowMs, boundedTimeoutMs - 250));
   const deadlineAtMs = Date.now() + boundedTimeoutMs;
   let stableUrl = page.url();
   let stableSinceMs = Date.now();
@@ -3363,9 +3370,15 @@ export async function waitForPassiveRedirectSettle(
       stableUrl = currentUrl;
       stableSinceMs = Date.now();
     }
+    const redirectUrl = latestRedirectUrl?.();
+    const redirectCommitted = !redirectUrl || normalizeTargetUrl(currentUrl) === normalizeTargetUrl(redirectUrl);
+    // Once an observed destination commits, use the existing minimum quiet
+    // window. Requiring the initial discovery window again spends the same
+    // resolution budget twice and can discard a valid redirect.
+    const quietWindowMs = redirectUrl ? minimumStableWindowMs : stableWindowMs;
     if (
-      (!expectedLanding || currentUrl === expectedLanding) && /^https:\/\//i.test(currentUrl) &&
-      Date.now() - stableSinceMs >= stableWindowMs
+      redirectCommitted && (!expectedLanding || currentUrl === expectedLanding) && /^https:\/\//i.test(currentUrl) &&
+      Date.now() - stableSinceMs >= quietWindowMs
     ) return true;
     if (Date.now() >= deadlineAtMs) break;
     await waitForDelay(

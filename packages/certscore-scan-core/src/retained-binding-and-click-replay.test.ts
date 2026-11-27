@@ -70,7 +70,7 @@ const oneTrustMarkup = `<section role="dialog" id="onetrust-banner-sdk" aria-lab
 </script>` + choiceScript([{selector: oneTrust, action: "accept"}]);
 
 async function replayFixture(t: TestContext, url: string, passiveMarkup: string, workerMarkup = passiveMarkup,
-  requestedUrl = url, redirectDelayMs = 0) {
+  requestedUrl = url, {redirectDelayMs = 0, landingCommitDelayMs = 0} = {}) {
   for (const flag of ["CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW", "CERTSCORE_REJECT_GATE_PRODUCTION_SHADOW"]) {
     const previous = process.env[flag];
     process.env[flag] = "1";
@@ -97,6 +97,7 @@ async function replayFixture(t: TestContext, url: string, passiveMarkup: string,
         const script = redirectDelayMs ? "setTimeout(() => " + redirect + ", " + redirectDelayMs + ")" : redirect;
         await route.fulfill({contentType: "text/html", body: "<script>" + script + "</script>"});
       } else if (request.url() === url) {
+        if (!passive && landingCommitDelayMs) await new Promise(resolve => setTimeout(resolve, landingCommitDelayMs));
         await route.fulfill({contentType: "text/html", body: '<meta charset="utf-8"><main>Local fixture</main>' +
           (passive ? passiveMarkup : workerMarkup)});
       } else if (request.method() === "POST" && new URL(request.url()).origin === new URL(url).origin &&
@@ -474,7 +475,7 @@ for (const {url, requestedUrl, markup, recipeId, redirectDelayMs, blockedReason}
   {url: "https://www.nrdc.org/", markup: contextualOneTrustMarkup},
 ]) {
   test(`independent Accept worker ${recipeId ? "binds" : "blocks"} the registered control on ${url}`, async t => {
-    const fixture = await replayFixture(t, url, markup, markup, requestedUrl, redirectDelayMs);
+    const fixture = await replayFixture(t, url, markup, markup, requestedUrl, {redirectDelayMs});
     const recipes = buildCanonicalPostAcceptActionRecipes();
     type WorkerReceipt = Parameters<NonNullable<Parameters<typeof runPostAcceptObserver>[0]["onWorkerDiscoveredClick"]>>[0];
     const receipts: WorkerReceipt[] = [];
@@ -494,6 +495,36 @@ for (const {url, requestedUrl, markup, recipeId, redirectDelayMs, blockedReason}
     }
   });
 }
+
+test("independent Reject worker resolves the delayed Magasins U destination within the original budget", async t => {
+  const requestedUrl = "https://magasins-u.com/";
+  const url = "https://www.magasins-u.com/";
+  const selector = "#footer_tc_privacy_button_2";
+  const markup = `<section id="footer_tc_privacy" role="dialog" aria-label="Gestion des cookies">
+    <p id="footer_tc_privacy_container_text">Nous utilisons des cookies dont certains requièrent votre accord.
+    Choisissez quels cookies vous souhaitez autoriser.</p>
+    <div id="footer_tc_privacy_container_button">
+      <button id="footer_tc_privacy_button">Accepter tout</button>
+      <button id="footer_tc_privacy_button_2">Tout refuser</button>
+      <button id="footer_tc_privacy_button_3">Paramétrer</button>
+    </div></section>` + choiceScript([{selector, action: "reject"}]);
+  const fixture = await replayFixture(t, url, markup, markup, requestedUrl, {landingCommitDelayMs: 375});
+  const recipes = buildCanonicalPostRefusalActionRecipes();
+  type WorkerReceipt = Parameters<NonNullable<Parameters<typeof runPostRefusalObserver>[0]["onWorkerDiscoveredClick"]>>[0];
+  const receipts: WorkerReceipt[] = [];
+  const packet = postRefusalEvidencePacketSchema.parse(await runPostRefusalObserver({
+    ...fixture.observerInput, recipe: recipes[0]!, recipeCandidates: recipes, allowCanonicalRejectDiscovery: true,
+    recipeSetId: "magasins-u-retained-reject", productionProjectable: true,
+    onWorkerDiscoveredClick: receipt => receipts.push(receipt),
+  }));
+  assert.deepEqual(fixture.clicks, ["reject"], JSON.stringify(packet.interactionDiagnostics?.navigation));
+  assert.equal(packet.targetUrl, url);
+  assert.equal(packet.interactionDiagnostics?.navigation.redirectResolution?.redirectCount, 1);
+  assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
+  assert.equal(receipts.length, 1);
+  assert.equal(receipts[0]!.control.selectorHint, selector);
+  assert.ok(receipts[0]!.deadlineAtMs - receipts[0]!.completedAtMs >= 200);
+});
 
 for (const originalRoute of [true, false]) {
   test("ActiveCampaign uses the larger native click window only on the retained route (" + originalRoute + ")", async t => {
