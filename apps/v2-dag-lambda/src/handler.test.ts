@@ -1,4 +1,4 @@
-import { buildWorkerDiscoveredClick, WORKER_DISCOVERED_CLICK_FILE } from "./worker-discovered-click.js";
+import { buildWorkerDiscoveredClick, verifyWorkerDiscoveredClick, type WorkerDiscoveredClick, WORKER_DISCOVERED_CLICK_FILE } from "./worker-discovered-click.js";
 import { buildConsentClickCheckpoint, verifyConsentClickCheckpoint, CONSENT_CLICK_CHECKPOINT_FILES } from "./reject-click-checkpoint.js";
 import { redHatCanaryFixture } from "./test-fixtures/redhat-canary";
 import redHatPacketFixture from '../../../packages/certscore-contracts/src/test-fixtures/redhat-terminal-choice.json';
@@ -67,6 +67,7 @@ import {
   awaitPostRefusalWorkerWithinTailBudget,
   artifactPointersFromS3Keys,
   assessEgressProbeObservation,
+  retainWorkerDiscoveredClick,
   buildLocalV2DagLambdaLaneRun,
   buildLocalV2DagLambdaLaneTimingSummary,
   buildLocalV2DagLambdaResultMessage,
@@ -7050,4 +7051,90 @@ test(`California worker discovery seals only verified packet-bound receipts (cor
     assert.equal(result.bundle.postRefusalLaneOutcome?.failureReason,"evidence_validation_failed");
   }
 });
+}
+
+for (const action of ["accept", "reject"] as const) {
+  test(`independent ${action} receipt delivery reports exactly where retention stopped`, async t => {
+    const previous = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "local-fixture";
+    t.after(() => {
+      if (previous === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+      else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previous;
+    });
+
+    const log = t.mock.method(console, "info", () => {});
+    const sha = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
+    const payload = {...parseLocalV2DagLambdaDispatchPayload(validPayload()), parentDispatchSha256: sha("parent")};
+    const binding = {action, scanId: payload.scanId, requestedUrl: payload.targetUrl, parentDispatchSha256: payload.parentDispatchSha256};
+    const {CONSENT_ACTION_CONTROL_PROOF_VERSION} = await import("@certscore/contracts");
+    const click: WorkerDiscoveredClick = {
+      control: {contractVersion: CONSENT_ACTION_CONTROL_PROOF_VERSION, action, actionSemantics: "direct_label",
+        classifierIntent: action, classifierConfidence: 0.95, classifierReasonCodes: [], observedAtMs: 1000,
+        accessibleLabel: action === "accept" ? "Accept all" : "Reject all", labelSource: "visible_text",
+        selectorHint: "#choice", recipeId: "fixture", visible: true, enabled: true, uniquelyActionable: true,
+        authorizedTargetSha256: sha(payload.targetUrl), frameIdentitySha256: sha(payload.targetUrl)},
+      recheckedAtMs: 1001, dispatchedAtMs: 1002, completedAtMs: 1003, deadlineAtMs: 1203,
+    };
+    const packet = Buffer.from(JSON.stringify({parentScanId: payload.scanId, targetUrl: payload.targetUrl,
+      normalizedUrl: payload.targetUrl, actionControlProof: click.control, interactionDiagnostics: {click: {outcome: "completed"}}}));
+    const unexpected = {send: async () => { throw new Error("unexpected fixture upload"); }};
+    const lastOutcome = () => JSON.parse(log.mock.calls.at(-1)!.arguments[0]);
+    const expectOutcome = (outcome: string) => assert.deepEqual(lastOutcome(), {
+      event: "worker_discovered_click_delivery.v1", scanId: payload.scanId, action, outcome,
+    });
+
+    await retainWorkerDiscoveredClick(payload, action, undefined, packet, {s3Client: unexpected}, false);
+    assert.equal(log.mock.callCount(), 0);
+    await retainWorkerDiscoveredClick(payload, action, undefined, packet, {s3Client: unexpected}, true);
+    expectOutcome("missing_click_callback");
+    await retainWorkerDiscoveredClick({...payload, parentDispatchSha256: undefined}, action, click, packet, {s3Client: unexpected}, true);
+    expectOutcome("missing_parent_dispatch");
+    await retainWorkerDiscoveredClick(payload, action, click, packet, {s3Client: unexpected, signal: AbortSignal.abort()}, true);
+    expectOutcome("worker_aborted");
+    await retainWorkerDiscoveredClick(payload, action, click, Buffer.from("{}"), {s3Client: unexpected}, true);
+    expectOutcome("packet_invalid");
+    await retainWorkerDiscoveredClick(payload, action, {...click, deadlineAtMs: 1202}, packet, {s3Client: unexpected}, true);
+    expectOutcome("insufficient_reserve");
+    await retainWorkerDiscoveredClick(payload, action, {...click, dispatchedAtMs: 999}, packet, {s3Client: unexpected}, true);
+    expectOutcome("invalid_timing");
+    await retainWorkerDiscoveredClick(payload, action, {...click, control: {...click.control, selectorHint: "#changed"}}, packet, {s3Client: unexpected}, true);
+    expectOutcome("control_mismatch");
+    await retainWorkerDiscoveredClick({...payload, targetUrl: payload.targetUrl + "changed"}, action, click, packet, {s3Client: unexpected}, true);
+    expectOutcome("target_mismatch");
+
+    let writes = 0;
+    const s3Client = {send: async (command: PutObjectCommand) => {
+      writes++;
+      assert.equal(command.input.IfNoneMatch, "*");
+      if (writes > 1) throw Object.assign(new Error(), {$metadata: {httpStatusCode: 412}});
+      const body = command.input.Body;
+      assert.ok(Buffer.isBuffer(body));
+      assert.equal(verifyWorkerDiscoveredClick({binding, body, metadataSha256: command.input.Metadata?.sha256,
+        packetBytes: packet, packetSha256: sha(packet), workerDispatchedAtMs: 990, readAtMs: 1100})?.reserveMs, 200);
+      return {$metadata: {}};
+    }};
+    await retainWorkerDiscoveredClick(payload, action, click, packet, {s3Client}, true);
+    expectOutcome("uploaded");
+    await retainWorkerDiscoveredClick(payload, action, click, packet, {s3Client}, true);
+    expectOutcome("already_exists");
+    assert.equal(writes, 2);
+    await retainWorkerDiscoveredClick(payload, action, click, packet, {s3Client: {
+      send: async () => { throw new Error("private storage error"); },
+    }}, true);
+    expectOutcome("upload_failed");
+
+    // Keep the mock transport alive while the writer's real 500 ms timer runs.
+    const waitForAbort = {send: async (_: PutObjectCommand, options?: {abortSignal?: AbortSignal}) =>
+      new Promise<never>((_, reject) => {
+        const guard = setTimeout(() => reject(new Error("upload deadline missing")), 1000);
+        options!.abortSignal!.addEventListener("abort", () => { clearTimeout(guard); reject(new Error("aborted")); }, {once: true});
+      })};
+    await retainWorkerDiscoveredClick(payload, action, click, packet, {s3Client: waitForAbort}, true);
+    expectOutcome("upload_timeout");
+    const parent = new AbortController();
+    const pending = retainWorkerDiscoveredClick(payload, action, click, packet, {s3Client: waitForAbort, signal: parent.signal}, true);
+    parent.abort();
+    await pending;
+    expectOutcome("worker_aborted");
+  });
 }

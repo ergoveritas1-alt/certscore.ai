@@ -539,7 +539,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
           exact?.getAttribute("aria-label") === transcendLabel && (exact as HTMLElement).innerText.trim() === transcendLabel &&
           localRoot instanceof ShadowRoot && localRoot.mode === "open" && localRoot.host.shadowRoot === localRoot &&
           document?.querySelectorAll("#transcend-shadow-root").length === 1 && document.querySelector("#transcend-shadow-root") === localRoot.host;
-        const selectorRoot = transcend ? localRoot : document;
+        const selectorRoot = (transcend || toomShadow) && localRoot instanceof ShadowRoot ? localRoot : document;
         const framer = workerDiscovered && view?.location.href === "https://www.framer.com/" &&
           exact instanceof HTMLInputElement && exact.type === "button" && ["Accept", "Reject"].includes(exact.value) &&
           exact.id === "__framer-cookie-component-button-" + exact.value.toLowerCase() &&

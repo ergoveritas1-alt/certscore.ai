@@ -56,12 +56,14 @@ function displayTarget(value: string) {
   return url.href.slice(0, 500);
 }
 
-export function buildWorkerDiscoveredClick(binding: Binding, click: WorkerDiscoveredClick, bytes: Buffer) {
+export function assessWorkerDiscoveredClick(binding: Binding, click: WorkerDiscoveredClick, bytes: Buffer):
+  | {body: Buffer}
+  | {reason: "packet_invalid" | "target_mismatch" | "control_mismatch" | "invalid_timing" | "insufficient_reserve"} {
   let requestedTargetSha256: string;
   try {
     const packet: Packet = JSON.parse(bytes.toString());
     if (!packet || packet.parentScanId !== binding.scanId || !digest.test(binding.parentDispatchSha256) ||
-        packet.interactionDiagnostics?.click?.outcome !== "completed") return;
+        packet.interactionDiagnostics?.click?.outcome !== "completed") return {reason: "packet_invalid"};
     requestedTargetSha256 = digestTarget(binding.requestedUrl);
     const displayTargetSha256 = digestTarget(packet.targetUrl);
     const exactTargetSha256 = packet.exactTargetSha256 ?? displayTargetSha256;
@@ -75,22 +77,28 @@ export function buildWorkerDiscoveredClick(binding: Binding, click: WorkerDiscov
     if (!digest.test(exactTargetSha256) ||
         (digestTarget(packet.normalizedUrl) !== requestedTargetSha256 &&
           !(verifiedRedirect && packet.normalizedUrl === displayTarget(binding.requestedUrl))) ||
-        (exactTargetSha256 !== displayTargetSha256 && !verifiedRedirect)) return;
+        (exactTargetSha256 !== displayTargetSha256 && !verifiedRedirect)) return {reason: "target_mismatch"};
     if (!consentActionControlProofSchema.safeParse(click.control).success || !packet.actionControlProof ||
         click.control.action !== binding.action ||
         (click.control.actionSemantics !== "direct_label" && !isReviewedWorkerNecessaryOnlyRejectProof(binding.requestedUrl, click.control)) ||
         click.control.authorizedTargetSha256 !== exactTargetSha256 ||
         !workerDiscoveredFrameMatchesTarget(click.control) ||
-        canonicalSha256(packet.actionControlProof) !== canonicalSha256(click.control)) return;
-  } catch { return; }
+        canonicalSha256(packet.actionControlProof) !== canonicalSha256(click.control)) return {reason: "control_mismatch"};
+  } catch { return {reason: "packet_invalid"}; }
   const {recheckedAtMs, dispatchedAtMs, completedAtMs, deadlineAtMs} = click;
   if (![recheckedAtMs, dispatchedAtMs, completedAtMs, deadlineAtMs].every(time => Number.isSafeInteger(time) && time > 0) ||
-      recheckedAtMs > dispatchedAtMs || dispatchedAtMs > completedAtMs || deadlineAtMs - completedAtMs < 200) return;
-  return Buffer.from(JSON.stringify({
+      recheckedAtMs > dispatchedAtMs || dispatchedAtMs > completedAtMs) return {reason: "invalid_timing"};
+  if (deadlineAtMs - completedAtMs < 200) return {reason: "insufficient_reserve"};
+  return {body: Buffer.from(JSON.stringify({
     version:WORKER_DISCOVERED_CLICK_VERSION, scanId:binding.scanId, action:binding.action, parentDispatchSha256:binding.parentDispatchSha256,
     requestedTargetSha256, packetSha256:sha(bytes),
     controlSha256:canonicalSha256(click.control), recheckedAtMs, dispatchedAtMs, completedAtMs, deadlineAtMs,
-  }));
+  }))};
+}
+
+export function buildWorkerDiscoveredClick(binding: Binding, click: WorkerDiscoveredClick, bytes: Buffer) {
+  const result = assessWorkerDiscoveredClick(binding, click, bytes);
+  return "body" in result ? result.body : undefined;
 }
 
 export function verifyWorkerDiscoveredClick(input: {

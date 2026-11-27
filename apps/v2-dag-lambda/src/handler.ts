@@ -1,4 +1,4 @@
-import { buildWorkerDiscoveredClick, verifyWorkerDiscoveredClick, WORKER_DISCOVERED_CLICK_FILE,
+import { assessWorkerDiscoveredClick, verifyWorkerDiscoveredClick, WORKER_DISCOVERED_CLICK_FILE,
   WORKER_DISCOVERED_CLICK_MAX_BYTES, type WorkerDiscoveredClick, type VerifiedWorkerDiscoveredClick } from "./worker-discovered-click.js";
 import { EVIDENCE_WORKER_SCAN_BUDGET_MS, actionReleaseStore, newActionPreparation, parseActionPreparation, proofForReadyAction, type ActionLane, type ActionPreparation } from "./dedicated-action-release.js";
 import { readConsentEvidenceWorkerStream } from "./consent-evidence-stream.js";
@@ -2571,23 +2571,38 @@ function consentClickCheckpointSink(
   };
 }
 
-async function retainWorkerDiscoveredClick(
+export async function retainWorkerDiscoveredClick(
   payload: LocalV2DagLambdaDispatchPayload, action: "accept" | "reject", click: WorkerDiscoveredClick | undefined,
-  packet: Buffer, options: { s3Client?: S3PutClient; signal?: AbortSignal },
+  packet: Buffer, options: { s3Client?: S3PutClient; signal?: AbortSignal }, expectedClick: boolean,
 ) {
-  // Require the original parent dispatch identity and the already-uploaded
-  // packet. These receipts are distinct from coordinator-gated checkpoints.
-  if (!click || !payload.parentDispatchSha256 || options.signal?.aborted) return;
-  const body = buildWorkerDiscoveredClick({ scanId:payload.scanId, action,
-    parentDispatchSha256:payload.parentDispatchSha256, requestedUrl:payload.targetUrl }, click, packet);
-  if (!body) return;
+  if (!click && !expectedClick) return;
+  const report = (outcome: string) => console.info(JSON.stringify({
+    event: "worker_discovered_click_delivery.v1", scanId: payload.scanId, action, outcome,
+  }));
+  if (!click) return report("missing_click_callback");
+  if (!payload.parentDispatchSha256) return report("missing_parent_dispatch");
+  if (options.signal?.aborted) return report("worker_aborted");
+
+  const result = assessWorkerDiscoveredClick({scanId: payload.scanId, action,
+    parentDispatchSha256: payload.parentDispatchSha256, requestedUrl: payload.targetUrl}, click, packet);
+  if ("reason" in result) return report(result.reason);
+
   const timeout = AbortSignal.timeout(500);
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
-  await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion, 1)).send(new PutObjectCommand({
-    Bucket:requireArtifactBucket(), Key:`${artifactKeyPrefix(payload)}/${WORKER_DISCOVERED_CLICK_FILE}`,
-    Body:body, IfNoneMatch:"*", ContentType:"application/json",
-    Metadata:{sha256:createHash("sha256").update(body).digest("hex")},
-  }), {abortSignal:signal}).catch(() => undefined);
+  const command = new PutObjectCommand({
+    Bucket: requireArtifactBucket(), Key: `${artifactKeyPrefix(payload)}/${WORKER_DISCOVERED_CLICK_FILE}`,
+    Body: result.body, IfNoneMatch: "*", ContentType: "application/json",
+    Metadata: {sha256: createHash("sha256").update(result.body).digest("hex")},
+  });
+  try {
+    await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion, 1)).send(command, {abortSignal: signal});
+  } catch (error) {
+    const failure = asRecord(error);
+    if (failure.name === "PreconditionFailed" || asRecord(failure.$metadata).httpStatusCode === 412) return report("already_exists");
+    if (signal.aborted) return report(signal.reason === timeout.reason && timeout.aborted ? "upload_timeout" : "worker_aborted");
+    return report("upload_failed");
+  }
+  report("uploaded");
 }
 
 /** The same exact worker's URL check may begin when its proof is released.
@@ -2877,7 +2892,8 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   if (!archive.body.equals(body)) throw new Error("Reject packet changed after it was sealed.");
   await archive.uploaded;
   const { bucket, key, sha256 } = archive;
-  await retainWorkerDiscoveredClick(payload, "reject", workerDiscoveredClick, body, options);
+  await retainWorkerDiscoveredClick(payload, "reject", workerDiscoveredClick, body, options,
+    !firstLayerProof && packet.interactionDiagnostics?.click?.outcome === "completed" && californiaWorkerConsentDiscoveryEnabled(payload, "reject"));
   const packetPointer = s3Uri(bucket, key);
   const descriptor = postRefusalLambdaEvidenceDescriptorSchema.parse({
     artifactOnly: true,
@@ -3037,7 +3053,8 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
     }), { abortSignal: options.signal });
     await checkpoint("artifact_upload_completed");
   });
-  await retainWorkerDiscoveredClick(payload, "accept", workerDiscoveredClick, body, options);
+  await retainWorkerDiscoveredClick(payload, "accept", workerDiscoveredClick, body, options,
+    !firstLayerProof && packet.interactionDiagnostics?.click?.outcome === "completed" && californiaWorkerConsentDiscoveryEnabled(payload, "accept"));
   const packetPointer = s3Uri(bucket, key);
   const descriptor = postAcceptLambdaEvidenceDescriptorSchema.parse({
     artifactOnly: true,

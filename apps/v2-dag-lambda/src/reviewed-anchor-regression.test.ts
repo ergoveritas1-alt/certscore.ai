@@ -14,6 +14,7 @@ import { RESOLVED_SCAN_TARGET_AUTHORIZATION_ID } from "../../../packages/certsco
 import { bindAccessibilityNodesToDom } from "../../../packages/certscore-scan-core/src/consent-accessibility-dom-binding.js";
 import { exactNativeConsentButtonSelector, TOOM_ACCEPT_SELECTOR } from "../../../packages/certscore-scan-core/src/exact-native-consent-button-selector.js";
 import { buildConsentClickCheckpoint, verifyConsentClickCheckpoint } from "./reject-click-checkpoint.js";
+import { buildWorkerDiscoveredClick, verifyWorkerDiscoveredClick, type WorkerDiscoveredClick } from "./worker-discovered-click.js";
 import { proofForReadyAction } from "./dedicated-action-release.js";
 
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
@@ -86,6 +87,7 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
     const clickPrefix = new URL("/clicked/", url).href;
     const clicks: string[] = [];
     let changedDestination = false;
+    let shadowIdCase: "none" | "unique" | "duplicate" = "none";
     const open = browser.newContext.bind(browser);
     t.mock.method(browser, "newContext", async (...args: Parameters<typeof open>) => {
       const context = await open({...args[0], serviceWorkers: "block"});
@@ -96,6 +98,16 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
           ${url === adikteev ? hubSpot : url === iobit ? iobitNotice : url === mist ? mistNotice : url === toom ? toomNotice : url === starfield ? starfieldNotice : consent}
           <script>
           const root = document.querySelector("#usercentrics-root")?.shadowRoot ?? document;
+          if (root !== document && "${shadowIdCase}" !== "none") {
+            root.querySelector("[data-choice]").id = "uc-choice";
+            if ("${shadowIdCase}" === "duplicate") {
+              const duplicate = document.createElement("span");
+              duplicate.id = "uc-choice";
+              root.append(duplicate);
+              // A single light-DOM match must never mask a duplicate in the active root.
+              document.body.append(duplicate.cloneNode());
+            }
+          }
           if (${changedDestination} && root !== document) {
             root.querySelector("[data-choice]").setAttribute("formaction", "/changed");
           }
@@ -211,11 +223,39 @@ for (const [url, action] of [[adikteev, "accept"], [adikteev, "reject"], [navigr
     assert.ok(binding.proof.expiresAtMs - receipt.completedAtMs >= 200);
     assert.deepEqual(clicks,[`/clicked/${action}`]);
     t.diagnostic(`Verified ${action} receipt with ${binding.proof.expiresAtMs - receipt.completedAtMs} ms reserve`);
+    if (url === toom) {
+      for (const variant of ["none", "unique", "duplicate"] as const) {
+        shadowIdCase = variant;
+        const retained: WorkerDiscoveredClick[] = [];
+        const before = clicks.length;
+        const started = Date.now();
+        const result = await runPostAcceptObserver({...observer, recipe: a[0]!, recipeCandidates: a,
+          allowCanonicalAcceptDiscovery: true, onWorkerDiscoveredClick: click => retained.push(click)});
+        if (variant === "duplicate") {
+          assert.equal(clicks.length, before);
+          assert.equal(retained.length, 0);
+          assert.notEqual(result.interactionDiagnostics?.click.outcome, "completed");
+          continue;
+        }
+        assert.deepEqual(clicks.slice(before), ["/clicked/accept"], variant + ": " + JSON.stringify(result.resolver));
+        assert.equal(retained.length, 1);
+        const binding = {scanId, action: "accept" as const, parentDispatchSha256: hash(scanId), requestedUrl: requested};
+        const packetBytes = Buffer.from(JSON.stringify(result));
+        const body = buildWorkerDiscoveredClick(binding, retained[0]!, packetBytes);
+        assert.ok(body);
+        const verified = verifyWorkerDiscoveredClick({binding, body, packetBytes, packetSha256: hash(packetBytes),
+          metadataSha256: hash(body), workerDispatchedAtMs: started, readAtMs: Date.now()});
+        assert.ok(verified && verified.reserveMs >= 200);
+        t.diagnostic(`Toom independent Accept verified (${variant === "none" ? "no ID" : "unique ID"}) with ${verified.reserveMs} ms reserve`);
+      }
+      shadowIdCase = "none";
+    }
+    const clicksBeforeTargetChange = [...clicks];
     changedDestination = true;
     receipt.completedAtMs = undefined;
     const denied = await run({...observer, actionSearchTimeoutMs:600, resultBudgetMs:1800});
     assert.notEqual(denied.interactionDiagnostics?.click.outcome, "completed");
     assert.equal(receipt.completedAtMs, undefined);
-    assert.deepEqual(clicks,[`/clicked/${action}`]);
+    assert.deepEqual(clicks, clicksBeforeTargetChange);
   });
 }
