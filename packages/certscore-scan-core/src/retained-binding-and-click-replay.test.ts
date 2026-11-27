@@ -2,9 +2,10 @@ import caiaHandlers from "./test-fixtures/caia-consent-handlers.json";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test, { type TestContext } from "node:test";
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import {
-  CAIA_ACCEPT_CONTROL, DAFITI_ADOPT_ACCEPT_CONTROL, consentActionControlProofSchema, postAcceptEvidencePacketSchema,
+  CAIA_ACCEPT_CONTROL, DAFITI_ADOPT_ACCEPT_CONTROL, ONETRUST_ITALIAN_ACCEPT_CONTROL,
+  consentActionControlProofSchema, postAcceptEvidencePacketSchema,
   postRefusalEvidencePacketSchema, type CanonicalEvidenceBundle,
 } from "@certscore/contracts";
 import { deriveAcceptFirstLayerProof } from "./accept-first-layer-gate.js";
@@ -68,7 +69,7 @@ const oneTrustMarkup = `<section role="dialog" id="onetrust-banner-sdk" aria-lab
   document.cookie='OptanonConsent=groups=C0001:1,C0002:0;path=/';
 </script>` + choiceScript([{selector: oneTrust, action: "accept"}]);
 
-async function replayFixture(t: TestContext, url: string, passiveMarkup: string, workerMarkup = passiveMarkup) {
+async function replayFixture(t: TestContext, url: string, passiveMarkup: string, workerMarkup = passiveMarkup, requestedUrl = url) {
   for (const flag of ["CERTSCORE_ACCEPT_GATE_PRODUCTION_SHADOW", "CERTSCORE_REJECT_GATE_PRODUCTION_SHADOW"]) {
     const previous = process.env[flag];
     process.env[flag] = "1";
@@ -78,13 +79,21 @@ async function replayFixture(t: TestContext, url: string, passiveMarkup: string,
   t.after(() => browser.close());
   const clicks: string[] = [];
   let contextCount = 0;
+  let workerPage: Page | undefined;
   const newContext = browser.newContext.bind(browser);
   t.mock.method(browser, "newContext", async (options: Parameters<typeof newContext>[0]) => {
     const passive = ++contextCount === 1;
     const context = await newContext({...options, serviceWorkers: "block"});
+    if (!passive) {
+      // tsx's function-name shim needs to exist inside the browser when a native guard is serialized.
+      await context.addInitScript("globalThis.__name ??= value => value;");
+      context.on("page", page => { workerPage = page; });
+    }
     await context.route("**/*", async route => {
       const request = route.request();
-      if (request.url() === url) {
+      if (requestedUrl !== url && request.url() === requestedUrl) {
+        await route.fulfill({contentType: "text/html", body: "<script>location.replace(" + JSON.stringify(url) + ")</script>"});
+      } else if (request.url() === url) {
         await route.fulfill({contentType: "text/html", body: '<meta charset="utf-8"><main>Local fixture</main>' +
           (passive ? passiveMarkup : workerMarkup)});
       } else if (request.method() === "POST" && new URL(request.url()).origin === new URL(url).origin &&
@@ -127,7 +136,7 @@ async function replayFixture(t: TestContext, url: string, passiveMarkup: string,
   await context.close();
   const scanId = new URL(url).hostname;
   const bundle = {
-    url, scanId, startedAt: new Date(startedAtMs).toISOString(),
+    url: requestedUrl, scanId, startedAt: new Date(startedAtMs).toISOString(),
     domSnapshots: [{url, documentIdentity, artifactId: "dom_text_pre_consent", consentStateAtTime: "pre_consent"}],
     consentSurfaceInspection: {inspectedPreInteraction: true, inspectionCompleted: true,
       actionableControlObserved: observation.acceptControlObserved || observation.rejectControlObserved},
@@ -137,18 +146,66 @@ async function replayFixture(t: TestContext, url: string, passiveMarkup: string,
   const gateInput = () => {
     const nowMs = Date.now();
     return {
-      bundle, scanId, targetUrl: url, sourceSha256: sha(JSON.stringify(bundle)), parentDispatchSha256: sha(scanId),
+      bundle, scanId, targetUrl: requestedUrl, sourceSha256: sha(JSON.stringify(bundle)), parentDispatchSha256: sha(scanId),
       geometry: {bytes, sha256: sha(bytes), sizeBytes: bytes.length}, nowMs, deadlineAtMs: nowMs + 6_000,
     };
   };
   const observerInput = {
-    browser, url, scanId, parentScanId: scanId, actionSearchTimeoutMs: 5_800, confirmationTimeoutMs: 500,
+    browser, url: requestedUrl, scanId, parentScanId: scanId, actionSearchTimeoutMs: 5_800, confirmationTimeoutMs: 500,
     observationWindowMs: 300, resultBudgetMs: 7_000,
-    interactionAuthorization: {kind: "scan_target" as const, authorizationId: "sharded_scan_exact_target.v1" as const,
-      scanId, normalizedUrl: url},
+    interactionAuthorization: requestedUrl === url
+      ? {kind: "scan_target" as const, authorizationId: "sharded_scan_exact_target.v1" as const, scanId, normalizedUrl: url}
+      : {kind: "scan_target_resolution" as const, authorizationId: "sharded_scan_resolved_exact_target.v2" as const,
+          scanId, requestedUrl, maxRedirects: 1, resolutionTimeoutMs: 1400},
   };
-  return {gateInput, observerInput, observation, geometry, clicks};
+  return {gateInput, observerInput, observation, geometry, clicks, workerPage: () => workerPage};
 }
+
+test("GAMSTOP Reject binds both passive labels to the same verified button", async t => {
+  const selector = "#rcc-decline-button";
+  const accessibleLabel = "Decline cookies";
+  const text = "Reject";
+  const url = "https://www.gamstop.co.uk/";
+  const markup = `<section id="cookie-banner" role="dialog" aria-label="Cookie preferences">
+    <p>We use optional cookies to improve our site.</p>
+    <button id="rcc-decline-button" type="button" aria-label="${accessibleLabel}">${text}</button>
+  </section>` + choiceScript([{selector, action: "reject"}]);
+  const fixture = await replayFixture(t, url, markup);
+  const gateInput = fixture.gateInput();
+  const [observation] = gateInput.bundle.consentUiObservations;
+  assert.ok(observation);
+  const template = observation.controls.find(control => control.selectorHint === selector);
+  assert.ok(template);
+  const visible = {...template, label: text, domBinding: undefined};
+  const accessible = {...template, label: accessibleLabel, domBinding: undefined};
+  const evaluateControls = (controls: typeof observation.controls) => {
+    const bundle = {...gateInput.bundle, consentUiObservations: [{...observation, controls}]};
+    return evaluateRejectGate({...gateInput, bundle, sourceSha256: sha(JSON.stringify(bundle))});
+  };
+  const gate = evaluateControls([visible, accessible]);
+  assert.equal(gate.outcome, "qualified", JSON.stringify(gate));
+  const proof = readRejectFirstLayerProof({...gate, scanId: gateInput.scanId});
+  assert.ok(proof);
+  assert.equal(proof.exactSelector, selector);
+  assert.equal(proof.binding.labelSource, "aria_label");
+  assert.equal(proof.binding.labelSha256, sha(accessibleLabel));
+
+  const anotherControl = {...accessible, selectorHint: "#another-decline"};
+  for (const controls of [[accessible, anotherControl], [accessible, accessible], [accessible, visible, visible]]) {
+    const decision = evaluateControls(controls);
+    assert.ok(decision.outcome === "blocked" && decision.reason === "control_ambiguous");
+  }
+  const recipes = buildCanonicalPostRefusalActionRecipes();
+  let reservedMs = 0;
+  const packet = await runPostRefusalObserver({...fixture.observerInput, firstLayerProof: proof,
+    recipe: recipes[0]!, recipeCandidates: recipes, recipeSetId: "retained-gamstop-aliased-labels",
+    allowCanonicalRejectDiscovery: true,
+    onExactRejectClickCompleted: click => { reservedMs = proof.expiresAtMs - click.completedAtMs; },
+  });
+  assert.equal(packet.interactionDiagnostics?.click.outcome, "completed", JSON.stringify(packet.limitations));
+  assert.deepEqual(fixture.clicks, ["reject"]);
+  assert.ok(reservedMs >= 200);
+});
 
 test("Prozis replay binds both Cookiebot AX controls and delivers exact click receipts", async t => {
   const fixture = await replayFixture(t, prozis, prozisMarkup);
@@ -357,5 +414,108 @@ for (const variant of ["original", "extra-listener", "changed-writer", "duplicat
     const reserveMs = proof.expiresAtMs - receipts[0]!;
     assert.ok(reserveMs >= 200);
     t.diagnostic(`CAIA verified Accept receipt and consent cookie, action reserve ${reserveMs} ms`);
+  });
+}
+
+
+for (const site of ["babycenter.com", "whattoexpect.com"]) {
+  for (const changed of [false, true]) {
+    test(site + " OneTrust replay " + (changed ? "blocks a button moved outside the group" : "binds the exact I Consent button"), async t => {
+      const label = "I Consent";
+      const markup = oneTrustMarkup.replace("Allow all</button>", label + "</button>");
+      const workerMarkup = changed
+        ? markup.replace('<div id="onetrust-button-group"><button id="onetrust-accept-btn-handler">I Consent</button></div>',
+            '<div id="onetrust-button-group"></div><button id="onetrust-accept-btn-handler">I Consent</button>')
+        : markup;
+      const fixture = await replayFixture(t, "https://www." + site + "/", markup, workerMarkup, "https://" + site + "/");
+      const proof = deriveAcceptFirstLayerProof({...fixture.gateInput(), requireExactSelector: true});
+      assert.ok(proof, JSON.stringify(fixture.observation.controls));
+      const receipts: number[] = [];
+      const packet = postAcceptEvidencePacketSchema.parse(await runPostAcceptObserver({
+        ...fixture.observerInput, firstLayerProof: proof, allowCanonicalAcceptDiscovery: true,
+        recipe: buildCanonicalPostAcceptActionRecipes().find(recipe => recipe.cmpId === "OneTrust")!,
+        onExactAcceptClickCompleted: receipt => receipts.push(receipt.completedAtMs),
+      }));
+      assert.deepEqual(fixture.clicks, changed ? [] : ["accept"]);
+      assert.equal(receipts.length, changed ? 0 : 1);
+      assert.equal(packet.interactionDiagnostics?.click.outcome === "completed", !changed);
+      if (!changed) assert.ok(proof.expiresAtMs - receipts[0]! >= 200);
+    });
+  }
+}
+
+const italianOneTrustMarkup = oneTrustMarkup.replace("Allow all</button>",
+  ONETRUST_ITALIAN_ACCEPT_CONTROL.label + "</button>");
+const contextualOneTrustMarkup = oneTrustMarkup.replace("Allow all</button>", "I Consent</button>");
+const ungroupedOneTrustMarkup = contextualOneTrustMarkup.replace(
+  '<div id="onetrust-button-group"><button id="onetrust-accept-btn-handler">I Consent</button></div>',
+  '<div id="onetrust-button-group"></div><button id="onetrust-accept-btn-handler">I Consent</button>',
+);
+
+for (const {url, requestedUrl, markup, recipeId} of [
+  {url: "https://www.lafeltrinelli.it/", markup: italianOneTrustMarkup, recipeId: ONETRUST_ITALIAN_ACCEPT_CONTROL.recipeId},
+  {url: "https://www.libraccio.it/", markup: italianOneTrustMarkup, recipeId: ONETRUST_ITALIAN_ACCEPT_CONTROL.recipeId},
+  {url: adopt.targetUrl, requestedUrl: "https://dafiti.com.br/", recipeId: adopt.recipeId,
+    markup: adoptMarkup.replace("Usamos cookies para melhorar sua experiência. Você pode configurar cookies.",
+      "Controle sua privacidade AdOpt. Nosso site usa cookies para melhorar a navegação. " +
+      "Usamos cookies para compartilhar dados de análise, publicidade, dados de usuários e personalização de anúncios com o Google. " +
+      "Política de Privacidade. Política de Cookies. Desenvolvido por AdOpt.")},
+  {url: "https://www.babycenter.com/", requestedUrl: "https://babycenter.com/",
+    markup: contextualOneTrustMarkup, recipeId: ONETRUST_ITALIAN_ACCEPT_CONTROL.recipeId},
+  {url: "https://www.whattoexpect.com/", requestedUrl: "https://whattoexpect.com/",
+    markup: contextualOneTrustMarkup, recipeId: ONETRUST_ITALIAN_ACCEPT_CONTROL.recipeId},
+  {url: "https://www.babycenter.com/", requestedUrl: "https://babycenter.com/", markup: ungroupedOneTrustMarkup},
+  {url: "https://www.nrdc.org/", markup: contextualOneTrustMarkup},
+]) {
+  test(`independent Accept worker ${recipeId ? "binds" : "blocks"} the registered control on ${url}`, async t => {
+    const fixture = await replayFixture(t, url, markup, markup, requestedUrl);
+    const recipes = buildCanonicalPostAcceptActionRecipes();
+    type WorkerReceipt = Parameters<NonNullable<Parameters<typeof runPostAcceptObserver>[0]["onWorkerDiscoveredClick"]>>[0];
+    const receipts: WorkerReceipt[] = [];
+    const packet = postAcceptEvidencePacketSchema.parse(await runPostAcceptObserver({
+      ...fixture.observerInput, recipe: recipes[0]!, recipeCandidates: recipes, allowCanonicalAcceptDiscovery: true,
+      productionProjectable: true, onWorkerDiscoveredClick: receipt => receipts.push(receipt),
+    }));
+    assert.deepEqual(fixture.clicks, recipeId ? ["accept"] : [], JSON.stringify({resolver:packet.resolver, limitations:packet.limitations}));
+    assert.equal(receipts.length, recipeId ? 1 : 0, JSON.stringify(packet.resolver));
+    assert.equal(packet.interactionDiagnostics?.click.outcome === "completed", !!recipeId);
+    if (recipeId) {
+      const [receipt] = receipts;
+      assert.ok(receipt);
+      assert.equal(receipt.control.recipeId, recipeId);
+      assert.ok(receipt.deadlineAtMs - receipt.completedAtMs >= 200);
+    }
+  });
+}
+
+for (const originalRoute of [true, false]) {
+  test("ActiveCampaign uses the larger native click window only on the retained route (" + originalRoute + ")", async t => {
+    const url = "https://www.activecampaign.com/";
+    const markup = oneTrustMarkup.replace("Allow all</button>", "Accept All</button>");
+    const fixture = await replayFixture(t, url, markup, markup, originalRoute ? "https://activecampaign.com/" : url);
+    const proof = deriveAcceptFirstLayerProof({...fixture.gateInput(), requireExactSelector: true});
+    assert.ok(proof);
+    const receipts: number[] = [];
+    let interruption: Promise<void> | undefined;
+    const packet = postAcceptEvidencePacketSchema.parse(await runPostAcceptObserver({
+      ...fixture.observerInput, firstLayerProof: proof, allowCanonicalAcceptDiscovery: true,
+      recipe: buildCanonicalPostAcceptActionRecipes().find(recipe => recipe.cmpId === "OneTrust")!,
+      onAcceptGateFinalRecheck: outcome => {
+        const page = fixture.workerPage();
+        if (outcome !== "passed" || !page) return;
+        interruption = page.evaluate(() => {
+          const button = document.querySelector<HTMLButtonElement>("#onetrust-accept-btn-handler")!;
+          button.disabled = true;
+          setTimeout(() => { button.disabled = false; }, 775);
+        });
+      },
+      onExactAcceptClickCompleted: receipt => receipts.push(receipt.completedAtMs),
+    }));
+    assert.ok(interruption);
+    await interruption;
+    assert.deepEqual(fixture.clicks, originalRoute ? ["accept"] : []);
+    assert.equal(receipts.length, originalRoute ? 1 : 0);
+    assert.equal(packet.interactionDiagnostics?.click.outcome === "completed", originalRoute);
+    if (originalRoute) assert.ok(proof.expiresAtMs - receipts[0]! >= 200);
   });
 }

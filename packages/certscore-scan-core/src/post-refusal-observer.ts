@@ -1,3 +1,4 @@
+import { REVIEWED_COOKIE_REJECT_CONTROLS } from "@certscore/contracts";
 import { dispatchWorkerDiscoveredConsentControl } from "./cmp-action-control-proof.js";
 import { takePreparedConsentActionPage, type PreparedConsentActionPage, type DeferredConsentProof } from "./consent-action-browser";
 import { COOKIE_SCRIPT_REJECT_ROLE_SELECTOR, expectedMoodMediaLanding } from "./cookiescript-reject-selector.js";
@@ -6,7 +7,7 @@ import { observeTrustArcReload } from "./trustarc-terminal-reload.js";
 import { installPostRefusalStorageWriteProbe } from "./post-refusal-storage-write-probe.js";
 import { installTrustArcSourceCapture, type TrustArcResponseCapture } from "./trustarc-source-capture.js";
 import { TRUSTARC_REJECT_COOKIE_DOMAINS, readTrustArcRejectReceipt, usesTrustArcUnderscoreReceipt, type TrustArcRejectReceipt } from "./trustarc-reject-receipt.js";
-import { choiceRequestRole } from "@certscore/contracts";
+import { choiceRequestRole, UNSW_NECESSARY_ONLY_REJECT } from "@certscore/contracts";
 import {captureOsanoReceiptBaseline,readVerifiedOsanoReceipt,type OsanoReceiptBaseline} from "./osano-consent-receipt.js";
 import {requireWithinActionBoundary, ActionOperationStopped} from "./action-operation-boundary.js";
 import {readWithinActionBoundary} from "./action-operation-boundary.js";
@@ -85,6 +86,7 @@ import {
   authorizePostRefusalTarget,
   bindPostRefusalBrowserResolvedExactTarget,
   committedConsentServerRedirect,
+  reviewedWorkerDiscoveredTarget,
   type PostRefusalInteractionAuthorization,
   type ResolvedPostRefusalScanTargetAuthorization,
 } from "./post-refusal-target-authorization.js";
@@ -1214,8 +1216,13 @@ export async function runPostRefusalObserver(
       limitations.push(`redirect_target_resolved_exact:${resolution.redirectCount}`);
     }
 
+    const readActionTarget = () => {
+      const liveUrl = page!.url();
+      return input.onWorkerDiscoveredClick && effectiveInteractionAuthorization.kind === "resolved_scan_target"
+        ? reviewedWorkerDiscoveredTarget(liveUrl) : liveUrl;
+    };
     const finalTargetAuthorization = authorizePostRefusalTarget(
-      page.url(),
+      readActionTarget(),
       effectiveInteractionAuthorization,
       authorizationScanId,
     );
@@ -1427,7 +1434,7 @@ export async function runPostRefusalObserver(
       });
     }
     const postResolverTargetAuthorization = authorizePostRefusalTarget(
-      page.url(),
+      readActionTarget(),
       effectiveInteractionAuthorization,
       authorizationScanId,
     );
@@ -1445,7 +1452,10 @@ export async function runPostRefusalObserver(
     // Preserve the completed uniqueness/target checks and stop an unsupported
     // generic label before baseline/proof work. Named necessary-only recipes
     // keep their separate scope proof and never enter this branch.
-    if (selectedRecipe.recipeId.startsWith("canonical-control:reject:") &&
+    const reviewedCookieChoice = Boolean(input.onWorkerDiscoveredClick) && !firstLayerProof &&
+      REVIEWED_COOKIE_REJECT_CONTROLS.some(scope => scope.documentUrl === page?.url() &&
+        normalizeControlLabel(scope.label) === selectedRecipe?.controlExpectedNormalizedLabel);
+    if (selectedRecipe.recipeId.startsWith("canonical-control:reject:") && !reviewedCookieChoice &&
       selectedRecipe.controlExpectedNormalizedLabel !== undefined &&
       !genericConsentActionLabelSupported(selectedRecipe.controlExpectedNormalizedLabel, "reject")) {
       recordResolverSnapshot({source:"canonical_geometry",state:"label_mismatch",selectorMatchCount:1,visibleCount:1,enabledCount:1,
@@ -1670,6 +1680,8 @@ export async function runPostRefusalObserver(
     if (preClickTiming) preClickTiming.storageReadyAtMs = Date.now();
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
+      retryDiscoveredElementRead: !firstLayerProof && Boolean(input.onWorkerDiscoveredClick),
+      workerDiscovered: !firstLayerProof && Boolean(input.onWorkerDiscoveredClick),
       expectedNativeSelector: firstLayerProof?.exactSelector,
       requireDrupalBanner: drupalNoThanks,
       deadlineAtMs: controlProofDeadlineAtMs,
@@ -1867,7 +1879,7 @@ export async function runPostRefusalObserver(
           assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256, deadlineAtMs);
         };
         const click = await dispatchWorkerDiscoveredConsentControl({
-          page, control: boundControlElement, proof: actionControlProof, deadlineAtMs, signal: effectiveSignal, assertCurrent,
+          page, requestedUrl: input.url, control: boundControlElement, proof: actionControlProof, deadlineAtMs, signal: effectiveSignal, assertCurrent,
           commit: () => {
             actionDispatchedAtEpochMs = Date.now();
             actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
@@ -3730,7 +3742,9 @@ async function waitForCanonicalRejectControlRecipe(
       candidate.layer === "first_layer" &&
       candidate.enabled &&
       candidate.intersectsViewport &&
-      candidate.classifierConfidence >= 0.8 &&
+      (candidate.classifierConfidence >= 0.8 ||
+        REVIEWED_COOKIE_REJECT_CONTROLS.some(scope => scope.documentUrl === page.url() &&
+          scope.controlSelector === candidate.selectorHint && normalizeControlLabel(scope.label) === candidate.normalizedLabel)) &&
       (candidate.consentContextConfirmed || geometry?.cmp.detected === true) &&
       Boolean(candidate.selectorHint)
     ) ?? []);
@@ -3856,7 +3870,10 @@ async function waitForCanonicalRejectControlRecipe(
       // necessary-only choice. A generic geometry recipe must not accidentally
       // bypass (or prevent) the named scope proof at the dispatch boundary.
       const necessaryOnlyPolicy = geometryCmpDefinition?.rejectLabelBoundNecessaryOnly;
-      const registeredNecessaryOnly = registeredCmpRecipe && necessaryOnlyPolicy?.expectedNormalizedLabels.includes(candidate.normalizedLabel) &&
+      const unswNecessaryOnly = !controlFrameUrl && page.url() === UNSW_NECESSARY_ONLY_REJECT.documentUrl &&
+        candidate.normalizedLabel === UNSW_NECESSARY_ONLY_REJECT.normalizedLabel;
+      const registeredNecessaryOnly = registeredCmpRecipe && necessaryOnlyPolicy &&
+        (necessaryOnlyPolicy.expectedNormalizedLabels.includes(candidate.normalizedLabel) || unswNecessaryOnly) &&
         await actionableControls[0]!.evaluate((element, selector) => element.matches(selector), necessaryOnlyPolicy.controlSelector).catch(() => false);
       const recipe: PostRefusalActionRecipe = registeredNecessaryOnly ? {
         ...registeredCmpRecipe!,

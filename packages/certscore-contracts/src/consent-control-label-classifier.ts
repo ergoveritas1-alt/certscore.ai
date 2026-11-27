@@ -6,7 +6,8 @@ import {
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
 const CUSTOMIZE_OR_DENY_ALL = "customize or deny all";
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v36";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v38";
+const NO_REJECT_COOKIES_LABEL = "no, reject cookies";
 export const ONETRUST_ITALIAN_ACCEPT_LABEL = "Accetto i cookie";
 
 /** OneTrust's banner wrapper can repeat the labels of descendant controls. */
@@ -334,6 +335,10 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("reject", "reject all"),
     ...direct("reject", "reject cookies"),
     ...direct("reject", "reject all cookies"),
+    { phrase: "reject all - close without accepting cookies", intent: "reject", strength: "direct", requiresConsentContext: true, exactLabelOnly: true },
+    // The comma distinguishes the answer "No" from a qualifier of the action.
+    { phrase: NO_REJECT_COOKIES_LABEL, intent: "reject", strength: "direct", requiresConsentContext: true, exactLabelOnly: true },
+    { phrase: "decline all non-essential", intent: "reject", strength: "direct", requiresConsentContext: true, exactLabelOnly: true },
     // Canonical Ketch first-layer wording: "non-essential" qualifies the
     // rejected categories; it is not a negation of the Reject action.
     { phrase: "reject all non-essential", intent: "reject", strength: "direct", requiresConsentContext: true, exactLabelOnly: true },
@@ -1381,6 +1386,7 @@ function classifyConsentControlLabelInternal(
     activeLocales.has(term.locale) &&
     !(input.usage === "action" && term.observationOnly === true) &&
     (!term.requiredObservationRecipe || term.requiredObservationRecipe === input.observationRecipe) &&
+    (term.phrase !== NO_REJECT_COOKIES_LABEL || labelText.toLowerCase() === NO_REJECT_COOKIES_LABEL) &&
     (!term.requiresLabelBoundNecessaryOnlyContext || hasLabelBoundNecessaryOnlyContext(input)) &&
     (!term.requiresLabelBoundPrice || hasLabelBoundPrice(input, term.phrase)) &&
     (localeHints.size === 0 || localeHints.has(term.locale))

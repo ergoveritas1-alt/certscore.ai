@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isReviewedCookieRejectProof, isUnswNecessaryOnlyRejectProof, UNSW_NECESSARY_ONLY_REJECT, type ConsentActionControlProof } from "@certscore/contracts";
 import type { Page, Response as BrowserResponse } from "playwright";
 import {
   assertPublicNetworkUrl,
@@ -10,6 +11,40 @@ export const ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID =
 
 export const RESOLVED_SCAN_TARGET_AUTHORIZATION_ID =
   "sharded_scan_resolved_exact_target.v2" as const;
+
+const LUCID_OSANO_LOGIN_TARGET = "https://lucid.app/users/login";
+const LUCID_OSANO_LOGIN_DOCUMENT = `${LUCID_OSANO_LOGIN_TARGET}#/login`;
+
+/** The retained Lucid login evidence binds this one fragment to its committed
+ * server route. Other fragments still fail exact target authorization. */
+export function reviewedWorkerDiscoveredTarget(url: string): string {
+  return url === LUCID_OSANO_LOGIN_DOCUMENT ? LUCID_OSANO_LOGIN_TARGET : url;
+}
+
+export function workerDiscoveredFrameMatchesTarget(proof: {
+  authorizedTargetSha256?: string;
+  frameIdentitySha256?: string;
+  cmpId?: string;
+}): boolean {
+  const { authorizedTargetSha256, frameIdentitySha256, cmpId } = proof;
+  return !!authorizedTargetSha256 && (frameIdentitySha256 === authorizedTargetSha256 ||
+    (cmpId === "Osano" && authorizedTargetSha256 === hashExactTarget(LUCID_OSANO_LOGIN_TARGET) &&
+      frameIdentitySha256 === hashExactTarget(LUCID_OSANO_LOGIN_DOCUMENT)));
+}
+
+/** Verify the reviewed OneTrust routes allowed to use independent necessary-only dispatch. */
+export function isReviewedWorkerNecessaryOnlyRejectProof(requestedUrl: string, proof: ConsentActionControlProof): boolean {
+  if (isReviewedCookieRejectProof(requestedUrl, proof)) return true;
+  if (proof.action !== "reject" || proof.actionSemantics !== "canonical_necessary_only_recipe" ||
+      proof.cmpId !== "OneTrust" || proof.recipeId !== "canonical-cmp:OneTrust:reject:v3") return false;
+  if (requestedUrl === UNSW_NECESSARY_ONLY_REJECT.requestedUrl) return isUnswNecessaryOnlyRejectProof(proof);
+  const scope = proof.labelBoundNecessaryOnly;
+  return requestedUrl === "https://iata.org/" &&
+    proof.accessibleLabel === "Accept Only Necessary" && scope?.policyVersion === "label_bound_necessary_only_reject.v2" &&
+    proof.authorizedTargetSha256 === hashExactTarget("https://www.iata.org/") &&
+    proof.authorizedTargetSha256 === proof.frameIdentitySha256 &&
+    /\bSelecting Accept All enables tracking technologies\b[^.]{0,300}\.\s+Selecting Accept Only Necessary or withdrawing your consent will disable them\./i.test(scope.contextText);
+}
 
 export const DEFAULT_POST_REFUSAL_REDIRECT_LIMIT = 8;
 export const DEFAULT_POST_REFUSAL_REDIRECT_RESOLUTION_TIMEOUT_MS = 5_000;

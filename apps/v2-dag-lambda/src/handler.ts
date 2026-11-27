@@ -3302,12 +3302,16 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     accept: isPostAcceptWorkerEnabled(payload) && productionConsentGateEnforced(payload,"accept"),
     reject: isPostRefusalRejectWorkerEnabled(payload) && productionConsentGateEnforced(payload,"reject"),
   };
+  const discoveryActions = {
+    accept: californiaWorkerConsentDiscoveryEnabled(payload, "accept"),
+    reject: californiaWorkerConsentDiscoveryEnabled(payload, "reject"),
+  };
   const usePreparedReject = enforced.reject && rejectPreparationCanaryEnabled(payload);
   function actionDispatchDelayMs(action: ActionLane, configuredMs: number | undefined, defaultMs: number) {
-    // Ordinary lanes have already waited for sealed passive proof. The default
-    // stagger applied before exact gating existed and can now delay release.
+    // Worker-owned discovery starts alongside passive capture. Gated actions
+    // already wait for sealed passive proof, so neither needs the legacy stagger.
     const delayMs = configuredMs ?? defaultMs;
-    return enforced[action] && !usePreparedReject && delayMs === defaultMs ? 0 : delayMs;
+    return (discoveryActions[action] || enforced[action] && !usePreparedReject) && delayMs === defaultMs ? 0 : delayMs;
   }
   let finishRejectRelease: (() => void) | undefined;
   const rejectReleaseSettled = usePreparedReject ? new Promise<void>(resolve => {
@@ -3730,7 +3734,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           [postRefusalState, postRefusalAbortController, result.consentRejectAvailability.rejectPassiveBarrierOnly, "reject"],
           [postAcceptState, postAcceptAbortController, result.consentRejectAvailability.acceptPassiveBarrierOnly, "accept"],
         ] as const) {
-          if (enforced[action] || !limited || !state.started || state.settled) continue;
+          if (enforced[action] || discoveryActions[action] || !limited || !state.started || state.settled) continue;
           state.passiveCoverageLimited = true;
           if (actionLanePassiveAbsenceDisposition({ ...state, passiveBarrierReached: false }) === "cancel_not_dispatched") {
             if (action === "reject") postRefusalState.cancelledNoReject = true;
@@ -3738,7 +3742,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             controller.abort(new Error(`${action}_path_incomplete_at_passive_barrier`));
           }
         }
-        if (!enforced.reject && postRefusalState.started && !postRefusalState.cancelledNoReject && !postRefusalState.timedOut) {
+        if (!enforced.reject && !discoveryActions.reject && postRefusalState.started && !postRefusalState.cancelledNoReject && !postRefusalState.timedOut) {
           const returnedRejectStatus = postRefusalState.result?.postRefusalEvidence?.status;
           const rejectActionMayHaveDispatched = returnedRejectStatus !== undefined &&
             returnedRejectStatus !== "not_attempted" &&
@@ -3766,7 +3770,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           }
         }
         if (
-          !enforced.accept && postAcceptState.started &&
+          !enforced.accept && !discoveryActions.accept && postAcceptState.started &&
           !postAcceptState.cancelledNoAccept &&
           !postAcceptState.timedOut &&
           result.consentRejectAvailability.inventoryComplete &&
@@ -3966,7 +3970,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   // action_join_existing_work.v1: an already-invoked action may return while
   // required passive artifacts are downloaded, verified, merged and mirrored.
   // Freeze both lanes here, before any action join. Passive disagreement adds
-  // no worker wait: unfinished work is cancelled; returned results still require
+  // no worker wait for legacy lanes: unfinished work is cancelled. Independent
+  // discovery uses its existing join budget even when passive capture disagrees.
+  // Returned results still require
   // ordinary packet verification within the original six/eight-second deadlines
   // measured from passiveLaneBarrierCompletedAtMs, never from this later point.
   for (const [state, controller, action] of [
@@ -3987,7 +3993,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   // packet join for Accept and for a dedicated Reject lane.
   let joinedPostRefusalPacket: PostRefusalEvidencePacket | undefined;
   let joinedPostAcceptPacket: PostAcceptEvidencePacket | undefined;
-  const acceptOuterDeadlineAtMs = enforced.accept && consentClickCheckpointEnabled(payload, "accept")
+  const acceptOuterDeadlineAtMs = discoveryActions.accept || enforced.accept && consentClickCheckpointEnabled(payload, "accept")
     ? options.deadlineAtMs ?? Infinity
     : Infinity;
   const acceptOuterTailWaitMs = Math.max(0, acceptOuterDeadlineAtMs - passiveLaneBarrierCompletedAtMs);
@@ -4084,6 +4090,16 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     postRefusalMaxTailWaitMs = remaining.maxTailWaitMs;
     return remaining.completed;
   };
+  let discoveredAccept: VerifiedWorkerDiscoveredClick | undefined;
+  let discoveredReject: VerifiedWorkerDiscoveredClick | undefined;
+  const verifyDiscoveredAction = (action: ActionLane, packet: PostAcceptEvidencePacket | PostRefusalEvidencePacket) => {
+    const state = action === "accept" ? postAcceptState : postRefusalState;
+    const tailMs = action === "accept" ? postAcceptMaxTailWaitMs : postRefusalMaxTailWaitMs;
+    return readJoinedWorkerDiscoveredClick({ payload, action, packet, result: state.result,
+      workerDispatchedAtMs: state.dispatchStartedAtMs, parentDispatchSha256: consentParentSha256,
+      deadlineAtMs: Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + tailMs),
+      s3GetClient: evidenceReader, signal: options.signal });
+  };
   const joinPostRefusalWithinBarrier = async (): Promise<boolean | null> => {
     if (!postRefusalWorkerPromise) return null;
     try {
@@ -4102,7 +4118,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         ? earlyRejectPacket.join(result)
         : readPostRefusalPacketFromArtifactResult(result, {
           awsRegion: payload.awsRegion, s3GetClient: evidenceReader, signal: postRefusalAbortController.signal,
-          retainWorkerDiscoveredBytes: californiaWorkerConsentDiscoveryEnabled(payload, "reject"),
+          retainWorkerDiscoveredBytes: discoveryActions.reject,
         });
       // The phase samples memory asynchronously before joining. Observe an early
       // failure immediately and let the join report the original rejection.
@@ -4114,7 +4130,14 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           packet = verifiedPacket;
         })),
       );
-      if (packetCompleted && packet) joinedPostRefusalPacket = packet;
+      if (packetCompleted && packet) {
+        if (discoveryActions.reject && (packet.refusalRegistration.refusalExercised ||
+            packet.interactionDiagnostics?.click.outcome === "completed" || packet.interactionDiagnostics?.click.outcome === "confirmed_after_error")) {
+          discoveredReject = await verifyDiscoveredAction("reject", packet);
+          if (!discoveredReject) throw new Error("Evidence validation failed: unverified worker reject receipt");
+        }
+        joinedPostRefusalPacket = packet;
+      }
       return packetCompleted && Boolean(packet);
     } catch (error) {
       if (!postRefusalState.timedOut) {
@@ -4143,12 +4166,19 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             awsRegion: payload.awsRegion,
             s3GetClient: options.s3GetClient,
             signal: postAcceptAbortController.signal,
-            retainWorkerDiscoveredBytes: californiaWorkerConsentDiscoveryEnabled(payload, "accept"),
+            retainWorkerDiscoveredBytes: discoveryActions.accept,
           }).then((verifiedPacket) => {
             packet = verifiedPacket;
           })),
       );
-      if (packetCompleted && packet) joinedPostAcceptPacket = packet;
+      if (packetCompleted && packet) {
+        if (discoveryActions.accept && (packet.acceptanceRegistration.acceptanceExercised ||
+            packet.interactionDiagnostics?.click.outcome === "completed" || packet.interactionDiagnostics?.click.outcome === "confirmed_after_error")) {
+          discoveredAccept = await verifyDiscoveredAction("accept", packet);
+          if (!discoveredAccept) throw new Error("Evidence validation failed: unverified worker accept receipt");
+        }
+        joinedPostAcceptPacket = packet;
+      }
       return packetCompleted && Boolean(packet);
     } catch (error) {
       if (!postAcceptState.timedOut) {
@@ -4440,10 +4470,6 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       packet:joinedPostRefusalPacket,
     },
   }) : undefined;
-  const discoveryActions = {
-    accept:californiaWorkerConsentDiscoveryEnabled(payload, "accept"),
-    reject:californiaWorkerConsentDiscoveryEnabled(payload, "reject"),
-  };
   const consentActionStages = (shadow || discoveryActions.accept || discoveryActions.reject) && {
     version: "certscore.consent-action-stages.v1" as const,
     scanId: payload.scanId,
@@ -4460,17 +4486,6 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       recheck: shadow?.baseline.reject?.finalRecheck?.outcome,
     }) } : {}),
   };
-  const readDiscoveredClick = (action: "accept" | "reject") => {
-    if (!discoveryActions[action]) return;
-    const state = action === "accept" ? postAcceptState : postRefusalState;
-    const packet = action === "accept" ? joinedPostAcceptPacket : joinedPostRefusalPacket;
-    const tailMs = action === "accept" ? postAcceptMaxTailWaitMs : postRefusalMaxTailWaitMs;
-    return readJoinedWorkerDiscoveredClick({ payload, action, packet, result:state.result,
-      workerDispatchedAtMs:state.dispatchStartedAtMs, parentDispatchSha256:consentParentSha256,
-      deadlineAtMs:Math.min(options.deadlineAtMs ?? Infinity, passiveLaneBarrierCompletedAtMs + tailMs),
-      s3GetClient:evidenceReader, signal:options.signal });
-  };
-  const [discoveredAccept, discoveredReject] = await Promise.all([readDiscoveredClick("accept"), readDiscoveredClick("reject")]);
   const workerDiscoveredClicks = discoveredAccept || discoveredReject ?
     {parentDispatchSha256:consentParentSha256, accept:discoveredAccept, reject:discoveredReject} : undefined;
   const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({

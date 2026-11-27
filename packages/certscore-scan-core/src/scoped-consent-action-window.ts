@@ -44,6 +44,11 @@ const slowControls = [
     "button.iubenda-cs-accept-btn", "ACCETTA E CONTINUA", 10_000),
 ];
 
+// The retained ActiveCampaign worker bound the exact control, then exhausted
+// its 500 ms click window. Use more of the existing proof window for this input.
+const activeCampaignAccept = verifiedControl("accept", ["https://activecampaign.com/"],
+  "https://www.activecampaign.com/", "#onetrust-accept-btn-handler", "Accept All", 1_500);
+
 type RetainedBinding = {
   requestedTargetSha256?: string;
   documentSha256?: string;
@@ -67,4 +72,8 @@ export function scopedConsentActionWindowMs(action: Action, selector: unknown, b
 
 export function isScopedSitsBorlabsControl(action: Action, selector: unknown, binding?: RetainedBinding): boolean {
   return sitsBorlabsControls.some(control => matchesVerifiedControl(control, action, selector, binding));
+}
+
+export function scopedAcceptClickWindowMs(selector: unknown, binding?: RetainedBinding): number | undefined {
+  return matchesVerifiedControl(activeCampaignAccept, "accept", selector, binding) ? activeCampaignAccept.windowMs : undefined;
 }

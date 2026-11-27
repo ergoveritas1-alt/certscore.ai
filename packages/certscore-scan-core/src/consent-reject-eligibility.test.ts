@@ -3,8 +3,8 @@ import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { chromium } from "playwright";
-import { classifyConsentControlLabel, consentActionControlProofSchema } from "@certscore/contracts";
-import { assertReviewedRejectDispatchAllowed, buildConsentActionControlProof } from "./cmp-action-control-proof.js";
+import { classifyConsentControlLabel, consentActionControlProofSchema, REVIEWED_COOKIE_ACCEPT_CONTROLS, REVIEWED_COOKIE_REJECT_CONTROLS, UNSW_NECESSARY_ONLY_REJECT } from "@certscore/contracts";
+import { assertReviewedRejectDispatchAllowed, buildConsentActionControlProof, dispatchWorkerDiscoveredConsentControl } from "./cmp-action-control-proof.js";
 import { buildCanonicalPostRefusalActionRecipes, CANONICAL_POST_REFUSAL_RECIPE_SET_ID } from "./post-refusal-cmp-recipes.js";
 import { runPostRefusalObserver } from "./post-refusal-observer.js";
 
@@ -196,4 +196,173 @@ test("OneTrust's exact Accept only necessary label uses versioned named proof, n
       await assert.rejects(assertReviewedRejectDispatchAllowed({page,control:page.locator('#onetrust-reject-all-handler').first(),proof:result.proof}),/binding_changed/);
     }
   } finally {await browser.close();}
+});
+
+
+const unsw = UNSW_NECESSARY_ONLY_REJECT;
+for (const {site, url, requestedUrl, label, text, policyVersion} of [
+  {site: "IATA", url: "https://www.iata.org/", requestedUrl: "https://iata.org/", label: "Accept Only Necessary",
+    text: "Selecting Accept All enables tracking technologies. Selecting Accept Only Necessary or withdrawing your consent will disable them.",
+    policyVersion: "label_bound_necessary_only_reject.v2"},
+  {site: "UNSW", url: unsw.documentUrl, requestedUrl: unsw.requestedUrl, label: unsw.label,
+    text: unsw.instruction, policyVersion: unsw.policyVersion},
+] as const) {
+  test(`the independent ${site} Reject worker rechecks the same native button and visible instructions`, async t => {
+    const buttonSelector = "#onetrust-reject-all-handler";
+    const html = `<section id="onetrust-banner-sdk"><p>${text}</p>
+      <button type="button" id="onetrust-reject-all-handler">${label}</button></section>`;
+    const browser = await chromium.launch({args: ["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
+    t.after(() => browser.close());
+    const context = await browser.newContext({serviceWorkers: "block"});
+    // tsx keeps nested function names in callbacks serialized into Chromium.
+    await context.addInitScript("globalThis.__name ??= value => value;");
+    const page = await context.newPage();
+    await context.route("**/*", route => route.request().url() === url
+      ? route.fulfill({contentType: "text/html", body: html}) : route.abort("blockedbyclient"));
+    for (const mutation of ["none", "instructions changed", "duplicate", "opposite accessible label", "different request"]) {
+      await page.goto(url);
+      const proof = await buildConsentActionControlProof({
+        page, control: page.locator(buttonSelector), bindElement: true, workerDiscovered: true, action: "reject",
+        observedAtMs: 1, cmpId: "OneTrust", recipeId: recipe.recipeId, selectorHint: recipe.controlSelector,
+        authorizedTargetSha256: hash(url),
+      });
+      assert.ok(proof.status === "verified" && proof.boundElement, JSON.stringify(proof));
+      assert.equal(proof.proof.labelBoundNecessaryOnly?.policyVersion, policyVersion);
+      await proof.boundElement.evaluate(element => {
+        element.addEventListener("click", event => {
+          if (event.isTrusted) element.setAttribute("data-clicked", "true");
+        });
+      });
+      if (mutation === "instructions changed") {
+        // Preserve the qualifying sentence while replacing the surrounding instructions.
+        await page.locator("p").evaluate(element => element.prepend("Changed instructions. "));
+      } else if (mutation === "duplicate") {
+        await proof.boundElement.evaluate(element => element.parentElement?.append(element.cloneNode(true)));
+      } else if (mutation === "opposite accessible label") {
+        await proof.boundElement.evaluate(element => element.setAttribute("aria-label", "Accept all"));
+      }
+      const deadlineAtMs = Date.now() + 2_000;
+      let committed = 0;
+      const result = dispatchWorkerDiscoveredConsentControl({
+        page, requestedUrl: mutation === "different request" ? url : requestedUrl, control: proof.boundElement, proof: proof.proof,
+        deadlineAtMs, assertCurrent: () => {}, commit: () => { committed++; },
+      });
+      if (mutation === "none") {
+        const click = await result;
+        assert.ok(consentActionControlProofSchema.safeParse(click.control).success);
+        assert.equal(click.control.labelBoundNecessaryOnly?.policyVersion, policyVersion);
+        assert.ok(deadlineAtMs - click.completedAtMs >= 200);
+        assert.equal(committed, 1);
+        assert.equal(await page.locator("[data-clicked]").count(), 1);
+      } else {
+        await assert.rejects(result, /worker_consent_control_(?:unbound|changed)|worker_consent_exact_selector_unavailable/, mutation);
+        assert.equal(committed, 0, mutation);
+        assert.equal(await page.locator("[data-clicked]").count(), 0, mutation);
+      }
+    }
+  });
+}
+
+
+test("reviewed worker cookie controls require a visible notice and a unique non-transactional button", async t => {
+  const browser = await chromium.launch({args: ["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
+  t.after(() => browser.close());
+  const context = await browser.newContext({serviceWorkers: "block"});
+  await context.addInitScript("globalThis.__name ??= value => value;");
+  const page = await context.newPage();
+  for (const [action, controls] of [["accept", REVIEWED_COOKIE_ACCEPT_CONTROLS], ["reject", REVIEWED_COOKIE_REJECT_CONTROLS]] as const) {
+    for (const scope of controls) {
+      const labelAttribute = "labelSource" in scope && scope.labelSource === "aria_label" ? ` aria-label="${scope.label}"` : "";
+      const button = `<button type="button" id="${scope.controlSelector.slice(1)}"${labelAttribute}>${scope.label}</button>`;
+      const html = `<meta charset="utf-8"><section id="${scope.bannerSelector.slice(1)}"><p>${scope.notice}</p>${button}</section>`;
+      await context.route("**/*", route => route.request().url() === scope.documentUrl
+        ? route.fulfill({contentType: "text/html", body: html}) : route.abort("blockedbyclient"));
+      const getProof = () => buildConsentActionControlProof({
+        page, control: page.locator(scope.controlSelector).first(), bindElement: true, workerDiscovered: true, action,
+        observedAtMs: 1, recipeId: `canonical-control:${action}:fixture`, selectorHint: scope.controlSelector,
+        authorizedTargetSha256: scope.documentSha256,
+      });
+      await page.goto(scope.documentUrl);
+      const verified = await getProof();
+      assert.ok(verified.status === "verified" && verified.boundElement, `${scope.documentUrl} ${JSON.stringify(verified)}`);
+      assert.ok(consentActionControlProofSchema.safeParse(verified.proof).success, scope.documentUrl);
+      assert.ok(verified.proof.classifierReasonCodes.includes(scope.proofReason));
+      await page.locator("p").evaluate(element => {element.style.opacity = "0";});
+      let committed = false;
+      await assert.rejects(dispatchWorkerDiscoveredConsentControl({
+        page, requestedUrl: "requestedUrl" in scope ? scope.requestedUrl : scope.documentUrl, control: verified.boundElement,
+        proof: verified.proof, deadlineAtMs: Date.now() + 2_000, assertCurrent: () => {}, commit: () => {committed = true;},
+      }), /worker_consent_control_changed_before_dispatch/, scope.documentUrl);
+      assert.equal(committed, false, scope.documentUrl);
+      for (const changed of [html.replace(button, button + button), `<form>${html}</form>`]) {
+        await page.setContent(changed);
+        assert.notEqual((await getProof()).status, "verified", scope.documentUrl);
+      }
+      await context.unroute("**/*");
+    }
+  }
+});
+
+test("independent worker separates sibling consent choices while guarding same-intent duplicates", async t => {
+  const url = "https://fixture.example.com/";
+  const selector = "#cookie-choices button";
+  const browser = await chromium.launch({args: ["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
+  t.after(() => browser.close());
+  const context = await browser.newContext({serviceWorkers: "block"});
+  await context.addInitScript("globalThis.__name ??= value => value;");
+  await context.route("**/*", route => route.request().url() === url
+    ? route.fulfill({contentType: "text/html", body: `<section role="dialog" aria-label="Cookie choices" id="cookie-choices">
+        <button type="button">Accept all</button><button type="button">Reject all</button>
+        <button type="button">Cookie settings</button></section>`})
+    : route.abort("blockedbyclient"));
+  const page = await context.newPage();
+
+  for (const action of ["accept", "reject"] as const) {
+    const label = action === "accept" ? "Accept all" : "Reject all";
+    const equivalent = action === "accept" ? "Allow all cookies" : "Decline all";
+    for (const change of ["none", "second choice", "label", "replacement"]) {
+      await page.goto(url);
+      await page.locator("#cookie-choices").evaluate(group => {
+        group.addEventListener("click", event => {
+          if (event.isTrusted && event.target instanceof HTMLButtonElement) {
+            group.setAttribute("data-clicked", event.target.textContent ?? "");
+          }
+        });
+      });
+      const proof = await buildConsentActionControlProof({
+        page, control: page.getByRole("button", {name: label, exact: true}), bindElement: true, workerDiscovered: true,
+        action, observedAtMs: 1, recipeId: `canonical-control:${action}:group-fixture`,
+        selectorHint: selector, authorizedTargetSha256: hash(url),
+      });
+      assert.ok(proof.status === "verified" && proof.boundElement, JSON.stringify(proof));
+      if (change === "second choice") {
+        await page.locator("#cookie-choices").evaluate((group, competingLabel) => {
+          const competitor = document.createElement("button");
+          competitor.type = "button";
+          competitor.textContent = competingLabel;
+          group.append(competitor);
+        }, equivalent);
+      } else if (change === "label") {
+        await proof.boundElement.evaluate((element, changedLabel) => {element.textContent = changedLabel;}, equivalent);
+      } else if (change === "replacement") {
+        await proof.boundElement.evaluate(element => element.replaceWith(element.cloneNode(true)));
+      }
+      let commitCount = 0;
+      const deadlineAtMs = Date.now() + 2_000;
+      const result = dispatchWorkerDiscoveredConsentControl({
+        page, requestedUrl: url, control: proof.boundElement, proof: proof.proof, deadlineAtMs,
+        assertCurrent: () => {}, commit: () => {commitCount++;},
+      });
+      if (change === "none") {
+        const clicked = await result;
+        assert.ok(deadlineAtMs - clicked.completedAtMs >= 200);
+        assert.equal(commitCount, 1);
+        assert.equal(await page.locator("#cookie-choices").getAttribute("data-clicked"), label);
+      } else {
+        await assert.rejects(result, /worker_consent_(?:control_changed|exact_selector_unavailable)/, change);
+        assert.equal(commitCount, 0);
+        assert.equal(await page.locator("#cookie-choices").getAttribute("data-clicked"), null);
+      }
+    }
+  }
 });

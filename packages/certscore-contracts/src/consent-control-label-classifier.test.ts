@@ -5,6 +5,7 @@ import {
   CONSENT_CONTROL_LABEL_REGISTRY_VERSION,
   classifyConsentLanguage,
   classifyConsentControlLabel,
+  hasConsentControlSemanticVeto,
   classifyConsentSurfaceText,
   consentActionCandidateSchema,
   consentUiObservationSchema,
@@ -1113,6 +1114,37 @@ test("classifies standalone non-essential refusal but withholds conflicting conc
   const concatenated = classifyConsentControlLabel({ label: "Save Accept All Reject Non-Essential" });
   assert.equal(concatenated.intent, "unknown");
   assert.ok(concatenated.reasonCodes.includes("conflicting_consent_decisions"));
+});
+
+test("Netatmo’s exact Axeptio Reject label preserves its dismissal and conflict guards", () => {
+  const classify = (label: string, hasConsentContext = true) => classifyConsentControlLabel({
+    label, usage: "action", hasConsentContext, classifierProfile: "multilingual_v1",
+  });
+  const label = "Reject all - Close without accepting cookies";
+  assert.equal(classify(label).intent, "reject");
+  assert.equal(classify(label).matchStrength, "direct");
+  assert.notEqual(classify(label, false).intent, "reject");
+  for (const vetoed of ["Close without accepting cookies", `${label}?`, `${label} or Accept All`]) {
+    assert.notEqual(classify(vetoed).intent, "reject", vetoed);
+  }
+});
+
+test("recognizes the exact retained WTA and SLB Reject choices without ignoring negation", () => {
+  const classify = (label: string, hasConsentContext = true) => classifyConsentControlLabel({
+    label, usage: "action", classifierProfile: "multilingual_v1", hasConsentContext,
+  });
+  for (const label of ["No, reject cookies", "Decline All Non-Essential"]) {
+    const choice = classify(label);
+    assert.equal(choice.intent, "reject");
+    assert.equal(choice.matchStrength, "direct");
+    assert.equal(hasConsentControlSemanticVeto(choice), false);
+  }
+  for (const label of ["No reject cookies", "Do not reject cookies", "Do not decline all non-essential",
+    "No, reject cookies?", "No, reject cookies or Accept All"]) {
+    assert.equal(classify(label).intent, "unknown", label);
+  }
+  assert.equal(classify("No, reject cookies", false).intent, "unknown");
+  assert.equal(classify("Decline All Non-Essential", false).intent, "unknown");
 });
 
 test("classifies category-scoped analytics controls without broadening plain category labels", () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { consentActionControlProofSchema, CONSENT_ACTION_CONTROL_PROOF_VERSION,
-  DRUPAL_NO_THANKS_REJECT_CONTROL, isRegisteredContextualAcceptLabel, ONETRUST_ITALIAN_ACCEPT_CONTROL } from "./consent-action-control-proof.js";
+  DRUPAL_NO_THANKS_REJECT_CONTROL, isRegisteredContextualAcceptLabel, ONETRUST_ITALIAN_ACCEPT_CONTROL, REGISTERED_ONETRUST_ACCEPT_CONTROLS } from "./consent-action-control-proof.js";
 import { classifyConsentControlLabel } from "./consent-control-label-classifier.js";
 
 const contextualProof = {
@@ -72,6 +72,23 @@ test("Italian OneTrust Accept proof binds the registered control and authorized 
     { recipeId: "canonical-control:accept:fixture" }, { selectorHint: "#different-button" },
     { frameIdentitySha256: "a".repeat(64) }, { authorizedTargetSha256: undefined }, { labelSource: "title" },
   ]) assert.equal(consentActionControlProofSchema.safeParse({ ...proof, ...change }).success, false, JSON.stringify(change));
+});
+
+test("the shared I Consent caption stays bound to each reviewed OneTrust document", () => {
+  const [, babyCenter, whatToExpect] = REGISTERED_ONETRUST_ACCEPT_CONTROLS;
+  const label = {label: whatToExpect.label, hasConsentContext: true, classifierProfile: "multilingual_v1"} as const;
+  const observed = classifyConsentControlLabel(label);
+  assert.equal(classifyConsentControlLabel({...label, usage: "action"}).intent, "unknown");
+  const proof = {...contextualProof, contextualApproval: undefined, accessibleLabel: whatToExpect.label,
+    actionSemantics: "direct_label", classifierConfidence: observed.confidence, matchedLocale: "en", matchStrength: "direct",
+    recipeId: whatToExpect.recipeId, cmpId: whatToExpect.cmpId, selectorHint: whatToExpect.controlSelector,
+    frameIdentitySha256: whatToExpect.documentSha256, authorizedTargetSha256: whatToExpect.documentSha256,
+    classifierReasonCodes: [whatToExpect.proofReason]};
+  assert.equal(consentActionControlProofSchema.safeParse(proof).success, true);
+  assert.equal(consentActionControlProofSchema.safeParse({...proof, classifierReasonCodes: []}).success, false);
+  assert.equal(consentActionControlProofSchema.safeParse({...proof, classifierReasonCodes: [babyCenter.proofReason]}).success, false);
+  assert.equal(consentActionControlProofSchema.safeParse({...proof, frameIdentitySha256: babyCenter.documentSha256,
+    authorizedTargetSha256: babyCenter.documentSha256}).success, false);
 });
 
 test("Drupal weak refusal proof can certify only the registered decline button", () => {

@@ -1,3 +1,4 @@
+import { isReviewedWorkerNecessaryOnlyRejectProof, workerDiscoveredFrameMatchesTarget } from "./post-refusal-target-authorization.js";
 import { verifyStarfieldConsentListener } from "./starfield-consent-listener.js";
 import { verifyCaiaAcceptListeners } from "./caia-accept-control.js";
 import { exactNativeConsentButtonSelector, hubSpotHrefLessConsentSelector, reviewedConsentAnchor, TOOM_ACCEPT_SELECTOR } from "./exact-native-consent-button-selector.js";
@@ -7,10 +8,12 @@ import {
   CONSENT_ACTION_CONTROL_PROOF_VERSION,
   classifyConsentControlLabel,
   DRUPAL_NO_THANKS_REJECT_CONTROL,
+  UNSW_NECESSARY_ONLY_REJECT,
   hasConsentControlSemanticVeto,
   isRegisteredContextualAcceptLabel,
   normalizeConsentControlText,
-  ONETRUST_ITALIAN_ACCEPT_CONTROL,
+  REGISTERED_ONETRUST_ACCEPT_CONTROLS,
+  REVIEWED_COOKIE_ACCEPT_CONTROLS, REVIEWED_COOKIE_REJECT_CONTROLS,
   classifyDafitiAdoptAcceptLabel, DAFITI_ADOPT_ACCEPT_CONTROL, CAIA_ACCEPT_CONTROL,
   type ConsentActionControlProof,
   type PostRefusalInteractionDiagnostics,
@@ -201,6 +204,7 @@ export type ConsentActionControlProofInput = {
   bindElement?: boolean;
   /** During the final recheck, the recipe must still select this node. */
   exactElement?: ElementHandle<HTMLElement | SVGElement>;
+  retryDiscoveredElementRead?: boolean;
   requireUniqueSelector?: boolean;
   workerDiscovered?: boolean;
   /** The passive Reject selector must resolve only to the resolver's bound native button. */
@@ -231,16 +235,21 @@ export async function buildConsentActionControlProof(input: ConsentActionControl
     let element: ElementHandle<HTMLElement | SVGElement> | null = null;
     let retained = false;
     try {
-      const available = await guard.read(() => (input.control as Locator).elementHandle({timeout: Math.max(1,
+      const readElement = () => guard.read(() => (input.control as Locator).elementHandle({timeout: Math.max(1,
         Math.min(100, (input.deadlineAtMs ?? Date.now() + 100) - Date.now()))})
         .then(value => {element = value; return true;}, () => false));
-      // A disappearing control or bounded browser-read failure supplies no
-      // proof. Preserve the deadline/abort checkpoint and never retry a click.
+      let available = await readElement();
+      if (input.retryDiscoveredElementRead && (!available || !element)) {
+        // Re-read only the original scoped locator. The same deadline and
+        // fresh exact-element validation still apply before any input.
+        available = await readElement();
+      }
       if (!available) return {status: "label_unverifiable", reason: "resolved_control_unavailable"};
       if (!element) return {status: "label_unverifiable", reason: "resolved_control_detached"};
       const result = await buildConsentActionControlProofWithinBoundary({
         ...input, control: element,
-        ...(input.expectedNativeSelector ? {exactElement: element} : {}),
+        ...(input.expectedNativeSelector || input.workerDiscovered && input.recipeId === DRUPAL_NO_THANKS_REJECT_CONTROL.recipeId
+          ? {exactElement: element} : {}),
       }, guard);
       guard.checkpoint();
       if (result.status !== "verified") return result;
@@ -318,11 +327,38 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       labelSources: labelEntries.map((entry) => entry[0]) },
   });
   guard.checkpoint();
-  const italianAccept = ONETRUST_ITALIAN_ACCEPT_CONTROL;
-  const oneTrustItalianAccept = input.action === "accept" && input.cmpId === italianAccept.cmpId &&
-    input.recipeId === italianAccept.recipeId && input.selectorHint === italianAccept.controlSelector &&
-    input.expectedNativeSelector === italianAccept.controlSelector && !!input.exactElement && !!input.authorizedTargetSha256 &&
-    !input.controlFrameUrl && !input.expectedAccessibleControl && hasExactOneTrustItalianAcceptLabel(bounded);
+  const registeredOneTrustAccept = input.action === "accept" && !!input.exactElement &&
+    !!input.authorizedTargetSha256 && !input.controlFrameUrl && !input.expectedAccessibleControl
+    ? REGISTERED_ONETRUST_ACCEPT_CONTROLS.find(scope =>
+        input.cmpId === scope.cmpId && input.recipeId === scope.recipeId &&
+        input.selectorHint === scope.controlSelector && input.expectedNativeSelector === scope.controlSelector &&
+        hasExactOneTrustAcceptLabel(bounded, scope.label) &&
+        (!("documentUrl" in scope) || (input.page.url() === scope.documentUrl &&
+          input.authorizedTargetSha256 === scope.documentSha256)))
+    : undefined;
+  const reviewedCookieAccept = input.workerDiscovered && input.action === "accept" &&
+    !input.controlFrameUrl && !input.expectedAccessibleControl && preferredLabel(bounded)?.source === "visible_text"
+    ? REVIEWED_COOKIE_ACCEPT_CONTROLS.find(scope =>
+        input.page.url() === scope.documentUrl && input.authorizedTargetSha256 === scope.documentSha256 &&
+        (!input.expectedNativeSelector || input.expectedNativeSelector === scope.controlSelector) &&
+        bounded.visibleText === scope.label)
+    : undefined;
+  if (reviewedCookieAccept && !(await guard.read(() => readVisibleConsentBannerText(input.control,
+    reviewedCookieAccept)))?.includes(reviewedCookieAccept.notice)) {
+    return {status: "label_unverifiable", reason: "reviewed_cookie_accept_scope_unverified"};
+  }
+  const reviewedCookieReject = input.workerDiscovered && input.action === "reject" &&
+    !input.controlFrameUrl && !input.expectedAccessibleControl
+    ? REVIEWED_COOKIE_REJECT_CONTROLS.find(scope =>
+        input.page.url() === scope.documentUrl && input.authorizedTargetSha256 === scope.documentSha256 &&
+        (!input.expectedNativeSelector || input.expectedNativeSelector === scope.controlSelector) &&
+        bounded.visibleText === scope.label && preferredLabel(bounded)?.value === scope.label &&
+        preferredLabel(bounded)?.source === scope.labelSource)
+    : undefined;
+  if (reviewedCookieReject && !(await guard.read(() => readVisibleConsentBannerText(input.control,
+    reviewedCookieReject)))?.includes(reviewedCookieReject.notice)) {
+    return {status: "label_unverifiable", reason: "reviewed_cookie_reject_scope_unverified"};
+  }
   const caia = CAIA_ACCEPT_CONTROL;
   const caiaAccept = input.recipeId === caia.recipeId && input.action === "accept" &&
     input.selectorHint === caia.controlSelector && input.expectedNativeSelector === caia.controlSelector &&
@@ -342,13 +378,19 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       !await guard.read(() => verifyContextualApprovalScope(input.control, adopt.bannerSelector, true, true)))) {
     return {status: "label_unverifiable", reason: "registered_dafiti_adopt_accept_scope_unverified"};
   }
-  const drupalReject = input.requireDrupalBanner && input.action === "reject";
-  const drupalScope = input.requireDrupalBanner ? (drupalReject ? DRUPAL_NO_THANKS_REJECT_CONTROL : {
+  const registeredDrupalReject = DRUPAL_NO_THANKS_REJECT_CONTROL;
+  const workerDrupalReject = input.workerDiscovered && input.action === "reject" &&
+    input.recipeId === registeredDrupalReject.recipeId && input.cmpId === registeredDrupalReject.cmpId &&
+    bounded.visibleText === registeredDrupalReject.label;
+  const expectedNativeSelector = workerDrupalReject ? registeredDrupalReject.controlSelector : input.expectedNativeSelector;
+  const requireDrupalBanner = input.requireDrupalBanner || workerDrupalReject;
+  const drupalReject = requireDrupalBanner && input.action === "reject";
+  const drupalScope = requireDrupalBanner ? (drupalReject ? registeredDrupalReject : {
     cmpId: DRUPAL_CMP, recipeId: DRUPAL_ACCEPT_RECIPE, controlSelector: DRUPAL_ACCEPT_SELECTOR,
     bannerSelector: DRUPAL_ACCEPT_BANNER_SELECTOR, label: "Accept",
   }) : undefined;
   if (drupalScope && (input.cmpId !== drupalScope.cmpId ||
-    input.recipeId !== drupalScope.recipeId || input.expectedNativeSelector !== drupalScope.controlSelector ||
+    input.recipeId !== drupalScope.recipeId || expectedNativeSelector !== drupalScope.controlSelector ||
     !input.exactElement || !input.authorizedTargetSha256 || input.controlFrameUrl || input.expectedAccessibleControl ||
     bounded.visibleText !== drupalScope.label || preferredLabel(bounded)?.source !== "visible_text" ||
     (drupalReject && (bounded.title || bounded.value)))) {
@@ -361,16 +403,22 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     ? definition.acceptContextualApproval : undefined;
   const contextualLabelVerified = contextualApproval &&
     isRegisteredContextualAcceptLabel(preferredLabel(bounded)?.value ?? "", contextualApproval.expectedNormalizedLabel);
+  const unsw = UNSW_NECESSARY_ONLY_REJECT;
+  const unswNecessaryOnly = input.page.url() === unsw.documentUrl && !input.controlFrameUrl &&
+    input.authorizedTargetSha256 === unsw.documentSha256 && bounded.visibleText === unsw.label &&
+    preferredLabel(bounded)?.source === "visible_text";
   const necessaryOnlyRecipe = input.action === "reject" && definition?.rejectLabelBoundNecessaryOnly &&
     input.recipeId === `canonical-cmp:${definition.canonicalName}:reject:v3` &&
     input.selectorHint === definition.rejectControlSelectors?.join(", ") &&
     input.authorizedTargetSha256 && !input.expectedAccessibleControl &&
-    definition.rejectLabelBoundNecessaryOnly.expectedNormalizedLabels.includes(normalizeConsentControlText(preferredLabel(bounded)?.value))
+    (unswNecessaryOnly || definition.rejectLabelBoundNecessaryOnly.expectedNormalizedLabels
+      .includes(normalizeConsentControlText(preferredLabel(bounded)?.value)))
     ? definition.rejectLabelBoundNecessaryOnly : undefined;
   const necessaryOnlyContext = necessaryOnlyRecipe
-    ? await guard.read(() => readLabelBoundNecessaryOnlyContext(input.control, necessaryOnlyRecipe)) : undefined;
-  const labelBoundNecessaryOnly = necessaryOnlyRecipe && necessaryOnlyContext
-    ? { policyVersion: necessaryOnlyRecipe.policyVersion,
+    ? await guard.read(() => readVisibleConsentBannerText(input.control, necessaryOnlyRecipe)) : undefined;
+  const labelBoundNecessaryOnly = necessaryOnlyRecipe && necessaryOnlyContext &&
+    (!unswNecessaryOnly || necessaryOnlyContext.includes(unsw.instruction))
+    ? { policyVersion: unswNecessaryOnly ? unsw.policyVersion : necessaryOnlyRecipe.policyVersion,
         bannerSelector: "#onetrust-banner-sdk" as const, controlSelector: "#onetrust-reject-all-handler" as const,
         contextText: necessaryOnlyContext } : undefined;
   // Reuse classifications for identical strings from independent DOM reads.
@@ -380,7 +428,9 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
     const cached = classifications.get(label);
     if (cached) return cached;
     const result = classifyConsentControlLabel({
-      usage: labelBoundNecessaryOnly || caiaAccept || (oneTrustItalianAccept && label === italianAccept.label) ? "observation" : "action",
+      usage: labelBoundNecessaryOnly || caiaAccept || (registeredOneTrustAccept && label === registeredOneTrustAccept.label) ||
+        (reviewedCookieAccept && label === reviewedCookieAccept.label) ||
+        (reviewedCookieReject && label === reviewedCookieReject.label) ? "observation" : "action",
       classifierProfile: "multilingual_v1", label,
       contextText: labelBoundNecessaryOnly?.contextText, hasConsentContext: true,
     });
@@ -408,8 +458,9 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
   if (classification.matchedLocale === "mk") {
     return { status: "label_unverifiable", reason: "observation_only_control_locale" };
   }
-  const necessaryOnlyLabelVerified = labelBoundNecessaryOnly
-    ? classification.intent === "reject" && classification.variant === "necessary_only" && classification.confidence >= 0.8
+  const necessaryOnlyLabelVerified = labelBoundNecessaryOnly || reviewedCookieReject
+    ? classification.intent === "reject" && classification.variant === "necessary_only" &&
+      (Boolean(reviewedCookieReject) || classification.confidence >= 0.8)
     : input.canonicalNecessaryOnly
     ? Object.values(bounded).some((label) =>
         normalizeConsentControlText(label) ===
@@ -467,7 +518,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       return { status: "label_unverifiable", reason: "starfield_click_handler_unverified" };
     }
     const toomShadow = input.action === "accept" && input.expectedNativeSelector === TOOM_ACCEPT_SELECTOR;
-    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, italianAcceptScope, drupalBannerSelector, caiaBannerSelector, toomShadow, workerDiscovered}) => {
+    const liveSnapshot = await guard.read(() => frames[0]!.locator(input.selectorHint).evaluateAll((elements, {exact, passiveSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, oneTrustAcceptScope, drupalBannerSelector, caiaBannerSelector, toomShadow, workerDiscovered}) => {
       if (elements.length > 32 || (exact && !elements.includes(exact))) return null;
       if (passiveSelector) {
         const document = exact?.ownerDocument;
@@ -479,8 +530,9 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
           (!reviewedAnchor.id || document.querySelectorAll("#" + reviewedAnchor.id).length === 1) &&
           !exact.closest("form,button,label,[contenteditable]") && !exact.querySelector("a,button,input,[role=button]");
         if (reviewedAnchor && !exactReviewedAnchor) return null;
-        if (workerDiscovered && (!exact || exact.closest("form, label, [contenteditable], [inert]") ||
+        if (workerDiscovered && (!exact || !document || exact.closest("form, label, [contenteditable], [inert]") ||
             exact.hasAttribute("form") || exact.hasAttribute("formaction") ||
+            (exact.id && document.querySelectorAll("#" + CSS.escape(exact.id)).length !== 1) ||
             exact.querySelector("a, button, input, [role=button]"))) return null;
         const buttonLink = exactReviewedAnchor || exact?.localName === "a" && exact.getAttribute("role") === "button" &&
           !exact.hasAttribute("target") && !exact.hasAttribute("download") &&
@@ -511,14 +563,14 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
             !exact.closest(caiaBannerSelector) || exact.childElementCount ||
             exact.closest("form,a,button,label,[contenteditable],[inert],[aria-hidden='true'],[aria-disabled='true']") ||
             exact.hasAttribute("role") || exact.hasAttribute("onclick"))) return null;
-        if (italianAcceptScope) {
-          const group = exact.closest(italianAcceptScope.groupSelector);
-          const banner = group?.closest(italianAcceptScope.bannerSelector);
+        if (oneTrustAcceptScope) {
+          const group = exact.closest(oneTrustAcceptScope.groupSelector);
+          const banner = group?.closest(oneTrustAcceptScope.bannerSelector);
           if (!(exact instanceof HTMLButtonElement) || !banner || !group || exact.form || exact.closest("form") ||
               exact.hasAttribute("form") || exact.hasAttribute("formaction") ||
               (exact.type !== "button" && exact.hasAttribute("type")) || exact.querySelector("a[href]") ||
-              document.querySelectorAll(italianAcceptScope.bannerSelector).length !== 1 ||
-              document.querySelectorAll(italianAcceptScope.groupSelector).length !== 1) return null;
+              document.querySelectorAll(oneTrustAcceptScope.bannerSelector).length !== 1 ||
+              document.querySelectorAll(oneTrustAcceptScope.groupSelector).length !== 1) return null;
         }
         if (drupalBannerSelector && (!(exact instanceof HTMLButtonElement) || !exact.matches(drupalBannerSelector) ||
             document.querySelectorAll("#sliding-popup").length !== 1 || exact.form || exact.closest("form") ||
@@ -530,27 +582,32 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         const style = getComputedStyle(element);
         return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" &&
           style.display !== "none" && !element.matches(":disabled") && element.getAttribute("aria-disabled") !== "true";
-      }).map((element) => ({ ariaLabel: element.getAttribute("aria-label") ?? undefined,
+      }).map((element) => ({ isBoundElement: element === exact, ariaLabel: element.getAttribute("aria-label") ?? undefined,
         visibleText: (element as HTMLElement).innerText || element.textContent || undefined,
         title: element.getAttribute("title") ?? undefined,
         value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
           ? element.value : undefined }));
       return { selectorMatchCount: elements.length, labels };
-    }, {exact: input.exactElement, passiveSelector: input.expectedNativeSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, toomShadow, workerDiscovered: input.workerDiscovered,
-      italianAcceptScope: oneTrustItalianAccept ? italianAccept : undefined,
+    }, {exact: input.exactElement, passiveSelector: expectedNativeSelector, roleButtonIds, hubSpotAnchor, reviewedAnchor, toomShadow, workerDiscovered: input.workerDiscovered,
+      oneTrustAcceptScope: registeredOneTrustAccept,
       drupalBannerSelector: drupalScope?.bannerSelector,
       caiaBannerSelector: caiaAccept ? caia.bannerSelector : undefined}).catch(() => null));
-    if (input.expectedNativeSelector && !liveSnapshot) {
+    if (expectedNativeSelector && !liveSnapshot) {
       return {status: "label_unverifiable", reason: `passive_${input.action}_button_binding_unverified`};
     }
-    if (input.requireUniqueSelector && liveSnapshot?.selectorMatchCount !== 1) {
+    // Independent discovery may start with a selector covering the full choice
+    // group. The native selector above establishes exact element uniqueness.
+    // Keep sweeping the original group for any second action of the same intent.
+    const requireUniqueIntent = input.requireUniqueSelector && input.workerDiscovered && Boolean(expectedNativeSelector);
+    if (input.requireUniqueSelector && !requireUniqueIntent && liveSnapshot?.selectorMatchCount !== 1) {
       return { status: "label_unverifiable", reason: "exact_selector_no_longer_unique" };
     }
     const matching = liveSnapshot?.labels.filter((fields) => {
       const labels = boundFields(fields);
       const liveLabel = preferredLabel(labels);
-      if (input.exactElement && (liveLabel?.source !== selected.source || liveLabel.value !== selected.value)) return false;
-      if (oneTrustItalianAccept && !hasExactOneTrustItalianAcceptLabel(labels)) return false;
+      if (input.exactElement && (!requireUniqueIntent || fields.isBoundElement) &&
+          (liveLabel?.source !== selected.source || liveLabel.value !== selected.value)) return false;
+      if (registeredOneTrustAccept && !hasExactOneTrustAcceptLabel(labels, registeredOneTrustAccept.label)) return false;
       if (dafitiAdoptAccept) return !!classifyDafitiAdoptAcceptLabel(labels.visibleText) &&
         !labels.ariaLabel && !labels.title && !labels.value;
       if (sourceIntentConflict(labels, classify)) return false;
@@ -558,9 +615,12 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         liveLabel.value === DRUPAL_NO_THANKS_REJECT_CONTROL.label && !labels.title && !labels.value;
       if (labelBoundNecessaryOnly) {
         const classified = classify(preferredLabel(labels)?.value);
-        return necessaryOnlyRecipe!.expectedNormalizedLabels.includes(normalizeConsentControlText(preferredLabel(labels)?.value)) &&
+        return (unswNecessaryOnly ? preferredLabel(labels)?.value === unsw.label :
+          necessaryOnlyRecipe!.expectedNormalizedLabels.includes(normalizeConsentControlText(preferredLabel(labels)?.value))) &&
           classified.intent === "reject" && classified.variant === "necessary_only";
       }
+      if (reviewedCookieReject) return liveLabel?.value === reviewedCookieReject.label &&
+        liveLabel.source === reviewedCookieReject.labelSource && labels.visibleText === reviewedCookieReject.label;
       if (input.canonicalNecessaryOnly) return Object.values(labels).some((label) =>
         normalizeConsentControlText(label) === normalizeConsentControlText(input.canonicalNecessaryOnly?.expectedNormalizedLabel));
       if (contextualLabelVerified) return isRegisteredContextualAcceptLabel(
@@ -568,9 +628,14 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       const classified = classify(liveLabel?.value);
       return classified.intent === input.action && classified.confidence >= 0.8;
     });
-    if (matching?.length !== 1) return { status: "label_unverifiable", reason: "resolved_control_no_longer_unique" };
+    if (matching?.length !== 1 || (requireUniqueIntent && !matching[0]?.isBoundElement)) {
+      return { status: "label_unverifiable", reason: "resolved_control_no_longer_unique" };
+    }
   }
-  const selectorHint = bound(input.expectedNativeSelector ?? input.selectorHint, 500);
+  // The named recipe retains its registered selector scope in the packet.
+  // The worker checks the exact native button separately before clicking.
+  const selectorHint = bound(labelBoundNecessaryOnly ? input.selectorHint :
+    reviewedCookieAccept?.controlSelector ?? reviewedCookieReject?.controlSelector ?? expectedNativeSelector ?? input.selectorHint, 500);
   if (!selectorHint) {
     return {
       status: "label_unverifiable",
@@ -586,7 +651,7 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
       input.expectedCustomControlBinding,
     ))) return { status: "label_unverifiable", reason: "custom_control_binding_changed" };
   if (input.signal?.aborted) return { status: "label_unverifiable", reason: "abort_requested_before_action" };
-  if (labelBoundNecessaryOnly && await guard.read(() => readLabelBoundNecessaryOnlyContext(input.control, necessaryOnlyRecipe!)) !== labelBoundNecessaryOnly.contextText) {
+  if (labelBoundNecessaryOnly && await guard.read(() => readVisibleConsentBannerText(input.control, necessaryOnlyRecipe!)) !== labelBoundNecessaryOnly.contextText) {
     return {status: "label_unverifiable", reason: "label_bound_necessary_only_context_changed"};
   }
   if (input.authorizedTargetSha256 && sha256(normalizedTarget(input.page.url())) !== input.authorizedTargetSha256) {
@@ -620,7 +685,9 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
         ...(necessaryOnlyLabelVerified ? ["canonical_necessary_only_recipe_verified"] : []),
         ...(labelBoundNecessaryOnly ? [labelBoundNecessaryOnly.policyVersion] : []),
         ...(contextualLabelVerified ? ["registered_contextual_accept_scope_verified"] : []),
-        ...(oneTrustItalianAccept ? [italianAccept.proofReason] : []),
+        ...(registeredOneTrustAccept ? [registeredOneTrustAccept.proofReason] : []),
+        ...(reviewedCookieAccept ? [reviewedCookieAccept.proofReason] : []),
+        ...(reviewedCookieReject ? [reviewedCookieReject.proofReason] : []),
         ...(caiaAccept ? [caia.proofReason] : []),
         ...(dafitiAdoptAccept ? [adopt.proofReason] : []),
         ...(drupalReject ? [DRUPAL_NO_THANKS_REJECT_CONTROL.proofReason] : []),
@@ -641,15 +708,16 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
 
 /** Read only visible instructions in the registered first-layer banner. A
  * category heading, hidden copy, another dialog or a form cannot authorize it. */
-async function readLabelBoundNecessaryOnlyContext(control: ConsentActionControl, recipe: {
+async function readVisibleConsentBannerText(control: ConsentActionControl, recipe: {
   bannerSelector: string; controlSelector: string;
 }): Promise<string | undefined> {
   const read = (element: HTMLElement | SVGElement, selectors: {bannerSelector: string; controlSelector: string}) => {
     const root = element.getRootNode() as Document | ShadowRoot;
     const banner = element.closest(selectors.bannerSelector);
-    if (!banner || root.querySelectorAll(selectors.bannerSelector).length !== 1 ||
-      !element.matches(selectors.controlSelector) || element.closest("form") ||
+    if (!banner || root.querySelectorAll(selectors.bannerSelector).length !== 1 || root.querySelectorAll(selectors.controlSelector).length !== 1 ||
+      !element.matches(selectors.controlSelector) || element.closest("form, label, [contenteditable]") ||
       !(element instanceof HTMLButtonElement) || element.form || element.hasAttribute("form") ||
+      element.hasAttribute("formaction") || element.querySelector("a, button, input, [role=button]") ||
       !(element.type === "button" || element.getAttribute("type") === null)) return undefined;
     const ancestors: Element[] = [];
     for (let current: Element | null = banner; current; current = current.parentElement) ancestors.push(current);
@@ -729,8 +797,7 @@ function preferredLabel(fields: ControlLabelFields): {
   return undefined;
 }
 
-function hasExactOneTrustItalianAcceptLabel(fields: ControlLabelFields): boolean {
-  const {label} = ONETRUST_ITALIAN_ACCEPT_CONTROL;
+function hasExactOneTrustAcceptLabel(fields: ControlLabelFields, label: string): boolean {
   return fields.visibleText === label && [fields.ariaLabel, fields.value, fields.title].every(value => !value || value === label);
 }
 
@@ -774,6 +841,7 @@ function normalizedTarget(value: string) {
  * its single input. This path has no coordinator-supplied selector. */
 export async function dispatchWorkerDiscoveredConsentControl(input: {
   page: Page;
+  requestedUrl: string;
   control?: ElementHandle<HTMLElement | SVGElement>;
   proof: ConsentActionControlProof;
   deadlineAtMs: number;
@@ -781,24 +849,31 @@ export async function dispatchWorkerDiscoveredConsentControl(input: {
   assertCurrent: () => void;
   commit: () => void;
 }) {
-  const { page, control, proof, signal, deadlineAtMs } = input;
-  if (!control || !proof.authorizedTargetSha256 || proof.frameIdentitySha256 !== proof.authorizedTargetSha256 ||
-      proof.actionSemantics !== "direct_label") throw new Error("worker_consent_control_unbound");
+  const { page, requestedUrl, control, proof, signal, deadlineAtMs } = input;
+  const reviewedNecessaryOnly = isReviewedWorkerNecessaryOnlyRejectProof(requestedUrl, proof);
+  if (!control || !workerDiscoveredFrameMatchesTarget(proof) || proof.frameIdentitySha256 !== sha256(page.url()) ||
+      (proof.actionSemantics !== "direct_label" && !reviewedNecessaryOnly)) throw new Error("worker_consent_control_unbound");
   input.assertCurrent();
   const selector = await boundedControlProof({page, signal, deadlineAtMs}, guard =>
     guard.read(() => control.evaluate(exactNativeConsentButtonSelector)));
-  if (!selector) throw new Error("worker_consent_exact_selector_unavailable");
+  if (!selector || (reviewedNecessaryOnly && selector !== (proof.labelBoundNecessaryOnly?.controlSelector ?? proof.selectorHint))) {
+    throw new Error("worker_consent_exact_selector_unavailable");
+  }
   input.assertCurrent();
   const verified = await buildConsentActionControlProof({
-    page, control, exactElement: control, requireUniqueSelector: true, workerDiscovered: true,
+    page, control, exactElement: control, requireUniqueSelector: !reviewedNecessaryOnly, workerDiscovered: true,
     expectedNativeSelector: selector,
     action: proof.action, authorizedTargetSha256: proof.authorizedTargetSha256,
-    selectorHint: selector, recipeId: proof.recipeId, cmpId: proof.cmpId,
+    selectorHint: proof.selectorHint, recipeId: proof.recipeId, cmpId: proof.cmpId,
     observedAtMs: proof.observedAtMs, signal, deadlineAtMs,
   });
   const current = verified.status === "verified" ? verified.proof : undefined;
   if (!current || current.accessibleLabel !== proof.accessibleLabel || current.labelSource !== proof.labelSource ||
-      current.actionSemantics !== proof.actionSemantics || current.frameIdentitySha256 !== proof.frameIdentitySha256) {
+      current.actionSemantics !== proof.actionSemantics || current.frameIdentitySha256 !== proof.frameIdentitySha256 ||
+      REVIEWED_COOKIE_ACCEPT_CONTROLS.some(scope => proof.classifierReasonCodes.includes(scope.proofReason) &&
+        !current.classifierReasonCodes.includes(scope.proofReason)) ||
+      (reviewedNecessaryOnly && (!isReviewedWorkerNecessaryOnlyRejectProof(requestedUrl, current) ||
+        current.labelBoundNecessaryOnly?.contextText !== proof.labelBoundNecessaryOnly?.contextText))) {
     throw new Error("worker_consent_control_changed_before_dispatch");
   }
   const recheckedAtMs = Date.now();

@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { consentActionControlProofSchema, type ConsentActionControlProof } from "@certscore/contracts";
 import { canonicalSha256 } from "@certscore/scan-core/post-refusal-reconciliation";
 
+import { isReviewedWorkerNecessaryOnlyRejectProof, workerDiscoveredFrameMatchesTarget } from "@certscore/scan-core/post-refusal-target-authorization";
+
 type Action = "accept" | "reject";
 export type WorkerDiscoveredClick = {
   control: ConsentActionControlProof;
@@ -20,8 +22,20 @@ type Packet = {
   parentScanId: string;
   targetUrl: string;
   normalizedUrl: string;
+  exactTargetSha256?: string;
   actionControlProof?: ConsentActionControlProof;
-  interactionDiagnostics?: { click?: { outcome: string } };
+  interactionDiagnostics?: {
+    click?: { outcome: string };
+    navigation?: {
+      documentCommitted: boolean;
+      finalUrlAuthorized: boolean;
+      redirectResolution?: {
+        status: string;
+        requestedTargetSha256: string;
+        finalExactTargetSha256?: string;
+      };
+    };
+  };
 };
 const sha = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const digest = /^[a-f0-9]{64}$/;
@@ -35,17 +49,38 @@ function digestTarget(value: string) {
   return sha(url.href);
 }
 
+function displayTarget(value: string) {
+  const url = new URL(value);
+  url.search = "";
+  url.hash = "";
+  return url.href.slice(0, 500);
+}
+
 export function buildWorkerDiscoveredClick(binding: Binding, click: WorkerDiscoveredClick, bytes: Buffer) {
-  let packet: Packet;
+  let requestedTargetSha256: string;
   try {
-    packet = JSON.parse(bytes.toString());
+    const packet: Packet = JSON.parse(bytes.toString());
     if (!packet || packet.parentScanId !== binding.scanId || !digest.test(binding.parentDispatchSha256) ||
-        digestTarget(packet.normalizedUrl) !== digestTarget(binding.requestedUrl) ||
         packet.interactionDiagnostics?.click?.outcome !== "completed") return;
+    requestedTargetSha256 = digestTarget(binding.requestedUrl);
+    const displayTargetSha256 = digestTarget(packet.targetUrl);
+    const exactTargetSha256 = packet.exactTargetSha256 ?? displayTargetSha256;
+    const navigation = packet.interactionDiagnostics.navigation;
+    const redirect = navigation?.redirectResolution;
+    // Report URLs drop query values. Only a committed, authorized redirect can
+    // substitute the retained exact destination digest for the display URL.
+    const verifiedRedirect = navigation?.documentCommitted === true && navigation.finalUrlAuthorized === true &&
+      redirect?.status === "resolved" && redirect.requestedTargetSha256 === requestedTargetSha256 &&
+      redirect.finalExactTargetSha256 === exactTargetSha256 && packet.targetUrl === displayTarget(packet.targetUrl);
+    if (!digest.test(exactTargetSha256) ||
+        (digestTarget(packet.normalizedUrl) !== requestedTargetSha256 &&
+          !(verifiedRedirect && packet.normalizedUrl === displayTarget(binding.requestedUrl))) ||
+        (exactTargetSha256 !== displayTargetSha256 && !verifiedRedirect)) return;
     if (!consentActionControlProofSchema.safeParse(click.control).success || !packet.actionControlProof ||
-        click.control.action !== binding.action || click.control.actionSemantics !== "direct_label" ||
-        click.control.authorizedTargetSha256 !== digestTarget(packet.targetUrl) ||
-        click.control.frameIdentitySha256 !== click.control.authorizedTargetSha256 ||
+        click.control.action !== binding.action ||
+        (click.control.actionSemantics !== "direct_label" && !isReviewedWorkerNecessaryOnlyRejectProof(binding.requestedUrl, click.control)) ||
+        click.control.authorizedTargetSha256 !== exactTargetSha256 ||
+        !workerDiscoveredFrameMatchesTarget(click.control) ||
         canonicalSha256(packet.actionControlProof) !== canonicalSha256(click.control)) return;
   } catch { return; }
   const {recheckedAtMs, dispatchedAtMs, completedAtMs, deadlineAtMs} = click;
@@ -53,7 +88,7 @@ export function buildWorkerDiscoveredClick(binding: Binding, click: WorkerDiscov
       recheckedAtMs > dispatchedAtMs || dispatchedAtMs > completedAtMs || deadlineAtMs - completedAtMs < 200) return;
   return Buffer.from(JSON.stringify({
     version:WORKER_DISCOVERED_CLICK_VERSION, scanId:binding.scanId, action:binding.action, parentDispatchSha256:binding.parentDispatchSha256,
-    requestedTargetSha256:digestTarget(binding.requestedUrl), packetSha256:sha(bytes),
+    requestedTargetSha256, packetSha256:sha(bytes),
     controlSha256:canonicalSha256(click.control), recheckedAtMs, dispatchedAtMs, completedAtMs, deadlineAtMs,
   }));
 }

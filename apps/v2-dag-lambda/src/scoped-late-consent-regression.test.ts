@@ -35,11 +35,19 @@ for (const example of [
     selector: "div.cookieControl__BarButtons > button:nth-of-type(2)", label: "Essential only", attribute: "" },
   { action: "accept", url: "https://bt.com/", documentUrl: "https://www.bt.com/",
     selector: "#onetrust-accept-btn-handler", label: "Accept all", attribute: 'id="onetrust-accept-btn-handler"' },
+  { action: "accept", url: "https://smartling.com/", documentUrl: "https://www.smartling.com/",
+    selector: "#hs-eu-confirmation-button", label: "Accept", attribute: 'id="hs-eu-confirmation-button" aria-label="Accept"', changedLabel: false },
+  { action: "accept", url: "https://smartling.com/", documentUrl: "https://www.smartling.com/",
+    selector: "#hs-eu-confirmation-button", label: "Accept", attribute: 'id="hs-eu-confirmation-button" aria-label="Accept"', changedLabel: true },
 ] as const) {
-  const rerender = example.url === "https://bt.com/";
+  const smartling = example.url === "https://smartling.com/";
+  const changedLabel = smartling && example.changedLabel;
+  const rerender = example.url === "https://bt.com/" || smartling;
   const oneTrust = example.selector.startsWith("#onetrust-");
   const fictionZone = example.url === "https://fictionzone.net/";
-  test(`${example.url} retains its exact ${example.action} click ${rerender ? "after a transient element-read failure" : "after the old deadline"}`, { timeout: 30_000 }, async t => {
+  const scenario = changedLabel ? "blocks a changed label after a transient element-read failure"
+    : `retains its exact ${example.action} click ${rerender ? "after a transient element-read failure" : "after the old deadline"}`;
+  test(`${example.url} ${scenario}`, { timeout: 30_000 }, async t => {
     const browser = await chromium.launch({ args: ["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"] });
     t.after(() => browser.close());
     const open = browser.newContext.bind(browser);
@@ -55,7 +63,15 @@ for (const example of [
           if (interruptControlRead && this.toString().includes(example.selector)) {
             interruptControlRead = false;
             interrupted = true;
-            return Promise.reject(new Error("original element was replaced before the read"));
+            const replace = smartling ? page.locator(example.selector).evaluate((button, opposite) => {
+              const replacement = button.cloneNode(true) as HTMLElement;
+              if (opposite) {
+                replacement.setAttribute("aria-label", "Reject all");
+                replacement.textContent = "Reject all";
+              }
+              button.replaceWith(replacement);
+            }, changedLabel) : Promise.resolve();
+            return replace.then(() => { throw new Error("original element was replaced before the read"); });
           }
           return read.apply(this, arguments_);
         });
@@ -71,13 +87,14 @@ for (const example of [
           const buttons = fictionZone
             ? `<div class="cookieControl__BarContainer"><div class="cookieControl__BarButtons">${example.action === "reject" ? "<button>Accept</button>" : ""}${button}</div></div>`
             : button;
-          const bannerId = oneTrust ? "onetrust-banner-sdk" : example.url === "https://ilmattino.it/" ? "iubenda-cs-banner" : "cookie-banner";
+          const bannerId = smartling ? "hs-eu-cookie-confirmation"
+            : oneTrust ? "onetrust-banner-sdk" : example.url === "https://ilmattino.it/" ? "iubenda-cs-banner" : "cookie-banner";
           return route.fulfill({ contentType: "text/html", body: `<!doctype html><meta charset="utf-8"><body><script src="/late-consent.js"></script>
             <section id="${bannerId}" role="dialog" aria-label="Cookie consent"><p>Choose which optional cookies are allowed.</p>
             ${buttons}</section></body>` });
         }
         if (url === example.documentUrl + "late-consent.js") {
-          if (!rerender) await new Promise(resolve => setTimeout(resolve, 6_500));
+          if (smartling || !rerender) await new Promise(resolve => setTimeout(resolve, smartling ? 3_300 : 6_500));
           return route.fulfill({ contentType: "text/javascript", body: "" });
         }
         if (url === example.documentUrl + "clicked") hits.push(url);
@@ -96,6 +113,7 @@ for (const example of [
     const binding = example.action === "accept"
       ? { action: "accept" as const, proof: proofForReadyAction<AcceptFirstLayerProof>({
           version: "certscore.accept-first-layer-proof.v1", scanId, exactSelector: example.selector, ...timing, ...source,
+          ...(smartling ? { labelSource: "aria_label" as const } : {}),
         }, Infinity) }
       : { action: "reject" as const, proof: proofForReadyAction<RejectFirstLayerProof>({
           outcome: "qualified", scanId, exactSelector: example.selector, ...timing,
@@ -138,6 +156,13 @@ for (const example of [
       : await runPostRefusalObserver({ ...input, firstLayerProof: binding.proof,
           recipe: rejectRecipes[0]!, recipeCandidates: rejectRecipes, allowCanonicalRejectDiscovery: true,
           onRejectGateFinalRecheck: recheck, onExactRejectClickCompleted: complete });
+    if (changedLabel) {
+      assert.ok(interrupted);
+      assert.equal(packet.interactionDiagnostics?.click.outcome, "not_attempted", JSON.stringify(packet.limitations));
+      assert.equal(verifiedClickAtMs, undefined);
+      assert.deepEqual(hits, []);
+      return;
+    }
     assert.equal(packet.interactionDiagnostics?.click.outcome, "completed", JSON.stringify(packet.limitations));
     assert.ok(verifiedClickAtMs !== undefined);
     if (rerender) assert.ok(interrupted && verifiedClickAtMs < timing.expiresAtMs);

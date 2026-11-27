@@ -1,3 +1,4 @@
+import { REGISTERED_ONETRUST_ACCEPT_CONTROLS, REVIEWED_COOKIE_ACCEPT_CONTROLS } from "@certscore/contracts";
 import { dispatchWorkerDiscoveredConsentControl } from "./cmp-action-control-proof.js";
 import { takePreparedConsentActionPage, type PreparedConsentActionPage, type DeferredConsentProof } from "./consent-action-browser";
 import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
@@ -31,7 +32,7 @@ import { createActionRequestRetention } from "./action-request-retention.js";
 import { LATE_FORM_CAPTURE_EXTENSION_MS, startAfterAcceptClickFormSnapshots, startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 import { startPostAcceptFormCapture } from "./post-accept-form-capture.js";
-import { isScopedSitsBorlabsControl } from "./scoped-consent-action-window.js";
+import { isScopedSitsBorlabsControl, scopedAcceptClickWindowMs } from "./scoped-consent-action-window.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { genericConsentActionLabelSupported } from "./consent-action-label-eligibility.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
@@ -961,11 +962,15 @@ export async function runPostAcceptObserver(
       acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
       ? recipes.find(recipe => recipe.recipeId === DRUPAL_ACCEPT_RECIPE) : undefined;
     const adopt = DAFITI_ADOPT_ACCEPT_CONTROL;
-    const exactAdoptRecipe: PostAcceptActionRecipe | undefined = firstLayerProof?.exactSelector === adopt.controlSelector &&
+    const workerDiscovery = Boolean(input.onWorkerDiscoveredClick) && !firstLayerProof;
+    const workerAdopt = workerDiscovery && input.allowCanonicalAcceptDiscovery &&
+      authorizedExactTargetUrl === adopt.targetUrl && page.url() === adopt.targetUrl &&
+      [adopt.targetUrl, "https://dafiti.com.br/"].includes(input.url);
+    const passiveAdopt = firstLayerProof?.exactSelector === adopt.controlSelector &&
       firstLayerProof.geometrySha256 && firstLayerProof.labelSha256 === hashValue(adopt.label) &&
       authorizedExactTargetUrl === adopt.targetUrl && firstLayerProof.documentSha256 === hashValue(adopt.targetUrl) &&
-      acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs)
-      ? {
+      acceptFirstLayerProofMatches(firstLayerProof, authorizationScanId, input.url, resolverStartedAtMs);
+    const exactAdoptRecipe: PostAcceptActionRecipe | undefined = passiveAdopt || workerAdopt ? {
         artifactVersion: "certscore.post_accept_action_recipe.v1",
         recipeId: adopt.recipeId, resolverMethod: "canonical_consent_control_registry_recipe",
         controlSelector: adopt.controlSelector, controlExpectedNormalizedLabel: adopt.label.toLowerCase(),
@@ -989,7 +994,8 @@ export async function runPostAcceptObserver(
       }
       : undefined;
     const exactNativeRecipe = exactCookieScriptRecipe ?? exactOneTrustRecipe ?? exactDrupalRecipe ?? exactAdoptRecipe ?? exactCaiaRecipe;
-    const exactActionDeadline = exactNativeRecipe || exactCookieInformation ? firstLayerProof!.expiresAtMs : Infinity;
+    const exactActionDeadline = firstLayerProof && (exactNativeRecipe || exactCookieInformation)
+      ? firstLayerProof.expiresAtMs : Infinity;
     const searchDeadline = Math.min(resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs), exactActionDeadline);
     let readyCookieInformationControl: Locator | undefined;
     const probeExactCookieInformation = async (sliceMs:number, signal:AbortSignal, waitForVisible=false) => {
@@ -1125,11 +1131,30 @@ export async function runPostAcceptObserver(
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
     }
-    selectedRecipe = resolution.recipe;
+    const workerRecipe = (resolved: Extract<AcceptRecipeResolution, {status:"found"}>) => {
+      const recipe = resolved.recipe;
+      if (!workerDiscovery || resolved.scope !== page || recipe.cmpId !== "OneTrust" ||
+          !authorizedExactTargetUrl || page?.url() !== authorizedExactTargetUrl) return recipe;
+      const registered = REGISTERED_ONETRUST_ACCEPT_CONTROLS.find(scope =>
+        normalizeAcceptControlLabel(scope.label) === recipe.controlExpectedNormalizedLabel &&
+        (!("documentUrl" in scope) || scope.documentUrl === authorizedExactTargetUrl));
+      const named = registered && recipes.find(candidate => candidate.recipeId === registered.recipeId &&
+        candidate.cmpId === registered.cmpId && candidate.controlSelector === registered.controlSelector);
+      return named ? {...named, controlExpectedNormalizedLabel: recipe.controlExpectedNormalizedLabel} : recipe;
+    };
+    const nativeSelectorFor = (recipe: PostAcceptActionRecipe) => firstLayerProof?.exactSelector ??
+      (workerDiscovery && (recipe.recipeId === adopt.recipeId ||
+        REGISTERED_ONETRUST_ACCEPT_CONTROLS.some(scope => scope.recipeId === recipe.recipeId &&
+          scope.cmpId === recipe.cmpId && scope.controlSelector === recipe.controlSelector))
+        ? recipe.controlSelector : undefined);
+    selectedRecipe = workerRecipe(resolution);
     // A generated generic recipe retains its selected geometry label. Reject
     // observation-only semantics before baseline/proof work, using the same
     // final failure as live proof. Do not turn it into a missing-control retry.
-    if (selectedRecipe.recipeId.startsWith("canonical-control:accept:") &&
+    const reviewedCookieChoice = Boolean(input.onWorkerDiscoveredClick) && !firstLayerProof &&
+      REVIEWED_COOKIE_ACCEPT_CONTROLS.some(scope => scope.documentUrl === page?.url() &&
+        normalizeAcceptControlLabel(scope.label) === selectedRecipe?.controlExpectedNormalizedLabel);
+    if (selectedRecipe.recipeId.startsWith("canonical-control:accept:") && !reviewedCookieChoice &&
       selectedRecipe.controlExpectedNormalizedLabel !== undefined &&
       (!authorizedExactTargetUrl || normalizeTargetUrl(page.url()) === normalizeTargetUrl(authorizedExactTargetUrl)) &&
       !genericConsentActionLabelSupported(selectedRecipe.controlExpectedNormalizedLabel, "accept")) {
@@ -1324,7 +1349,9 @@ export async function runPostAcceptObserver(
     stage("control_proof");
     let proofResolution = await buildConsentActionControlProof({
       bindElement: boundControlDispatch,
-      expectedNativeSelector: firstLayerProof?.exactSelector,
+      workerDiscovered: !firstLayerProof && Boolean(input.onWorkerDiscoveredClick),
+      retryDiscoveredElementRead: !firstLayerProof && Boolean(input.onWorkerDiscoveredClick),
+      expectedNativeSelector: nativeSelectorFor(selectedRecipe),
       requireDrupalBanner: firstLayerProof?.drupalOverflow,
       deadlineAtMs: exactCookieScriptRecipe ? Math.min(resultBudgetDeadlineAtMs ?? Infinity, firstLayerProof!.expiresAtMs) : resultBudgetDeadlineAtMs,
       onLabelInspection: recordResolverSnapshot,
@@ -1347,15 +1374,21 @@ export async function runPostAcceptObserver(
       selectorHint: selectedRecipe.controlSelector,
       expectedCustomControlBinding: selectedRecipe.customControlBinding,
     });
-    // OneTrust can replace its native button after resolution but before the
-    // first element read. Re-resolve that exact control once in the bound
-    // document. The original proof window and final pre-click guard still apply.
-    const retryExactOneTrust = exactOneTrustRecipe === selectedRecipe && firstLayerProof !== undefined &&
-      proofResolution.status === "label_unverifiable" &&
+    // A registered button can be replaced between resolution and the first
+    // element read. Re-resolve it once in the original bound document and
+    // proof window, before any click dispatch.
+    const exactSmartlingHubSpot = firstLayerProof?.exactSelector === "#hs-eu-confirmation-button" &&
+      Boolean(firstLayerProof.geometrySha256) && firstLayerProof.labelSource === "aria_label" &&
+      firstLayerProof.labelSha256 === hashValue("Accept") &&
+      input.url === "https://smartling.com/" && authorizedExactTargetUrl === "https://www.smartling.com/" &&
+      firstLayerProof.documentSha256 === hashValue(authorizedExactTargetUrl) &&
+      confirmationScope === page && selectedRecipe.cmpId === "HubSpot Consent Banner";
+    const retryExactBoundControl = (exactOneTrustRecipe === selectedRecipe || exactSmartlingHubSpot) &&
+      firstLayerProof !== undefined && proofResolution.status === "label_unverifiable" &&
       (proofResolution.reason === "resolved_control_unavailable" || proofResolution.reason === "resolved_control_detached");
     if (
       proofResolution.status !== "verified" &&
-      (retryExactOneTrust || proofResolution.reason === "resolved_control_no_longer_actionable" ||
+      (retryExactBoundControl || proofResolution.reason === "resolved_control_no_longer_actionable" ||
         proofResolution.reason === "resolved_control_scope_not_interactive" ||
         (input.allowCanonicalAcceptDiscovery && consentActionLabelNeedsRediscovery(proofResolution))) &&
       !exactCookieScriptRecipe && !cancellation()
@@ -1368,10 +1401,10 @@ export async function runPostAcceptObserver(
             ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
             : undefined,
         );
-        if (retryExactOneTrust) sourceFrameBinding.assertCurrent();
+        if (retryExactBoundControl) sourceFrameBinding.assertCurrent();
         const recoveryDeadline = Math.min(
           Math.max(resolverStartedAtMs + actionSearchTimeoutMs, actionReadinessDeadline),
-          retryExactOneTrust ? Math.min(exactActionDeadline, Date.now() + 600) : Infinity,
+          retryExactBoundControl ? Math.min(firstLayerProof!.expiresAtMs, resultBudgetDeadlineAtMs ?? Infinity, Date.now() + 600) : Infinity,
         );
         const remainingRecoveryBudgetMs = () => Math.max(0, recoveryDeadline - Date.now());
         if (remainingRecoveryBudgetMs() === 0) {
@@ -1394,12 +1427,14 @@ export async function runPostAcceptObserver(
           : await waitForDeterministicRecipe(
             page,
             [selectedRecipe],
-            Math.min(retryExactOneTrust ? 600 : 250, remainingRecoveryBudgetMs()),
+            Math.min(retryExactBoundControl ? 600 : 250, remainingRecoveryBudgetMs()),
             effectiveSignal,
             actionDiscovery,
             recordResolverSnapshot,
+            retryExactBoundControl ? recoveryDeadline : undefined,
+            retryExactBoundControl && exactSmartlingHubSpot,
           );
-        if (!retryExactOneTrust && lateResolution.status === "not_found" && input.allowCanonicalAcceptDiscovery && remainingRecoveryBudgetMs() >= 250) {
+        if (!retryExactBoundControl && lateResolution.status === "not_found" && input.allowCanonicalAcceptDiscovery && remainingRecoveryBudgetMs() >= 250) {
           lateResolution = await waitForCanonicalAcceptControlRecipe(
             page,
             remainingRecoveryBudgetMs(),
@@ -1412,7 +1447,7 @@ export async function runPostAcceptObserver(
           );
         }
         if (lateResolution.status === "found") {
-          selectedRecipe = lateResolution.recipe;
+          selectedRecipe = workerRecipe(lateResolution);
           control = lateResolution.control;
           confirmationScope = lateResolution.scope;
           if (boundControlDispatch) sourceFrameBinding.bind(page, confirmationScope);
@@ -1421,16 +1456,17 @@ export async function runPostAcceptObserver(
           const refreshBaseline = () => captureConfirmationBaseline(
             context!, page!, confirmationScope, selectedRecipe!.confirmation, control, confirmationDiagnostic.reason,
           );
-          const refreshedBaseline = retryExactOneTrust
+          const refreshedBaseline = retryExactBoundControl
             ? await readWithinAcceptDeadline(refreshBaseline, undefined, recoveryDeadline, effectiveSignal)
             : await refreshBaseline();
           if (!refreshedBaseline) throw new Error("late_control_recovery_search_budget_exhausted");
           confirmationBaseline = refreshedBaseline;
           proofResolution = await buildConsentActionControlProof({
             bindElement: boundControlDispatch,
-            expectedNativeSelector: firstLayerProof?.exactSelector,
+            workerDiscovered: !firstLayerProof && Boolean(input.onWorkerDiscoveredClick),
+            expectedNativeSelector: nativeSelectorFor(selectedRecipe),
             requireDrupalBanner: firstLayerProof?.drupalOverflow,
-            deadlineAtMs: retryExactOneTrust ? Math.min(recoveryDeadline, resultBudgetDeadlineAtMs ?? Infinity) : resultBudgetDeadlineAtMs,
+            deadlineAtMs: retryExactBoundControl ? Math.min(recoveryDeadline, resultBudgetDeadlineAtMs ?? Infinity) : resultBudgetDeadlineAtMs,
             onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
             action: "accept",
@@ -1527,7 +1563,8 @@ export async function runPostAcceptObserver(
         const standardDeadline = Math.min(proofDeadline, recheckStartedAt + 250);
         // A live exact-element read can use the same time already reserved for
         // the click, including its existing absolute and finalization limits.
-        const availableClickDeadline = Math.min(proofDeadline, recheckStartedAt + ACCEPT_EXACT_CLICK_WINDOW_MS,
+        const clickWindowMs = scopedAcceptClickWindowMs(firstLayerProof.exactSelector, firstLayerProof) ?? ACCEPT_EXACT_CLICK_WINDOW_MS;
+        const availableClickDeadline = Math.min(proofDeadline, recheckStartedAt + clickWindowMs,
           (resultBudgetDeadlineAtMs ?? Infinity) - observationWindowMs - ACCEPT_RESULT_FINALIZATION_RESERVE_MS);
         const deadline = firstLayerProof.exactSelector ? Math.max(standardDeadline, availableClickDeadline) : standardDeadline;
         notifyBeforeDispatch();
@@ -1576,7 +1613,7 @@ export async function runPostAcceptObserver(
           (resultBudgetDeadlineAtMs ?? Infinity) - observationWindowMs - ACCEPT_RESULT_FINALIZATION_RESERVE_MS);
         notifyBeforeDispatch();
         const click = await dispatchWorkerDiscoveredConsentControl({
-          page, control: boundControlElement, proof: actionControlProof, deadlineAtMs,
+          page, requestedUrl: input.url, control: boundControlElement, proof: actionControlProof, deadlineAtMs,
           signal: effectiveSignal, assertCurrent: () => assertDispatch(deadlineAtMs), commit,
         });
         actionControlProof = click.control;

@@ -238,13 +238,28 @@ test("the final observer dispatch guard rejects an expired wall-clock budget eve
 // Retained olx.pl reject worker fb8bdf7c-2304-4abb-bd7c-7262048934ee:
 // final elementHandle timed out after the locator had reported a visible control.
 // The same binding boundary is shared by Accept and Reject.
-for (const action of ["accept", "reject"] as const) test(`${action}: final handle timeout is unavailable proof, not a worker exception`, async () => {
+for (const action of ["accept", "reject"] as const) {
+  for (const retryDiscoveredElementRead of [false, true]) {
+    test(`${action}: unavailable element remains unverified with worker retry ${retryDiscoveredElementRead}`, async () => {
+      const f = proofFixture();
+      let reads = 0;
+      const control = {elementHandle: async () => {reads++; throw new Error("locator.elementHandle: Timeout 100ms exceeded");}} as unknown as Locator;
+      const result = await buildConsentActionControlProof({...f.request, action, control, bindElement: true,
+        retryDiscoveredElementRead, deadlineAtMs: Date.now() + 1000});
+      assert.deepEqual(result, {status: "label_unverifiable", reason: "resolved_control_unavailable"});
+      assert.equal(reads, retryDiscoveredElementRead ? 2 : 1);
+      assert.equal(f.callbacks(), 0);
+      assert.deepEqual(f.commands, []);
+    });
+  }
+}
+test("worker discovery does not retry an element read after cancellation", async () => {
   const f = proofFixture();
+  const abort = new AbortController();
   let reads = 0;
-  const control = {elementHandle: async () => {reads++; throw new Error("locator.elementHandle: Timeout 100ms exceeded");}} as unknown as Locator;
-  const result = await buildConsentActionControlProof({...f.request, action, control, bindElement: true, deadlineAtMs: Date.now() + 1000});
-  assert.deepEqual(result, {status: "label_unverifiable", reason: "resolved_control_unavailable"});
+  const control = {elementHandle: async () => {reads++; abort.abort(); return null;}} as unknown as Locator;
+  const result = await buildConsentActionControlProof({...f.request, control, bindElement: true,
+    retryDiscoveredElementRead: true, deadlineAtMs: Date.now() + 1000, signal: abort.signal});
+  assert.equal(result.status, "label_unverifiable");
   assert.equal(reads, 1);
-  assert.equal(f.callbacks(), 0);
-  assert.deepEqual(f.commands, []);
 });

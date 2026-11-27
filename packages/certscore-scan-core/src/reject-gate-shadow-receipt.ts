@@ -155,18 +155,37 @@ export function evaluateRejectGate(input: {
     candidate.frameContext.frameKind === "main_frame" && candidate.frameContext.frameUrl === document.url &&
     candidate.classifierReasonCodes.includes("borlabs_explanatory_close") &&
     inspection.candidates.some(row => row.candidateId === candidate.candidateId && row.role === "dismiss"));
-  const controlsByObservation = observations.map(row => row.controls.filter(c => c.visible && c.actionType === "reject_all" &&
-    !(explanatoryClose && (c.label === explanatoryClose.label || c.label === explanatoryClose.label.slice(0, 120)) && c.selectorHint === explanatoryClose.selectorHint &&
-      c.tagName === explanatoryClose.tagName)));
-  const controls = controlsByObservation.flat();
   const firstLayer = artifact.candidates.filter(c => c.layer === "first_layer");
   const candidates = firstLayer.filter(c => c.actionType === "reject_all" && c.decisionStatus === "confirmed_visible");
+  const candidate = candidates[0];
+  // DOM inventory can record both labels for one native button. Collapse the
+  // pair only when same-document geometry proved its exact ID unique.
+  const aliasSelector = candidates.length === 1 && candidate?.tagName === "button" &&
+    candidate.exactNativeRejectSelectorVerified === true && candidate.frameContext?.frameKind === "main_frame" &&
+    candidate.frameContext.frameUrl === document.url && candidate.selectorHint &&
+    /^#[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(candidate.selectorHint) &&
+    candidate.ariaLabel && candidate.ariaLabel !== candidate.label &&
+    directReject(candidate.ariaLabel) && directReject(candidate.label) &&
+    artifact.candidates.filter(other => other.selectorHint === candidate.selectorHint).length === 1
+    ? candidate.selectorHint : undefined;
+  const controlsByObservation = observations.map(row => {
+    const choices = row.controls.filter(c => c.visible && c.actionType === "reject_all" &&
+      !(explanatoryClose && (c.label === explanatoryClose.label || c.label === explanatoryClose.label.slice(0, 120)) &&
+        c.selectorHint === explanatoryClose.selectorHint && c.tagName === explanatoryClose.tagName));
+    if (!aliasSelector || choices.length !== 2 || !choices.every(control =>
+      control.tagName === "button" && control.selectorHint === aliasSelector && !control.domBinding &&
+      isConsentControlInteractionEligible(control))) return choices;
+    const accessible = choices.find(control => control.label === candidate?.ariaLabel);
+    const visible = choices.find(control => control.label === candidate?.label);
+    return accessible && visible ? [accessible] : choices;
+  });
+  const controls = controlsByObservation.flat();
   if (!controls.length && !candidates.length) return block("no_first_layer_reject");
   if (controlsByObservation.some(row => row.length > 1) || candidates.length > 1) return block("control_ambiguous");
   if (firstLayer.some(c => c.decisionStatus === "ambiguous" &&
       c.classifierReasonCodes?.includes("visible_accessible_intent_conflict") &&
       [c.label,c.ariaLabel,c.title,c.value].some(label => label && directReject(label)))) return block("label_conflict_unresolved");
-  const control = controls[0], candidate = candidates[0];
+  const control = controls[0];
   const drupal = DRUPAL_NO_THANKS_REJECT_CONTROL;
   const drupalNoThanks = candidate?.label === drupal.label && candidate === drupalScopedCandidate(artifact, "reject") &&
     control?.label === drupal.label && observations.some(drupalGeometryMatches);

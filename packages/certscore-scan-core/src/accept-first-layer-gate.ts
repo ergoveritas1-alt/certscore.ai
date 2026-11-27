@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import type { CanonicalEvidenceBundle, ConsentActionControlProof, ConsentUiObservation } from "@certscore/contracts";
 import {
   classifyConsentControlLabel, classifyDafitiAdoptAcceptLabel, DAFITI_ADOPT_ACCEPT_CONTROL, CAIA_ACCEPT_CONTROL, consentSessionAccessLimited, hasConsentControlSemanticVeto,
-  isConsentControlInteractionEligible, ONETRUST_ITALIAN_ACCEPT_CONTROL, verifyConsentControlInspection,
+  isConsentControlInteractionEligible, REGISTERED_ONETRUST_ACCEPT_CONTROLS, verifyConsentControlInspection,
 } from "@certscore/contracts";
 import type { ConsentControlCandidateEvidence, ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 
@@ -184,18 +184,23 @@ function exactGeometryAccept(
     geometry.candidates.filter(row => row.selectorHint === candidate.selectorHint).length === 1 &&
     conflicts.every(conflict => isSeparateNonAcceptConflict(conflict, candidate, geometry.candidates))
     ? conflicts : undefined;
-  // The observation vocabulary stays generic. Only this checksum-bound OneTrust
-  // control may carry the exact Italian label to the authorized action worker.
-  const italianAccept = ONETRUST_ITALIAN_ACCEPT_CONTROL;
-  const oneTrustItalianAccept = requireExactSelector && candidate.tagName === "button" &&
-    candidate.selectorHint === italianAccept.controlSelector && candidate.label === italianAccept.label &&
-    [candidate.ariaLabel, candidate.title, candidate.value].every(label => !label || label === italianAccept.label) &&
-    candidate.containerSelectorHint === italianAccept.groupSelector &&
-    geometry.cmp?.detections?.some(detection => detection.canonicalName === italianAccept.cmpId) === true &&
-    Array.isArray(geometry.containers) && geometry.containers.some(container => container?.selectorHint === italianAccept.bannerSelector &&
-      container.layer === "first_layer" && container.intersectsViewport) &&
-    geometry.containers.some(container => container?.selectorHint === italianAccept.groupSelector &&
-      container.containerId === candidate.containerId && container.layer === "first_layer" && container.intersectsViewport);
+  // These observation labels become actionable only with the registered
+  // OneTrust banner, native button and original document proof.
+  const registeredOneTrustAccept = requireExactSelector && candidate.tagName === "button" &&
+    REGISTERED_ONETRUST_ACCEPT_CONTROLS.find(scope =>
+      candidate.selectorHint === scope.controlSelector && candidate.label === scope.label &&
+      [candidate.ariaLabel, candidate.title, candidate.value].every(label => !label || label === scope.label) &&
+      (!("documentUrl" in scope) || document.url === scope.documentUrl) &&
+      geometry.cmp?.detections?.some(detection => detection.canonicalName === scope.cmpId) === true &&
+      Array.isArray(geometry.containers) && geometry.containers.some(container => container.selectorHint === scope.bannerSelector &&
+        container.layer === "first_layer" && container.intersectsViewport) &&
+      geometry.containers.some(container => container.selectorHint === scope.groupSelector &&
+        container.layer === "first_layer" && container.intersectsViewport) &&
+      geometry.containers.some(container => container.containerId === candidate.containerId &&
+        container.selectorHint === candidate.containerSelectorHint &&
+        (container.selectorHint === scope.groupSelector || ("documentUrl" in scope &&
+          container.selectorHint === scope.groupSelector + " div")) &&
+        container.layer === "first_layer" && container.intersectsViewport));
   const adopt = DAFITI_ADOPT_ACCEPT_CONTROL;
   const dafitiAdoptAccept = requireExactSelector && document.url === adopt.targetUrl &&
     candidate.tagName === "button" && candidate.selectorHint === adopt.controlSelector &&
@@ -212,12 +217,12 @@ function exactGeometryAccept(
   const binding = { cookieScriptRole, reviewedAnchor,
     selector: cookieScriptRole ? COOKIE_SCRIPT_ACCEPT_ROLE_SELECTOR : candidate.selectorHint, inventorySelector: candidate.selectorHint,
     sourceLabel: cookieScriptRole && !candidate.ariaLabel && candidate.cookieScriptUppercaseSourceLabel?.toUpperCase() === candidate.label
-      ? candidate.cookieScriptUppercaseSourceLabel : navigraphCaption ?? starfieldCaption ?? resideoTrustArcSourceLabel(candidate, geometry, "accept"), tagName: candidate.tagName, separateConflicts, oneTrustItalianAccept, dafitiAdoptAccept, caiaAccept };
+      ? candidate.cookieScriptUppercaseSourceLabel : navigraphCaption ?? starfieldCaption ?? resideoTrustArcSourceLabel(candidate, geometry, "accept"), tagName: candidate.tagName, separateConflicts, registeredOneTrustAccept, dafitiAdoptAccept, caiaAccept };
   if (candidate.ariaLabel) {
     // AX inventory can report the accessible name while geometry records the
     // rendered caption. Both must independently support Accept. The receipt
     // binds the exact ARIA label so a change of label source fails closed.
-    if (!oneTrustItalianAccept && ![candidate.label, candidate.ariaLabel, candidate.title, candidate.value]
+    if (!registeredOneTrustAccept && ![candidate.label, candidate.ariaLabel, candidate.title, candidate.value]
       .filter((label): label is string => typeof label === "string" && label.length > 0)
       .every(isActionableAcceptLabel)) return undefined;
     return { ...binding, sourceLabel: cookieInformationRenderedLabel(candidate, geometry.cmp),
@@ -350,7 +355,10 @@ export function deriveAcceptFirstLayerProof(input: {
         !(control.semanticallyInteractive === true || control.tagName === "button" || control.role === "button") ||
         (control.domBinding && (targetHash(control.domBinding.documentUrl) !== document ||
           control.domBinding.documentIdentity.token !== observation.documentIdentity.token))) return block("control_binding_unverified");
-      if (!(handoff && (nativeAccept.oneTrustItalianAccept || nativeAccept.dafitiAdoptAccept || nativeAccept.caiaAccept)) && !isActionableAcceptLabel(control.label)) return block("control_binding_unverified");
+      const namedOneTrust = handoff && nativeAccept.registeredOneTrustAccept;
+      const namedOneTrustAuthorized = namedOneTrust && (!("requestedUrl" in namedOneTrust) ||
+        targetUrl === namedOneTrust.requestedUrl || targetUrl === namedOneTrust.documentUrl);
+      if (!(namedOneTrustAuthorized || (handoff && (nativeAccept.dafitiAdoptAccept || nativeAccept.caiaAccept))) && !isActionableAcceptLabel(control.label)) return block("control_binding_unverified");
       if (matches.length !== previouslyMatched) return block("control_ambiguous");
       matches.push(handoff
         ? { document, label: hash(nativeAccept.label), selector: hash(nativeAccept.selector), labelSource: nativeAccept.labelSource, backendNodeId: control.domBinding?.backendNodeId,

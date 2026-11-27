@@ -2671,9 +2671,11 @@ async function runCoordinatorFixture(input: {
           const publish = () => {
             const sha256 = createHash("sha256").update(body).digest("hex");
             pointers.set(uri, {uri, body, sha256, sizeBytes: body.length});
+            // Validate simulated worker completion at its modeled time. The coordinator
+            // still reads and verifies the uploaded object against its own wall-clock cutoff.
             const verified = verifyConsentClickCheckpoint({
               body, metadataSha256:sha256, binding, coordinatorDispatchAtMs:workerStartedMs[runningAction]!,
-              verifiedAtMs:Date.now(), deadlineAtMs:binding.proof.expiresAtMs,
+              verifiedAtMs:completedAtMs, deadlineAtMs:binding.proof.expiresAtMs,
             });
             if (verified) workerVerifiedReceipts.add(runningAction);
           };
@@ -6990,7 +6992,8 @@ test("five-case local coordinator timing replay", {timeout: 15_000}, async t => 
         return {action,received,clickReserveMs:clickReserve,joinReserveMs:joinReserve,
           workerStartBeforePassiveMs:started === undefined ? null : barrier - started};
       });
-      assert.deepEqual(results.map(result => result.received), [row.clickMs !== null && row.accept, row.clickMs !== null && row.reject]);
+      assert.deepEqual(results.map(result => result.received),
+        [row.clickMs !== null && row.accept, row.clickMs !== null && row.reject], row.name);
       t.diagnostic(JSON.stringify({site:row.name, scanMs:Date.parse(timing.generatedAt) - Date.parse(timing.coordinatorStartedAt),
         passiveMs:barrier - Date.parse(timing.coordinatorStartedAt), results}));
     } finally {
@@ -6999,7 +7002,7 @@ test("five-case local coordinator timing replay", {timeout: 15_000}, async t => 
   }));
 });
 
-for (const corruptWorkerDiscoveredReceipt of [undefined, "reject"] as const) {
+for (const corruptWorkerDiscoveredReceipt of [undefined, "accept", "reject"] as const) {
 test(`California worker discovery seals only verified packet-bound receipts (corrupt=${corruptWorkerDiscoveredReceipt ?? "none"})`, async t => {
   for (const [name, value] of Object.entries({
     CERTSCORE_CA_WORKER_CONSENT_DISCOVERY_ENABLED:"1",
@@ -7013,8 +7016,8 @@ test(`California worker discovery seals only verified packet-bound receipts (cor
   }
   const scanId = "67d8e4f0-fcb4-42fb-a57a-0b096e393d2c";
   const result = await runCoordinatorFixture({scanId, workerFirst:true, corruptWorkerDiscoveredReceipt, replayParallelActions:true, replayPassiveTailMs:500,
-    consentBundle:coordinatorConsentBundle(scanId, {inspectionCompleted:true, acceptControlObserved:true, rejectControlObserved:true}),
-    action:"completed", dispatchDelayMs:0});
+    consentBundle:coordinatorConsentBundle(scanId, {inspectionCompleted:true, acceptControlObserved:false, rejectControlObserved:false}),
+    action:"completed", actionResponseDelayMs:750});
   t.after(() => rm(result.artifactRoot, {recursive:true,force:true}));
   const manifest = JSON.parse(await readFile(path.join(result.artifactRoot,"LocalV2DagLambdaManifest.json"),"utf8"));
   const barrier = Date.parse(manifest.laneTimingSummary.passiveLaneBarrierCompletedAt);
@@ -7029,11 +7032,22 @@ test(`California worker discovery seals only verified packet-bound receipts (cor
     } else {
       assert.equal(receipt?.action,action);
       assert.equal(receipt?.reserveMs,200);
+      assert.ok(receipt?.completedAtMs > barrier, "passive absence does not stop an in-flight action");
+      const joinLimit = barrier + manifest.laneTimingSummary[action === "accept" ? "maxAcceptTailWaitMs" : "maxRejectTailWaitMs"];
+      assert.ok(joinLimit - receipt?.verifiedAtMs >= 200);
       assert.equal(receipt?.parentDispatchSha256,worker.parentDispatchSha256);
       assert.equal(receipt?.packetSha256,manifest.artifactMetadata[action === "accept" ? "postAcceptPacketUri" : "postRefusalPacketUri"].sha256);
     }
   }
-  assert.equal(result.bundle.postAcceptLaneOutcome?.status,"joined");
-  assert.equal(result.bundle.postRefusalLaneOutcome?.status,"joined");
+  assert.equal(result.bundle.postAcceptLaneOutcome?.status,corruptWorkerDiscoveredReceipt === "accept" ? "failed" : "joined");
+  assert.equal(result.bundle.postRefusalLaneOutcome?.status,corruptWorkerDiscoveredReceipt === "reject" ? "failed" : "joined");
+  if (corruptWorkerDiscoveredReceipt === "accept") {
+    assert.equal(result.bundle.postAcceptEvidence,undefined);
+    assert.equal(result.bundle.postAcceptLaneOutcome?.limitationCode,"accept_path_worker_failed");
+  }
+  if (corruptWorkerDiscoveredReceipt === "reject") {
+    assert.equal(result.bundle.postRefusalEvidence,undefined);
+    assert.equal(result.bundle.postRefusalLaneOutcome?.failureReason,"evidence_validation_failed");
+  }
 });
 }

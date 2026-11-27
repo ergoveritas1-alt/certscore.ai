@@ -23,7 +23,76 @@ export const ONETRUST_ITALIAN_ACCEPT_CONTROL = {
   cmpId: "OneTrust",
   recipeId: "canonical-cmp:OneTrust:accept:v1",
   proofReason: "registered_onetrust_italian_accept.v1",
+  locale: "it",
 } as const;
+
+const ONETRUST_BABYCENTER_ACCEPT_CONTROL = {
+  ...ONETRUST_ITALIAN_ACCEPT_CONTROL,
+  label: "I Consent",
+  locale: "en",
+  requestedUrl: "https://babycenter.com/",
+  documentUrl: "https://www.babycenter.com/",
+  documentSha256: "a818c6649076e5929c044534bc9a7d87181fde63828d07050ae044a59f0f21ae",
+  proofReason: "registered_babycenter_onetrust_accept.v1",
+} as const;
+const ONETRUST_WHAT_TO_EXPECT_ACCEPT_CONTROL = {
+  ...ONETRUST_BABYCENTER_ACCEPT_CONTROL,
+  requestedUrl: "https://whattoexpect.com/",
+  documentUrl: "https://www.whattoexpect.com/",
+  documentSha256: "7bd9047d5b76c6c133991f6e51e692c70f2301c9a8e94401dd68f2da63a85eac",
+  proofReason: "registered_what_to_expect_onetrust_accept.v1",
+} as const;
+export const REGISTERED_ONETRUST_ACCEPT_CONTROLS = [
+  ONETRUST_ITALIAN_ACCEPT_CONTROL,
+  ONETRUST_BABYCENTER_ACCEPT_CONTROL,
+  ONETRUST_WHAT_TO_EXPECT_ACCEPT_CONTROL,
+] as const;
+
+export const REVIEWED_COOKIE_ACCEPT_CONTROLS = [
+  {
+    documentUrl: "https://cpj.org/",
+    documentSha256: "d9304fd2d4560fbee06fc3a38b056252f9b9b2d59834c503ae8be4481fdebfa1",
+    label: "Aceitar cookies", locale: "pt", controlSelector: "#onetrust-accept-btn-handler",
+    bannerSelector: "#onetrust-banner-sdk",
+    notice: "Este website utiliza cookies para melhorar a experiência do utilizador e para analisar o desempenho e o tráfego no nosso website.",
+    proofReason: "reviewed_cpj_cookie_accept.v1",
+  },
+  {
+    documentUrl: "https://banco.bradesco/html/classic/index.shtm",
+    documentSha256: "87d54043c43b0fee99b3e765396afd9f5a79bec96208c2db75b969f78682c461",
+    label: "Aceitar cookies", locale: "pt", controlSelector: "#aceitarCookies", bannerSelector: "#cookies",
+    notice: "Usamos cookies pra oferecer a melhor experiência, analisar o uso de nosso site e direcionar conteúdos e anúncios personalizados.",
+    proofReason: "reviewed_bradesco_cookie_accept.v1",
+  },
+  {
+    documentUrl: "https://www.flashscore.gr/",
+    documentSha256: "8d4d870bc92456410b4b018ee3eef8c6b626f7273058c6599fe8240f3c422ab2",
+    label: "Αποδοχή", locale: "el", controlSelector: "#onetrust-accept-btn-handler", bannerSelector: "#onetrust-banner-sdk",
+    notice: "Η επιλογή Αποδοχή επιτρέπει στις τεχνολογίες παρακολούθησης",
+    proofReason: "reviewed_flashscore_gr_cookie_accept.v1",
+  },
+] as const;
+
+export const REVIEWED_COOKIE_REJECT_CONTROLS = [
+  {
+    requestedUrl: "https://virginmediao2.co.uk/",
+    documentUrl: "https://www.virginmediao2.co.uk/",
+    documentSha256: "b0b285fdba10a77e65999b119a716f42b3f0b019c09c487f9da9afd088bc9ae6",
+    label: "Accept essential cookies only", labelSource: "aria_label", locale: "en",
+    controlSelector: "#privacy_pref_optout", bannerSelector: "#cookiePrompt",
+    notice: "To change your settings and manage any non-essential cookies please open the cookie jar.",
+    proofReason: "reviewed_virginmediao2_cookie_reject.v1",
+  },
+  {
+    requestedUrl: "https://telekom.de/",
+    documentUrl: "https://www.telekom.de/start",
+    documentSha256: "1cec6ea080fc32ecf297c86e02a3ade23fab9850a97b4dc3b985b305f670d2f5",
+    label: "Only required", labelSource: "visible_text", locale: "en",
+    controlSelector: "#rejectAll", bannerSelector: "#promptLayerContent",
+    notice: "By selecting “Only Required”, you only accept cookies that make our website function properly.",
+    proofReason: "reviewed_telekom_cookie_reject.v1",
+  },
+] as const;
 
 export const CAIA_ACCEPT_CONTROL = {
   targetUrl: "https://caiacosmetics.se/",
@@ -61,11 +130,22 @@ export const DRUPAL_NO_THANKS_REJECT_CONTROL = {
   proofReason: "registered_drupal_no_thanks_reject.v1",
 } as const;
 
+export const UNSW_NECESSARY_ONLY_REJECT = {
+  requestedUrl: "https://unsw.edu.au/",
+  documentUrl: "https://www.unsw.edu.au/",
+  documentSha256: "a954fd521a1a80ed1328dcbb8a5d49eb243e8b96bd33eea8c985175ba10bbc37",
+  label: "Accept only essential",
+  normalizedLabel: "accept only essential",
+  policyVersion: "label_bound_necessary_only_reject.unsw.v1",
+  instruction: "You can reject all non-essential processing by accepting only necessary cookies.",
+} as const;
+
 /** Versioned activation vocabulary. Generic observation terms remain separate;
  * the named adapter must still prove the exact live banner/control binding. */
 export const NAMED_NECESSARY_ONLY_REJECT_LABELS = {
   "label_bound_necessary_only_reject.v1": ["strictly necessary", "essential cookies"],
   "label_bound_necessary_only_reject.v2": ["strictly necessary", "essential cookies", "accept only necessary"],
+  [UNSW_NECESSARY_ONLY_REJECT.policyVersion]: [UNSW_NECESSARY_ONLY_REJECT.normalizedLabel],
 } as const;
 
 export const customAcceptControlBindingSchema = z.object({
@@ -107,7 +187,7 @@ export const consentActionControlProofSchema = z.object({
   }).strict().optional(),
   customControlBinding: customAcceptControlBindingSchema.optional(),
   labelBoundNecessaryOnly: z.object({
-    policyVersion: z.enum(["label_bound_necessary_only_reject.v1", "label_bound_necessary_only_reject.v2"]),
+    policyVersion: z.enum(["label_bound_necessary_only_reject.v1", "label_bound_necessary_only_reject.v2", UNSW_NECESSARY_ONLY_REJECT.policyVersion]),
     bannerSelector: z.literal("#onetrust-banner-sdk"),
     controlSelector: z.literal("#onetrust-reject-all-handler"),
     contextText: z.string().min(1).max(4096),
@@ -141,19 +221,36 @@ export const consentActionControlProofSchema = z.object({
         message: "The registered Drupal refusal label requires exact decline-button and document proof."});
     }
   }
-  const italianAccept = ONETRUST_ITALIAN_ACCEPT_CONTROL;
-  const hasItalianAcceptScope = proof.classifierReasonCodes.includes(italianAccept.proofReason);
-  if (hasItalianAcceptScope || (proof.contractVersion === CONSENT_ACTION_CONTROL_PROOF_VERSION &&
-    proof.action === "accept" && proof.accessibleLabel === italianAccept.label)) {
-    if (!hasItalianAcceptScope || proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION ||
-      proof.action !== "accept" || proof.actionSemantics !== "direct_label" || proof.accessibleLabel !== italianAccept.label ||
-      (proof.labelSource !== "visible_text" && proof.labelSource !== "aria_label") ||
-      proof.cmpId !== italianAccept.cmpId || proof.recipeId !== italianAccept.recipeId ||
-      proof.selectorHint !== italianAccept.controlSelector || proof.matchedLocale !== "it" || proof.matchStrength !== "direct" ||
-      !proof.authorizedTargetSha256 || proof.frameIdentitySha256 !== proof.authorizedTargetSha256) {
-      context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
-        message: "The registered Italian Accept label requires exact OneTrust control and document proof."});
-    }
+  const oneTrustAccept = REGISTERED_ONETRUST_ACCEPT_CONTROLS.find(scope =>
+    proof.classifierReasonCodes.includes(scope.proofReason));
+  const requiresOneTrustScope = proof.contractVersion === CONSENT_ACTION_CONTROL_PROOF_VERSION &&
+    proof.action === "accept" && REGISTERED_ONETRUST_ACCEPT_CONTROLS.some(scope => proof.accessibleLabel === scope.label);
+  if ((oneTrustAccept || requiresOneTrustScope) && (!oneTrustAccept ||
+    proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION || proof.action !== "accept" ||
+    proof.actionSemantics !== "direct_label" || proof.accessibleLabel !== oneTrustAccept.label ||
+    (proof.labelSource !== "visible_text" && proof.labelSource !== "aria_label") ||
+    proof.cmpId !== oneTrustAccept.cmpId || proof.recipeId !== oneTrustAccept.recipeId ||
+    proof.selectorHint !== oneTrustAccept.controlSelector || proof.matchedLocale !== oneTrustAccept.locale ||
+    proof.matchStrength !== "direct" || !proof.authorizedTargetSha256 ||
+    proof.frameIdentitySha256 !== proof.authorizedTargetSha256 ||
+    ("documentSha256" in oneTrustAccept && proof.authorizedTargetSha256 !== oneTrustAccept.documentSha256))) {
+    context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
+      message: "Registered OneTrust Accept labels require exact control and document proof."});
+  }
+  const reviewedCookieAccept = REVIEWED_COOKIE_ACCEPT_CONTROLS.find(scope => proof.classifierReasonCodes.includes(scope.proofReason));
+  if (reviewedCookieAccept && (proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION || proof.action !== "accept" ||
+    proof.actionSemantics !== "direct_label" || proof.labelSource !== "visible_text" ||
+    proof.accessibleLabel !== reviewedCookieAccept.label || proof.matchStrength !== "direct" ||
+    proof.matchedLocale !== reviewedCookieAccept.locale || proof.selectorHint !== reviewedCookieAccept.controlSelector ||
+    proof.authorizedTargetSha256 !== reviewedCookieAccept.documentSha256 || proof.frameIdentitySha256 !== reviewedCookieAccept.documentSha256)) {
+    context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
+      message: "The reviewed cookie Accept control requires its exact visible label, selector, and document."});
+  }
+  const reviewedCookieReject = REVIEWED_COOKIE_REJECT_CONTROLS.find(scope => proof.classifierReasonCodes.includes(scope.proofReason));
+  if (reviewedCookieReject && (proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION ||
+    !matchesReviewedCookieReject(proof, reviewedCookieReject))) {
+    context.addIssue({code: z.ZodIssueCode.custom, path: ["classifierReasonCodes"],
+      message: "The reviewed cookie Reject control requires its exact label, selector, and document."});
   }
   const caia = CAIA_ACCEPT_CONTROL;
   if (proof.recipeId === caia.recipeId || proof.classifierReasonCodes.includes(caia.proofReason)) {
@@ -193,6 +290,7 @@ export const consentActionControlProofSchema = z.object({
       proof.recipeId !== "canonical-cmp:OneTrust:reject:v3" || !proof.frameIdentitySha256 || !proof.authorizedTargetSha256 ||
       proof.selectorHint !== "#onetrust-reject-all-handler, #onetrust-banner-sdk.ot-close-btn-link button.onetrust-close-btn-handler.banner-close-button" ||
       !(NAMED_NECESSARY_ONLY_REJECT_LABELS[proof.labelBoundNecessaryOnly.policyVersion] as readonly string[]).includes(normalizeConsentControlText(proof.accessibleLabel)) ||
+      (proof.labelBoundNecessaryOnly.policyVersion === UNSW_NECESSARY_ONLY_REJECT.policyVersion && !isUnswNecessaryOnlyRejectProof(proof)) ||
       classification.intent !== "reject" || classification.variant !== "necessary_only" ||
       proof.classifierIntent !== classification.intent || proof.classifierConfidence !== classification.confidence ||
       proof.matchStrength !== classification.matchStrength || proof.matchedLocale !== classification.matchedLocale) {
@@ -244,3 +342,23 @@ export const consentActionControlProofSchema = z.object({
 });
 
 export type ConsentActionControlProof = z.infer<typeof consentActionControlProofSchema>;
+
+function matchesReviewedCookieReject(proof: ConsentActionControlProof, scope: typeof REVIEWED_COOKIE_REJECT_CONTROLS[number]) {
+  return proof.action === "reject" && proof.actionSemantics === "canonical_necessary_only_recipe" &&
+    proof.classifierIntent === "reject" && proof.accessibleLabel === scope.label && proof.labelSource === scope.labelSource &&
+    proof.matchedLocale === scope.locale && proof.selectorHint === scope.controlSelector &&
+    proof.authorizedTargetSha256 === scope.documentSha256 && proof.frameIdentitySha256 === scope.documentSha256;
+}
+
+export function isReviewedCookieRejectProof(requestedUrl: string, proof: ConsentActionControlProof): boolean {
+  return REVIEWED_COOKIE_REJECT_CONTROLS.some(scope => requestedUrl === scope.requestedUrl &&
+    proof.classifierReasonCodes.includes(scope.proofReason) && matchesReviewedCookieReject(proof, scope));
+}
+
+export function isUnswNecessaryOnlyRejectProof(proof: ConsentActionControlProof): boolean {
+  const scope = UNSW_NECESSARY_ONLY_REJECT;
+  return proof.labelBoundNecessaryOnly?.policyVersion === scope.policyVersion &&
+    proof.accessibleLabel === scope.label && proof.labelSource === "visible_text" &&
+    proof.authorizedTargetSha256 === scope.documentSha256 && proof.frameIdentitySha256 === scope.documentSha256 &&
+    proof.labelBoundNecessaryOnly.contextText.includes(scope.instruction);
+}
