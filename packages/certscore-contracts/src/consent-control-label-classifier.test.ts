@@ -14,6 +14,15 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
+test("retained preference buttons count as first-layer options in cookie context", () => {
+  for (const label of ["Configure Cookies", "Set your choices"]) {
+    const input = {label, classifierProfile: "multilingual_v1" as const};
+    assert.equal(classifyConsentControlLabel({...input, usage: "observation", hasConsentContext: true}).intent, "options");
+    assert.notEqual(classifyConsentControlLabel({...input, usage: "action", hasConsentContext: true}).matchedTerm, label.toLowerCase());
+    assert.notEqual(classifyConsentControlLabel({...input, usage: "observation", hasConsentContext: false}).intent, "options");
+  }
+});
+
 test("the visible German optional-cookie refusal is an exact observation", () => {
   const label = "Optionale Cookies nicht verwenden";
   const classify = (text: string, usage: "observation" | "action", hasConsentContext = true) =>

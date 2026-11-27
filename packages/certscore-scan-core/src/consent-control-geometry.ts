@@ -1941,6 +1941,13 @@ function collectConsentGeometryInPage(input: {
     const scrollableAncestorBox = scrollableAncestor ? rectFor(scrollableAncestor) : undefined;
     const clippedByScrollableAncestor = Boolean(scrollableAncestorBox && !containsRect(scrollableAncestorBox, box));
     const container = typeof containerIndex === "number" ? containerItems[containerIndex] : undefined;
+    // The retained Tealium preferences anchor is an in-page control. A new
+    // href (including an empty one) must go through the normal navigation check.
+    const chsPreferences = window === window.top && document.URL === "https://www.chs.net/" &&
+      element.id === "consent_preferences_open" && element.getRootNode() === document &&
+      element.matches("#__tealiumGDPRecModal .privacy_prompt #consent_prompt_footer a:not([href],[target],[download])") &&
+      document.querySelectorAll("#consent_preferences_open").length === 1 &&
+      (element as HTMLElement).innerText.trim() === "Configure Cookies";
     const caiaFirstLayer = isCaiaFirstLayerControl(element);
     return {
       frameUrl: window.location.href,
@@ -2048,7 +2055,7 @@ function collectConsentGeometryInPage(input: {
       scopeKind: element.closest("p,li") ? "paragraph" : "dialog",
       adjacentText: element.nextSibling?.nodeType === Node.TEXT_NODE && contextTextIsReadable(element)
         ? compactText(element.nextSibling.textContent || "").slice(0, 160) : undefined,
-      linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
+      linkHref: element.localName === "a" && !chsPreferences ? element.getAttribute("href") ?? "" : undefined,
     };
   }
 

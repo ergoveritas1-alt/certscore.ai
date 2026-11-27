@@ -597,6 +597,10 @@ for (const site of californiaControls) {
         });
       </script>`;
       const fixture = await replayFixture(t, site.url, markup);
+      if (site.url === "https://www.chs.net/") {
+        assert.ok(fixture.observation.controls.some(control => control.actionType === "manage_preferences" &&
+          control.label === "Configure Cookies"));
+      }
       const receipts: Array<{deadlineAtMs: number; completedAtMs: number}> = [];
       const input = {...fixture.observerInput, productionProjectable: true,
         onWorkerDiscoveredClick: (click: {deadlineAtMs: number; completedAtMs: number}) => receipts.push(click)};
@@ -645,4 +649,24 @@ test("California control replay blocks changed targets at the final selector rea
       assert.equal(await button.evaluate(exactNativeConsentButtonSelector), undefined);
     } finally { await context.close(); }
   }
+});
+
+
+test("California control replay identifies the IBTimes preference button", async t => {
+  const url = "https://www.ibtimes.co.uk/";
+  const markup = '<div role="dialog" aria-labelledby="sd-cmp-title-main"><h2 id="sd-cmp-title-main">Welcome</h2>' +
+    '<p>With our 183 partners, we wish to store and access information on your devices (cookies, pixels in emails, etc.).</p>' +
+    '<div class="sd-cmp-Sbln1"><button>Set your choices</button></div></div>';
+  const fixture = await replayFixture(t, url, markup);
+  assert.ok(fixture.observation.controls.some(control => control.actionType === "manage_preferences" &&
+    control.label === "Set your choices"));
+  assert.deepEqual(fixture.clicks, []);
+});
+
+test("California control replay keeps the CHS policy link outside Options", async t => {
+  const site = californiaControls.find(row => row.url === "https://www.chs.net/")!;
+  const markup = site.markup.replace('id="consent_preferences_open"', 'id="consent_preferences_open" href="/privacy"');
+  const fixture = await replayFixture(t, site.url, markup);
+  assert.ok(!fixture.observation.controls.some(control => control.actionType === "manage_preferences" &&
+    control.label === "Configure Cookies"));
 });

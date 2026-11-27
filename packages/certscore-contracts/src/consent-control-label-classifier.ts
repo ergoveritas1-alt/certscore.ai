@@ -246,6 +246,10 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
   { locale: "en", phrase: "allow necessary cookies", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "en", phrase: "use website with required cookies only (revocation) →", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "en", phrase: "required cookies only", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, observationOnly: true },
+  ...["configure cookies", "set your choices"].map((phrase): ConsentControlTerm => ({
+    locale: "en", phrase, intent: "options", strength: "direct", exactLabelOnly: true,
+    requiresConsentContext: true, observationOnly: true,
+  })),
   { locale: "en", phrase: "cookie preferences", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "en", phrase: "cookies manage your preferences about cookies", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "en", phrase: "manage your preferences about cookies", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
