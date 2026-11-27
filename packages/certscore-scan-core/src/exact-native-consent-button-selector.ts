@@ -22,6 +22,12 @@ const starfieldId = "28171fad-c63e-45f9-b528-cdc4dc2813bf";
 const starfieldBanner = `[id="${starfieldId}-banner"]`;
 
 export function reviewedConsentAnchor(action: "accept" | "reject", selector?: string) {
+  if (action === "accept" && selector === "#__tealiumGDPRecModal .privacy_prompt #consent_prompt_footer a#consent_prompt_submit:not([href], [target], [download])") {
+    return {documentUrl: "https://www.chs.net/", banner: "#consent_prompt_footer", labels: ["Accept All"]};
+  }
+  if (action === "accept" && selector === '#cookieConsent[role="dialog"] #cookieConsentDiv a#cookieConsentAllow[role="button"]:not([href], [target], [download])') {
+    return {documentUrl: "https://www.homepage-baukasten.de/", banner: "#cookieConsentDiv", labels: ["Optionale Cookies verwenden"]};
+  }
   const actionId = action === "accept" ? "accept" : "decline";
   if (selector === `${starfieldBanner} a[id="${starfieldId}-${actionId}"][href=""]:not([target], [download])`) {
     return { documentUrl: starfieldDocument, banner: starfieldBanner,
@@ -100,7 +106,26 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
       !element.hasAttribute("form") && !element.hasAttribute("formaction") && !element.hasAttribute("aria-label")) {
     return '#usercentrics-root #uc-center-container button[data-testid="uc-accept-all-button"]';
   }
+  if (view.location.href === "https://simpli.fi/" && elementRoot instanceof ShadowRoot &&
+      elementRoot.mode === "open" && elementRoot.host === root.querySelector("#transcend-shadow-root") &&
+      root.querySelectorAll("#transcend-shadow-root").length === 1 && elementRoot.host.shadowRoot === elementRoot &&
+      element.localName === "button" && ["AcceptAllAndClose", "RejectAllAndClose"].includes(element.id)) {
+    const selector = '#transcend-consent-ui dialog[open][data-layer="banner"] button[type="button"]#' + element.id;
+    if (elementRoot.querySelectorAll("#" + element.id).length === 1 && element.matches(selector) &&
+        !element.closest("form,label,[contenteditable]") && !element.hasAttribute("form") && !element.hasAttribute("formaction")) {
+      return "#transcend-shadow-root " + selector;
+    }
+  }
   if (elementRoot !== root) return undefined;
+  if (view.location.href === "https://www.framer.com/" && element instanceof HTMLInputElement &&
+      element.type === "button" && ["Accept", "Reject"].includes(element.value) &&
+      element.id === "__framer-cookie-component-button-" + element.value.toLowerCase() &&
+      !element.form && !element.closest("form,label,[contenteditable]") &&
+      !element.hasAttribute("form") && !element.hasAttribute("formaction")) {
+    const selector = 'div.--framer-cookie-banner-container input[type="button"]#' + element.id;
+    if (element.matches(selector) && root.querySelectorAll("div.--framer-cookie-banner-container").length === 1 &&
+        root.querySelectorAll("#" + element.id).length === 1) return selector;
+  }
   // This function is serialized into the page. These two original CAIA
   // controls are spans with directly attached listeners, not native buttons.
   if (view.location.href === "https://caiacosmetics.se/" && element.localName === "span" &&
@@ -129,6 +154,12 @@ export function exactNativeConsentButtonSelector(element: Element): string | und
         reviewedBanner = `[id="${id}-banner"]`;
         reviewedSelector = `${reviewedBanner} a[id="${element.id}"][href=""]:not([target], [download])`;
       }
+    } else if (view.location.href === "https://www.chs.net/") {
+      reviewedBanner = "#consent_prompt_footer";
+      reviewedSelector = "#__tealiumGDPRecModal .privacy_prompt #consent_prompt_footer a#consent_prompt_submit:not([href], [target], [download])";
+    } else if (view.location.href === "https://www.homepage-baukasten.de/") {
+      reviewedBanner = "#cookieConsentDiv";
+      reviewedSelector = '#cookieConsent[role="dialog"] #cookieConsentDiv a#cookieConsentAllow[role="button"]:not([href], [target], [download])';
     } else if (view.location.href === "https://www.mist.com/") {
       reviewedBanner = "#truste-consent-buttons";
       reviewedSelector = '#truste-consent-buttons a#truste-consent-button:not([href], [target], [download])';

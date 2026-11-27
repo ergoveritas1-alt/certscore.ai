@@ -14,6 +14,16 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
+test("the visible German optional-cookie refusal is an exact observation", () => {
+  const label = "Optionale Cookies nicht verwenden";
+  const classify = (text: string, usage: "observation" | "action", hasConsentContext = true) =>
+    classifyConsentControlLabel({label: text, classifierProfile: "multilingual_v1", usage, hasConsentContext});
+  assert.equal(classify(label, "observation").intent, "reject");
+  assert.notEqual(classify(label, "action").intent, "reject");
+  assert.notEqual(classify(label, "observation", false).matchedTerm, label.toLowerCase());
+  assert.notEqual(classify(label + "?", "action").intent, "reject");
+});
+
 test("the full German necessary-only caption matches the exact registered refusal phrase", () => {
   const label = "Nur notwendige Cookies zulassen";
   const result = classifyConsentControlLabel({

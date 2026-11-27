@@ -557,3 +557,92 @@ for (const originalRoute of [true, false]) {
     if (originalRoute) assert.ok(proof.expiresAtMs - receipts[0]! >= 200);
   });
 }
+
+const californiaControls = [
+  {
+    url: "https://www.homepage-baukasten.de/", accept: "#cookieConsentAllow", reject: "#cookieConsentDismiss",
+    markup: '<div id="cookieConsent" role="dialog" aria-label="cookieconsent"><p>Wir nutzen optionale Cookies.</p><div id="cookieConsentDiv"><a role="button" tabindex="0" id="cookieConsentAllow" aria-label="allow cookies" onclick="cookieConsentAccept()">Optionale Cookies verwenden</a><a role="button" tabindex="0" id="cookieConsentDismiss" aria-label="dismiss cookie message" onclick="cookieConsentDismiss()">Optionale Cookies nicht verwenden</a></div></div>',
+  },
+  {
+    url: "https://www.chs.net/", accept: "#consent_prompt_submit",
+    markup: '<div id="__tealiumGDPRecModal"><div class="privacy_prompt explicit_consent"><div class="privacy_prompt_content"><h1>Cookie Consent Policy</h1><p>This site uses cookies and similar technologies.</p><div class="privacy_prompt_footer"><div id="consent_prompt_footer"><a id="consent_prompt_submit" class="button right">Accept All</a><a id="consent_preferences_open">Configure Cookies</a></div></div></div></div></div>',
+  },
+  {
+    url: "https://www.framer.com/", accept: "#__framer-cookie-component-button-accept", reject: "#__framer-cookie-component-button-reject",
+    markup: '<div class="--framer-cookie-banner-container"><p>We use cookies to enhance your experience, analyze site traffic and deliver personalized ads and content.</p><input id="__framer-cookie-component-button-reject" type="button" value="Reject"><input id="__framer-cookie-component-button-accept" type="button" value="Accept"></div>',
+  },
+  {
+    url: "https://simpli.fi/", accept: "#AcceptAllAndClose", reject: "#RejectAllAndClose",
+    markup: '<div id="transcend-shadow-root"></div><script>const shadow = document.querySelector("#transcend-shadow-root").attachShadow({mode:"open"}); shadow.innerHTML = \'<div id="transcend-consent-ui"><dialog open id="mainLayoutContainer" data-layer="banner"><div class="banner__content-wrapper"><h1>Cookies</h1><div class="banner__content"><p>Accept all to enable functional, analytics, &amp; advertising cookies.</p><button id="RejectAllAndClose" type="button" aria-label="Reject All">Reject All</button><button id="AcceptAllAndClose" type="button" aria-label="Accept All Things">Accept All Things</button></div></div></dialog></div>\';</script>',
+  },
+  {
+    url: "https://thehill.com/", accept: "#onetrust-accept-btn-handler",
+    markup: '<div id="onetrust-banner-sdk"><div role="dialog" aria-label="This website uses cookies"><div id="onetrust-policy-text">This website uses cookies.</div><div id="onetrust-button-group"><button id="onetrust-accept-btn-handler">Accept</button></div></div></div>',
+  },
+  {
+    url: "https://www.usmagazine.com/", accept: ".osano-cm-accept", reject: ".osano-cm-deny",
+    markup: '<div class="osano-cm-window"><div role="dialog" aria-label="Cookie Consent Banner" class="osano-cm-dialog"><p>We use cookies for advertising.</p><div class="osano-cm-dialog__buttons"><button class="osano-cm-accept">Accept</button><button class="osano-cm-deny">Deny Non-Essential</button><button>Manage Preferences</button></div></div></div>',
+  },
+];
+
+for (const site of californiaControls) {
+  for (const action of ["accept", "reject"] as const) {
+    const selector = site[action];
+    if (!selector) continue;
+    test(`California control replay ${site.url} ${action}`, async t => {
+      const markup = site.markup + `<script>
+        const scope = document.querySelector("#transcend-shadow-root")?.shadowRoot || document;
+        scope.querySelector(${JSON.stringify(selector)}).addEventListener("click", event => {
+          if (event.isTrusted) fetch("/clicked/${action}", {method:"POST"});
+        });
+      </script>`;
+      const fixture = await replayFixture(t, site.url, markup);
+      const receipts: Array<{deadlineAtMs: number; completedAtMs: number}> = [];
+      const input = {...fixture.observerInput, productionProjectable: true,
+        onWorkerDiscoveredClick: (click: {deadlineAtMs: number; completedAtMs: number}) => receipts.push(click)};
+      const accept = buildCanonicalPostAcceptActionRecipes();
+      const reject = buildCanonicalPostRefusalActionRecipes();
+      const packet = action === "accept"
+        ? await runPostAcceptObserver({...input, recipe: accept[0]!, recipeCandidates: accept, allowCanonicalAcceptDiscovery: true})
+        : await runPostRefusalObserver({...input, recipe: reject[0]!, recipeCandidates: reject, allowCanonicalRejectDiscovery: true, recipeSetId: "ca-retained-replay"});
+      if (site.url === "https://www.homepage-baukasten.de/" && action === "reject") {
+        assert.ok(fixture.observation.rejectControlObserved);
+        assert.ok(fixture.geometry.candidates.some(candidate => candidate.actionType === "reject_all" &&
+          candidate.label === "Optionale Cookies nicht verwenden" && candidate.decisionStatus === "confirmed_visible"));
+        assert.deepEqual(fixture.clicks, []);
+        assert.equal(receipts.length, 0);
+        return;
+      }
+      assert.deepEqual(fixture.clicks, [action], JSON.stringify(packet.resolver));
+      assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
+      assert.equal(receipts.length, 1);
+      assert.ok(receipts[0]!.deadlineAtMs - receipts[0]!.completedAtMs >= 200);
+    });
+  }
+}
+
+test("California control replay blocks changed targets at the final selector read", async t => {
+  const {exactNativeConsentButtonSelector} = await import("./exact-native-consent-button-selector.js");
+  const browser = await chromium.launch({args:["--disable-background-networking", "--host-resolver-rules=MAP * ~NOTFOUND"]});
+  t.after(() => browser.close());
+  for (const [site, mutate] of [
+    [californiaControls[0]!, (node: Element) => node.setAttribute("href", "/privacy")],
+    [californiaControls[1]!, (node: Element) => node.setAttribute("target", "_blank")],
+    [californiaControls[2]!, (node: Element) => node.setAttribute("type", "submit")],
+    [californiaControls[3]!, (node: Element) => node.after(node.cloneNode(true))],
+  ] as const) {
+    const context = await browser.newContext({serviceWorkers: "block"});
+    try {
+      await context.addInitScript("globalThis.__name ??= value => value;");
+      await context.route("**/*", route => route.request().url() === site.url
+        ? route.fulfill({contentType:"text/html", body:site.markup}) : route.abort());
+      const page = await context.newPage();
+      await page.goto(site.url);
+      const button = await page.locator(site.accept).elementHandle();
+      assert.ok(button);
+      assert.ok(await button.evaluate(exactNativeConsentButtonSelector));
+      await button.evaluate(mutate);
+      assert.equal(await button.evaluate(exactNativeConsentButtonSelector), undefined);
+    } finally { await context.close(); }
+  }
+});

@@ -6,7 +6,7 @@ import {
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
 const CUSTOMIZE_OR_DENY_ALL = "customize or deny all";
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v38";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v39";
 const NO_REJECT_COOKIES_LABEL = "no, reject cookies";
 export const ONETRUST_ITALIAN_ACCEPT_LABEL = "Accetto i cookie";
 
@@ -580,6 +580,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "nur notwendige akzeptieren", "necessary_only"),
     equivalent("reject", "nur erforderliche akzeptieren", "necessary_only"),
     equivalent("reject", "nur essenzielle akzeptieren", "necessary_only"),
+    { phrase: "optionale cookies nicht verwenden", intent: "reject", strength: "direct",
+      exactLabelOnly: true, requiresConsentContext: true, observationOnly: true },
     ...direct("reject", "optionale cookies ablehnen"),
     ...direct("reject", "nicht erforderliche cookies ablehnen"),
     ...direct("reject", "nicht wesentliche cookies ablehnen"),

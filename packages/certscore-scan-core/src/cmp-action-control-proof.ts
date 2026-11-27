@@ -530,9 +530,24 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
           (!reviewedAnchor.id || document.querySelectorAll("#" + reviewedAnchor.id).length === 1) &&
           !exact.closest("form,button,label,[contenteditable]") && !exact.querySelector("a,button,input,[role=button]");
         if (reviewedAnchor && !exactReviewedAnchor) return null;
+        const localRoot = exact?.getRootNode();
+        const transcendId = exact?.id;
+        const transcendLabel = transcendId === "AcceptAllAndClose" ? "Accept All Things" : "Reject All";
+        const transcend = workerDiscovered && view?.location.href === "https://simpli.fi/" &&
+          (transcendId === "AcceptAllAndClose" || transcendId === "RejectAllAndClose") &&
+          passiveSelector === '#transcend-shadow-root #transcend-consent-ui dialog[open][data-layer="banner"] button[type="button"]#' + transcendId &&
+          exact?.getAttribute("aria-label") === transcendLabel && (exact as HTMLElement).innerText.trim() === transcendLabel &&
+          localRoot instanceof ShadowRoot && localRoot.mode === "open" && localRoot.host.shadowRoot === localRoot &&
+          document?.querySelectorAll("#transcend-shadow-root").length === 1 && document.querySelector("#transcend-shadow-root") === localRoot.host;
+        const selectorRoot = transcend ? localRoot : document;
+        const framer = workerDiscovered && view?.location.href === "https://www.framer.com/" &&
+          exact instanceof HTMLInputElement && exact.type === "button" && ["Accept", "Reject"].includes(exact.value) &&
+          exact.id === "__framer-cookie-component-button-" + exact.value.toLowerCase() &&
+          passiveSelector === 'div.--framer-cookie-banner-container input[type="button"]#' + exact.id &&
+          document?.querySelectorAll("div.--framer-cookie-banner-container").length === 1 && !exact.form;
         if (workerDiscovered && (!exact || !document || exact.closest("form, label, [contenteditable], [inert]") ||
             exact.hasAttribute("form") || exact.hasAttribute("formaction") ||
-            (exact.id && document.querySelectorAll("#" + CSS.escape(exact.id)).length !== 1) ||
+            (exact.id && selectorRoot?.querySelectorAll("#" + CSS.escape(exact.id)).length !== 1) ||
             exact.querySelector("a, button, input, [role=button]"))) return null;
         const buttonLink = exactReviewedAnchor || exact?.localName === "a" && exact.getAttribute("role") === "button" &&
           !exact.hasAttribute("target") && !exact.hasAttribute("download") &&
@@ -541,12 +556,12 @@ async function buildConsentActionControlProofWithinBoundary(input: ConsentAction
             document.querySelectorAll("#" + exact.id).length === 1 :
             exact.getAttribute("href") === "#" && !document?.querySelector("base[href], base[target]"));
         if (hubSpotAnchor && !buttonLink) return null;
-        if (!exact?.isConnected || !(caiaBannerSelector ? exact.localName === "span" : roleButtonIds ? exact.localName === "div" : exact.localName === "button" || buttonLink) ||
-            !document || (!toomShadow && exact.getRootNode() !== document) || !view || view !== view.top) return null;
+        if (!exact?.isConnected || !(caiaBannerSelector ? exact.localName === "span" : roleButtonIds ? exact.localName === "div" : exact.localName === "button" || buttonLink || framer) ||
+            !document || (!toomShadow && !transcend && exact.getRootNode() !== document) || !view || view !== view.top) return null;
         if (roleButtonIds && document.querySelectorAll(roleButtonIds).length !== 2) return null;
         const matches = toomShadow
           ? document.querySelector("#usercentrics-root")?.shadowRoot?.querySelectorAll('#uc-center-container button[data-testid="uc-accept-all-button"]')
-          : document.querySelectorAll(passiveSelector);
+          : transcend ? localRoot.querySelectorAll(passiveSelector.slice("#transcend-shadow-root ".length)) : document.querySelectorAll(passiveSelector);
         if (matches?.length !== 1 || matches[0] !== exact) return null;
         if (toomShadow) {
           const root = exact.getRootNode();
