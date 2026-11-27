@@ -71,3 +71,15 @@ for (const usage of ['observation', 'action'] as const) {
     }
   });
 }
+
+test("the retained German refusal requires the full label and cookie context", () => {
+  const label = 'Alle nicht-essentiellen ablehnen';
+  for (const usage of ['observation', 'action'] as const) {
+    const input = {usage, classifierProfile: 'multilingual_v1' as const, label};
+    const contextual = {...input, hasConsentContext: true};
+    assert.equal(classifyConsentControlLabel(contextual).intent, 'reject');
+    assert.equal(classifyConsentControlLabel(input).intent, 'unknown');
+    assert.equal(classifyConsentControlLabel({...contextual, label: `Kann ich ${label.toLowerCase()}?`}).intent, 'unknown');
+    assert.equal(classifyConsentControlLabel({...contextual, ariaLabel: 'Alles akzeptieren'}).intent, 'unknown');
+  }
+});

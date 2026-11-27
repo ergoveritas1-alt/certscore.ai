@@ -57,6 +57,7 @@ for (const [name,acceptLabel,rejectLabel] of [
   ['necessary','Zustimmen','Nur notwendige Funktionscookies akzeptieren'],
   ['category-en','Accept all non-essential cookies','Reject all non-essential cookies'],
   ['category-de','Alle nicht notwendigen Cookies akzeptieren','Alle nicht notwendigen Cookies ablehnen'],
+  ['retained-cgm-de','Alles akzeptieren','Alle nicht-essentiellen ablehnen'],
   ['category-fr','Accepter tous les cookies non essentiels','Refuser tous les cookies non essentiels'],
 ]) for (const action of ['accept','reject'] as const) {
   test(`${name}: ${action} clicks only the correct choice and preserves unverified capture`, async () => {
