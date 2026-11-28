@@ -1,0 +1,1289 @@
+{
+  "scanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+  "originalBundleSha256": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+  "originalPageEvidenceSha256": "f02f318349a4afdc5c7f3946899f69789722dbfa6489aa8d72ee43d01eafae98",
+  "startingPageFindings": [
+    {
+      "unifiedFindingId": "california_rights_disclosure_not_observed",
+      "title": "Privacy-rights disclosure not found in the inspected policy",
+      "severity": "medium",
+      "summary": "CCPA applicability has not been determined for this business. The inspected policy and linked supplements did not describe the right to know, the right to delete, and non-discrimination when exercising privacy rights.",
+      "confidenceBand": "moderate",
+      "primaryPageUrl": "https://ergoveritas.com/",
+      "affectedPageCount": 1,
+      "confidenceInputs": {
+        "evidenceQualityFlags": [
+          "fetch_quality:thin_content",
+          "page_attributed",
+          "fallback_only"
+        ],
+        "hasConcretePayloadEvidence": false,
+        "hasCorroboratedPositiveSurfaceEvidence": false,
+        "hasDirectRuntimeEvidence": true,
+        "hasKeyPageDiscoveryEvidence": false,
+        "hasReadableSurfaceSnippetEvidence": false,
+        "hasMultipleHumanFacingUrls": false,
+        "hasPageAttribution": true,
+        "hasPacketBackedEvidence": false,
+        "hasPolicyTextEvidence": true,
+        "hasStructuredValidationEvidence": false,
+        "isFallbackOnly": true,
+        "issueCount": 0,
+        "signalCount": 1,
+        "sourceCount": 1,
+        "sourceKinds": [
+          "signal"
+        ],
+        "validationCount": 0
+      },
+      "categoryAlignments": [
+        {
+          "evidenceCategoryId": "consent_interface_control_availability",
+          "relation": "owner"
+        }
+      ],
+      "sourceRefs": [
+        {
+          "kind": "signal",
+          "key": "privacy.california_privacy_review.california_rights_disclosure_not_observed",
+          "label": "Privacy-rights disclosure not found in the inspected policy",
+          "source": "runtime_artifact_signal"
+        }
+      ],
+      "evidence": {
+        "counts": {},
+        "entities": {
+          "cpraOptOutEvidenceUrls": [
+            "https://ergoveritas.com/"
+          ]
+        },
+        "fetchQuality": "thin_content",
+        "flags": [],
+        "pageUrls": [
+          "https://ergoveritas.com/"
+        ],
+        "snippets": [],
+        "sourceUrls": [
+          "https://ergoveritas.com/"
+        ]
+      },
+      "details": {
+        "family": "california_privacy_review",
+        "projection": {
+          "scanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+          "documentUrl": "https://ergoveritas.com/",
+          "capturedAt": "2026-11-26T02:10:54.670Z",
+          "sourceHash": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+          "verificationStatus": "verified",
+          "scoreEffect": "none",
+          "applicability": "not_determined",
+          "inspection": {
+            "documentUrl": "https://ergoveritas.com/",
+            "capturedAt": "2026-11-26T02:10:48.336Z",
+            "sourceHash": "a8bc6135b0cc593d7ae1be0cb08e3bbe42dad9c059a20c1f1eb6d8b85f000921",
+            "scope": "rendered_named_links_and_buttons",
+            "coverage": "limited",
+            "namedChoiceCandidateCount": 0,
+            "unnamedControlCount": 0,
+            "candidateEnumerationTruncated": false,
+            "uninspectedFrameCount": 1,
+            "uninspectedShadowRootCount": 0,
+            "supportedDocumentLanguage": true,
+            "representativeDocument": true,
+            "documentStable": true,
+            "rightsMethods": [],
+            "hiddenUnnamedControlCount": 0,
+            "frameCount": 1,
+            "inspectedSameOriginFrameCount": 0,
+            "hiddenUninspectedFrameCount": 0,
+            "inaccessibleFrameCount": 1,
+            "unreadyFrameCount": 0,
+            "unprojectableFrameCount": 0,
+            "frameBudgetLimitedCount": 0,
+            "namedFrameChoiceCandidateCount": 0,
+            "frameInspectionWorkMs": 1,
+            "frameProofWorkMs": 1,
+            "contractVersion": "certscore.privacy-choice-inspection.v5",
+            "homepageAccessPolicy": "representative_homepage.v1",
+            "readinessPolicy": "document_bound_dom_inventory.v1",
+            "diagnostics": {
+              "version": "privacy_choice_diagnostics.v1",
+              "inspectionSourceHash": "a8bc6135b0cc593d7ae1be0cb08e3bbe42dad9c059a20c1f1eb6d8b85f000921",
+              "firstDocumentHash": "403dc6e476567b98ff117323050feab20062a57eec49c7c7e101132efe5f9949",
+              "secondDocumentHash": "403dc6e476567b98ff117323050feab20062a57eec49c7c7e101132efe5f9949",
+              "identityBasis": "document_and_structural_locator_only",
+              "status": "captured",
+              "limitations": [],
+              "unnamedControls": [],
+              "frames": [
+                {
+                  "first": {
+                    "locatorHash": "8b5a6d5c6a427d2cbbee500e1b0b61c90d64ff45d65b6ec2d52f24f6c9fd199f",
+                    "frameDocumentHash": null,
+                    "reason": "visible",
+                    "depth": 4,
+                    "locatorLimited": false
+                  },
+                  "second": {
+                    "locatorHash": "8b5a6d5c6a427d2cbbee500e1b0b61c90d64ff45d65b6ec2d52f24f6c9fd199f",
+                    "frameDocumentHash": null,
+                    "reason": "visible",
+                    "depth": 4,
+                    "locatorLimited": false
+                  }
+                }
+              ],
+              "checkpointIdentity": {
+                "version": "privacy_frame_checkpoint_identity.v1",
+                "scope": "sampled_frame_checkpoint_identity_only",
+                "identityBasis": "dom_reference_equality",
+                "status": "limited",
+                "parentDocument": "same",
+                "frames": [
+                  {
+                    "slot": 0,
+                    "node": "same",
+                    "document": "unavailable"
+                  }
+                ],
+                "limitations": [
+                  "read_unavailable"
+                ]
+              }
+            },
+            "documentReadyState": "complete",
+            "limitationKeys": [
+              "frame_inventory_incomplete"
+            ]
+          },
+          "choiceSurface": "unknown",
+          "controls": [],
+          "controlsTruncated": false,
+          "failedNoticeLinks": [],
+          "optOutEffectiveness": "not_assessed",
+          "noticeAdequacy": "not_assessed",
+          "noticeTopics": [],
+          "noticeEvidenceRefs": [
+            "policy-surface:policy_surface_9c950c87"
+          ],
+          "contractVersion": "certscore.california-privacy-review.v10",
+          "policyVersion": "california-privacy-review.v10",
+          "reviewCoverage": {
+            "contractVersion": "certscore.california-review-coverage.v4",
+            "postureBasis": "assuming_ccpa_applies",
+            "runtimeCoverage": "complete",
+            "policyStatement": "not_identified",
+            "sourceDocuments": [
+              {
+                "evidenceRef": "policy-text:policy_surface_9c950c87",
+                "url": "https://ergoveritas.com/privacy/",
+                "sha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                "complete": true
+              }
+            ],
+            "topics": [
+              {
+                "topic": "purposes",
+                "evidenceRef": "policy-text:policy_surface_9c950c87",
+                "excerpt": "We use this information to understand site usage, verify changes, and diagnose usability issues."
+              }
+            ],
+            "families": [
+              {
+                "id": "privacy_notice",
+                "status": "review",
+                "reason": "Verified policy text inspected for categories, purposes and retention; presence does not establish adequacy.",
+                "evidenceRefs": [
+                  "policy-text:policy_surface_9c950c87"
+                ],
+                "assessmentState": "partial",
+                "followUp": "interpretation"
+              },
+              {
+                "id": "california_rights",
+                "status": "review",
+                "reason": "Clause inspection: no resolved positive clauses; right to know, right to delete, non discrimination not observed. California adequacy remains separate.",
+                "evidenceRefs": [
+                  "policy-text:policy_surface_9c950c87"
+                ],
+                "assessmentState": "partial",
+                "followUp": "interpretation"
+              },
+              {
+                "id": "request_methods",
+                "status": "review",
+                "reason": "Retained request instructions or a visible named route establish discoverability; submission functionality is untested.",
+                "evidenceRefs": [
+                  "policy-text:policy_surface_9c950c87"
+                ],
+                "assessmentState": "partial",
+                "followUp": "interpretation"
+              },
+              {
+                "id": "collection_notice",
+                "status": "review",
+                "reason": "1 of 1 collection points have category wording; 0 have relevant purpose wording. Product-name lookups are separate technical context.",
+                "evidenceRefs": [
+                  "policy-text:policy_surface_9c950c87",
+                  "ref_collection_surface_inventory_pre_consent"
+                ],
+                "assessmentState": "limited",
+                "followUp": "capture"
+              },
+              {
+                "id": "sale_sharing",
+                "status": "review",
+                "reason": "Policy wording assessed: operational/analytics claims and explicit sale/sharing statements are retained separately. Actual recipient roles and applicable obligations remain unresolved.",
+                "evidenceRefs": [
+                  "policy-text:policy_surface_9c950c87"
+                ],
+                "assessmentState": "completed",
+                "followUp": "recipient_roles"
+              },
+              {
+                "id": "privacy_choices",
+                "status": "unknown",
+                "reason": "Named choice and policy claims retained separately; verified execution and applicable opt-out requirements remain distinct checks.",
+                "evidenceRefs": [
+                  "policy-text:policy_surface_9c950c87"
+                ],
+                "assessmentState": "limited",
+                "followUp": "capture"
+              }
+            ],
+            "scoreReady": false,
+            "captureCoverage": {
+              "policyTextComplete": true,
+              "choiceInventoryComplete": false,
+              "collectionInventoryComplete": true
+            }
+          },
+          "disclosureInspection": {
+            "contractVersion": "certscore.california-disclosure-inspection.v1",
+            "sourceBundleSha256": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+            "method": "complete_english_policy_concept_inventory.v1",
+            "documents": [
+              {
+                "evidenceRef": "policy-text:policy_surface_9c950c87",
+                "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                "inspectedChars": 1548
+              }
+            ],
+            "topics": [
+              {
+                "topic": "right_to_know",
+                "status": "not_observed",
+                "candidateCount": 0
+              },
+              {
+                "topic": "right_to_delete",
+                "status": "not_observed",
+                "candidateCount": 0
+              },
+              {
+                "topic": "right_to_correct",
+                "status": "candidate_present",
+                "candidateCount": 1
+              },
+              {
+                "topic": "non_discrimination",
+                "status": "not_observed",
+                "candidateCount": 0
+              }
+            ]
+          },
+          "rightsAssessment": {
+            "contractVersion": "certscore.california-rights-clauses.v1",
+            "sourceBundleSha256": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+            "assessmentPolicyVersion": "rights_section_context.v2",
+            "topics": [
+              {
+                "topic": "right_to_know",
+                "status": "not_observed",
+                "context": "unresolved",
+                "candidateClauseCount": 0,
+                "excludedClauseCount": 0,
+                "unresolvedClauseCount": 0,
+                "reason": "No candidate rights wording in the completely inspected English policy documents.",
+                "passages": [],
+                "excludedPassages": []
+              },
+              {
+                "topic": "right_to_delete",
+                "status": "not_observed",
+                "context": "unresolved",
+                "candidateClauseCount": 0,
+                "excludedClauseCount": 0,
+                "unresolvedClauseCount": 0,
+                "reason": "No candidate rights wording in the completely inspected English policy documents.",
+                "passages": [],
+                "excludedPassages": []
+              },
+              {
+                "topic": "right_to_correct",
+                "status": "review",
+                "context": "unresolved",
+                "candidateClauseCount": 1,
+                "excludedClauseCount": 0,
+                "unresolvedClauseCount": 1,
+                "reason": "Candidate wording requires interpretation; no missing-right conclusion is inferred.",
+                "passages": [
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 0,
+                    "end": 100,
+                    "excerpt": "Privacy Policy Last updated August 6, 2026 Static website ErgoVeritas is served as a static website."
+                  }
+                ],
+                "excludedPassages": []
+              },
+              {
+                "topic": "non_discrimination",
+                "status": "not_observed",
+                "context": "unresolved",
+                "candidateClauseCount": 0,
+                "excludedClauseCount": 0,
+                "unresolvedClauseCount": 0,
+                "reason": "No candidate rights wording in the completely inspected English policy documents.",
+                "passages": [],
+                "excludedPassages": []
+              }
+            ]
+          },
+          "collectionNoticeAssessment": {
+            "contractVersion": "certscore.california-collection-notice-matching.v5",
+            "sourceBundleSha256": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+            "inventoryComplete": true,
+            "points": [
+              {
+                "id": "baseline-cookies",
+                "kind": "cookies",
+                "label": "Observed cookies",
+                "categories": [
+                  "cookie_identifiers"
+                ],
+                "status": "limited",
+                "association": "page_policy_link",
+                "reason": "The bounded cookie-purpose inventory is incomplete; no full-purpose disclosure conclusion is supported.",
+                "evidenceRefs": [
+                  "d0e8d3b9323ba51c9e828dae0cf8909b",
+                  "149b1ba5652f91a6700b1902b7900a8a"
+                ],
+                "passages": [
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 548,
+                    "end": 728,
+                    "excerpt": "These services may set cookies or use similar browser storage and collect information about page visits, device and browser characteristics, interactions, and approximate location."
+                  },
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 1067,
+                    "end": 1334,
+                    "excerpt": "Controlled calibration pages No-index calibration pages may intentionally expose synthetic controls, policy text, cookies, browser-storage values, or designated third-party analytics and session-replay tags so authorized CertScore testing can verify scanner behavior."
+                  }
+                ],
+                "scope": "cookie_identifiers",
+                "purposeMatch": "unresolved",
+                "recipientMatch": "not_assessed",
+                "assessmentScope": "category_purpose",
+                "categoryMatch": "wording_retained",
+                "technicalMatch": "not_assessed",
+                "purposeBasis": "unresolved"
+              },
+              {
+                "id": "recipient-svc_2c15b4657695",
+                "kind": "third_party_resources",
+                "label": "Google Tag Manager resources",
+                "categories": [
+                  "tag_management"
+                ],
+                "status": "policy_text_only",
+                "association": "page_policy_link",
+                "reason": "Exact product wording retained as technical context. Data-category, purpose and legal recipient-role coverage are assessed separately.",
+                "evidenceRefs": [
+                  "net_35",
+                  "net_41"
+                ],
+                "passages": [
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 419,
+                    "end": 547,
+                    "excerpt": "Analytics and session diagnostics On the main ErgoVeritas site, Google Tag Manager loads Google Analytics and Microsoft Clarity."
+                  }
+                ],
+                "scope": "resource_contact_only",
+                "purposeMatch": "not_assessed",
+                "recipientMatch": "wording_retained",
+                "assessmentScope": "technical_context",
+                "categoryMatch": "not_assessed",
+                "technicalMatch": "exact_name_retained",
+                "purposeBasis": "not_assessed"
+              },
+              {
+                "id": "recipient-svc_ac4e7a5227e2",
+                "kind": "third_party_resources",
+                "label": "Microsoft Clarity resources",
+                "categories": [
+                  "session_replay"
+                ],
+                "status": "policy_text_only",
+                "association": "page_policy_link",
+                "reason": "Exact product wording retained as technical context. Data-category, purpose and legal recipient-role coverage are assessed separately.",
+                "evidenceRefs": [
+                  "net_43",
+                  "net_47",
+                  "net_53"
+                ],
+                "passages": [
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 453,
+                    "end": 547,
+                    "excerpt": "On the main ErgoVeritas site, Google Tag Manager loads Google Analytics and Microsoft Clarity."
+                  },
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 826,
+                    "end": 906,
+                    "excerpt": "Microsoft Clarity is configured to mask sensitive content in session recordings."
+                  }
+                ],
+                "scope": "resource_contact_only",
+                "purposeMatch": "not_assessed",
+                "recipientMatch": "wording_retained",
+                "assessmentScope": "technical_context",
+                "categoryMatch": "not_assessed",
+                "technicalMatch": "exact_name_retained",
+                "purposeBasis": "not_assessed"
+              },
+              {
+                "id": "recipient-svc_84e490a5370b",
+                "kind": "third_party_resources",
+                "label": "Google Analytics resources",
+                "categories": [
+                  "analytics"
+                ],
+                "status": "policy_text_only",
+                "association": "page_policy_link",
+                "reason": "Exact product wording retained as technical context. Data-category, purpose and legal recipient-role coverage are assessed separately.",
+                "evidenceRefs": [
+                  "net_49"
+                ],
+                "passages": [
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 429,
+                    "end": 547,
+                    "excerpt": "and session diagnostics On the main ErgoVeritas site, Google Tag Manager loads Google Analytics and Microsoft Clarity."
+                  }
+                ],
+                "scope": "resource_contact_only",
+                "purposeMatch": "not_assessed",
+                "recipientMatch": "wording_retained",
+                "assessmentScope": "technical_context",
+                "categoryMatch": "not_assessed",
+                "technicalMatch": "exact_name_retained",
+                "purposeBasis": "not_assessed"
+              }
+            ],
+            "limitationKeys": [
+              "starting_page_only",
+              "notice_adequacy_not_assessed",
+              "no_form_submission"
+            ],
+            "runtimePurposeAssessment": {
+              "contractVersion": "certscore.runtime-storage-purpose.v2",
+              "sourceBundleSha256": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+              "retainedSources": [],
+              "items": [
+                {
+                  "kind": "cookie",
+                  "name": "_ga",
+                  "purpose": "unknown",
+                  "dataOrigin": "unknown",
+                  "basis": "runtime_only",
+                  "evidenceRefs": [
+                    "d0e8d3b9323ba51c9e828dae0cf8909b"
+                  ],
+                  "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity."
+                },
+                {
+                  "kind": "cookie",
+                  "name": "_ga_X5ZM7BWET3",
+                  "purpose": "unknown",
+                  "dataOrigin": "unknown",
+                  "basis": "runtime_only",
+                  "evidenceRefs": [
+                    "149b1ba5652f91a6700b1902b7900a8a"
+                  ],
+                  "reason": "Cookie observed; its name and setter alone do not establish a business purpose or necessity."
+                }
+              ],
+              "retainedReadTrace": {
+                "contractVersion": "certscore.storage-read-trace.v1",
+                "scanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+                "captureId": "13a0c719-c034-4eae-8ec4-ed6d33f25509:runtime_evidence",
+                "scenario": "pre_consent",
+                "limitReached": false,
+                "observations": []
+              },
+              "inventoryLimited": true
+            }
+          },
+          "saleSharingAssessment": {
+            "contractVersion": "certscore.california-sale-sharing-clauses.v1",
+            "sourceBundleSha256": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+            "topics": [
+              {
+                "topic": "sale",
+                "status": "not_observed",
+                "candidateClauseCount": 0,
+                "reason": "No explicit wording for this topic was found in the completely inspected policy text.",
+                "passages": []
+              },
+              {
+                "topic": "cross_context_sharing",
+                "status": "not_observed",
+                "candidateClauseCount": 0,
+                "reason": "No explicit wording for this topic was found in the completely inspected policy text.",
+                "passages": []
+              },
+              {
+                "topic": "operational_disclosures",
+                "status": "not_observed",
+                "candidateClauseCount": 0,
+                "reason": "No explicit wording for this topic was found in the completely inspected policy text.",
+                "passages": []
+              },
+              {
+                "topic": "analytics",
+                "status": "described",
+                "candidateClauseCount": 2,
+                "reason": "Analytics wording was retained; analytics alone does not establish sale or cross-context sharing.",
+                "passages": [
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 419,
+                    "end": 547,
+                    "excerpt": "Analytics and session diagnostics On the main ErgoVeritas site, Google Tag Manager loads Google Analytics and Microsoft Clarity."
+                  },
+                  {
+                    "evidenceRef": "policy-text:policy_surface_9c950c87",
+                    "textSha256": "1b36f348c66ea3096ea9e5afdf2c1d0a3a8ce14c55b471542d119e41b1e5bbce",
+                    "start": 1168,
+                    "end": 1334,
+                    "excerpt": "policy text, cookies, browser-storage values, or designated third-party analytics and session-replay tags so authorized CertScore testing can verify scanner behavior."
+                  }
+                ]
+              }
+            ],
+            "choiceBasis": "unresolved"
+          },
+          "rightsReviewScorePolicy": "california-regulatory-posture.v27-rights-review",
+          "observedScoreBasis": {
+            "policyVersion": "usable_starting_page_score.v1",
+            "scanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+            "documentUrl": "https://ergoveritas.com/",
+            "sourceHash": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+            "documentToken": "174AFC75B02A9053021A2FABB0F7CDC8",
+            "domArtifactId": "dom_text_pre_consent",
+            "sourceLane": "runtime_evidence",
+            "accessOutcome": "representative_page",
+            "evidenceRef": "CanonicalEvidenceBundle.json#runtimeMetadataSnapshots"
+          },
+          "disclosureChoiceAssessment": {
+            "policyVersion": "california.disclosure-choice.v4-combined",
+            "scanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+            "documentUrl": "https://ergoveritas.com/",
+            "sourceHash": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae"
+          },
+          "frictionlessGpcException": {
+            "version": "frictionless_gpc_exception.v1",
+            "scanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+            "documentUrl": "https://ergoveritas.com/",
+            "sourceHash": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+            "scope": "retained_website_evidence",
+            "status": "unresolved",
+            "basis": "insufficient_evidence",
+            "disclosures": [
+              {
+                "id": "opt_out_right",
+                "status": "not_established"
+              },
+              {
+                "id": "frictionless_processing",
+                "status": "not_established"
+              },
+              {
+                "id": "signal_setup",
+                "status": "not_established"
+              },
+              {
+                "id": "other_request_methods",
+                "status": "not_established"
+              }
+            ],
+            "unverifiedRequirements": [
+              "signal_processing",
+              "no_fee_or_consideration",
+              "equivalent_experience",
+              "no_signal_triggered_interstitial",
+              "full_sale_sharing_scope"
+            ]
+          },
+          "broadOptOutAssessment": {
+            "scanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+            "documentUrl": "https://ergoveritas.com/",
+            "sourceHash": "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+            "state": "not_observed",
+            "evidenceRefs": [
+              "dom-text:dom_text_pre_consent"
+            ],
+            "version": "sale_sharing_opt_out_assessment.v3",
+            "basis": "scoped_negative_search",
+            "scope": "captured_starting_page",
+            "limitations": [
+              "control_coverage_limited",
+              "frames_uninspected"
+            ]
+          },
+          "scopedOptOutSearch": {
+            "artifactId": "dom_text_pre_consent",
+            "documentToken": "41B9EA9C19DC7074355CBA5CE578F22B",
+            "textSha256": "aa3b0950c398e77c932758fa87ce57c2565b08eaf4345603a7236e04a55decf6",
+            "capturedAtMs": 3486,
+            "inspectedPolicyCount": 1,
+            "version": "sale_sharing_opt_out_scoped_search.v1",
+            "scope": "captured_starting_page",
+            "inspectionSourceHash": "a8bc6135b0cc593d7ae1be0cb08e3bbe42dad9c059a20c1f1eb6d8b85f000921",
+            "limitations": [
+              "control_coverage_limited",
+              "frames_uninspected"
+            ]
+          }
+        }
+      },
+      "concernContext": {
+        "assertionLevels": [
+          "moderate"
+        ],
+        "evidenceStrengthFlags": [
+          "page_attributed",
+          "fallback_only"
+        ],
+        "externalSurfacingEligibilities": [
+          "eligible"
+        ],
+        "negativeEvidenceFlags": [],
+        "originTypes": [
+          "runtime_artifact"
+        ],
+        "promotionEligibilities": [
+          "eligible"
+        ]
+      },
+      "scoreEffects": [
+        {
+          "appliesTo": "california_posture",
+          "framework": "california",
+          "deductionPoints": 4,
+          "evidenceRefs": [
+            "10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae"
+          ],
+          "observedActivity": [],
+          "policyKey": "california.rights_disclosure_not_observed",
+          "policyVersion": "california-regulatory-posture.v27-rights-review",
+          "reasonCode": "verified_reportable_california_finding"
+        }
+      ],
+      "linkedValidationFinding": null,
+      "observedValue": "CCPA applicability has not been determined for this business. The inspected policy and linked supplements did not describe the right to know, the right to delete, and non-discrimination when exercising privacy rights.",
+      "presentationDecision": {
+        "confidenceRationale": "Moderate confidence because direct runtime evidence was captured, policy or disclosure text contributed supporting context, but corroboration is still partial.",
+        "rationale": "Context findings should remain visible, but usually as scan context rather than lead risk findings.",
+        "status": "surface",
+        "downgradeReasons": [],
+        "verificationLabel": "Runtime evidence",
+        "verificationState": "runtime"
+      },
+      "presentation": {
+        "confidenceScore": "0.55",
+        "findingName": "Privacy-rights disclosure not found in the inspected policy",
+        "suggestedFix": "Open each inspected policy document listed with this finding and locate its consumer-rights section. Confirm the exact missing right against the retained clause assessment. Ask the privacy owner to determine applicability and exceptions; a disclosure finding does not prove requests would be refused.\n\nFor each confirmed applicable omission, add plain-language wording explaining that right and how to exercise it. For non-discrimination, explain that exercising privacy rights will not result in prohibited discriminatory treatment; have the privacy owner approve any applicable exception or incentive wording. Do not publish an unreviewed blanket promise or a fictional contact channel.\n\nPublish the approved text as readable HTML under a clear rights heading, with a real request/contact route where required. Keep the policy linked from the scanned page, update its version/date, and clear caches. Check the deployed contact destination with the owner; do not send real personal data or submit a request merely to test discovery.\n\nRe-test: Open the revised policy from the scanned page in a fresh signed-out session. Confirm the specific missing right is now stated in its rights context, and that links resolve to the approved route. Retain the exact passage and URL, obtain privacy-owner sign-off, then re-scan. Legal applicability and fulfillment effectiveness remain separate checks.",
+        "whyThisMatters": "This finding surfaced enough evidence to merit reviewer attention and follow-up."
+      },
+      "sourceLabel": "Source",
+      "sourceUrl": "https://ergoveritas.com/",
+      "surfacingDecision": {
+        "appliedRules": [
+          "family.context.default",
+          "evidence.context.keep_review"
+        ],
+        "decisionReasons": [
+          "Context findings should remain visible, but usually as scan context rather than lead risk findings.",
+          "Verified California privacy assessment; scoped factual findings with versioned California-only score effects where eligible."
+        ],
+        "decisionState": "review",
+        "family": "context",
+        "policyVersion": "v2",
+        "reportLane": "main",
+        "reportable": true,
+        "surfaceTier": "headline",
+        "supports": [],
+        "unifiedFindingId": "california_rights_disclosure_not_observed",
+        "usedFamilyDefault": true,
+        "usedFindingOverride": true
+      },
+      "topFindingEligibility": {
+        "candidateTopFindingIds": [],
+        "demotionReasons": [
+          "Context findings should remain visible, but usually as scan context rather than lead risk findings.",
+          "Verified California privacy assessment; scoped factual findings with versioned California-only score effects where eligible."
+        ],
+        "eligibility": "no_top_finding_mapping",
+        "groupedUnder": null,
+        "matchedCriteria": [],
+        "missingCorroborators": [],
+        "suppressionReason": "Context findings should remain visible, but usually as scan context rather than lead risk findings."
+      }
+    },
+    {
+      "unifiedFindingId": "california_collection_review",
+      "title": "Non-essential activity under GPC",
+      "severity": "low",
+      "summary": "Google LLC (analytics): 2 retained cookie snapshot observations and 1 request under GPC, non-personalized ads declared; Microsoft Corporation (session_replay): 1 retained request, first at +2191 ms from GPC visit start. The sale/sharing purpose of this activity remains unresolved. Review recipient purposes, effective settings, processing arrangements and privacy-choice enforcement. A cookie Reject click does not establish a California sale/sharing opt-out. These observations do not establish a legal violation.",
+      "confidenceBand": "moderate",
+      "primaryPageUrl": null,
+      "affectedPageCount": 0,
+      "confidenceInputs": {
+        "evidenceQualityFlags": [
+          "fetch_quality:thin_content",
+          "explicit_policy_snippet_retained",
+          "contradiction_runtime_artifact_retained",
+          "direct_runtime",
+          "policy_text",
+          "fallback_only"
+        ],
+        "hasConcretePayloadEvidence": false,
+        "hasCorroboratedPositiveSurfaceEvidence": false,
+        "hasDirectRuntimeEvidence": true,
+        "hasKeyPageDiscoveryEvidence": false,
+        "hasReadableSurfaceSnippetEvidence": true,
+        "hasMultipleHumanFacingUrls": false,
+        "hasPageAttribution": false,
+        "hasPacketBackedEvidence": false,
+        "hasPolicyTextEvidence": true,
+        "hasStructuredValidationEvidence": false,
+        "isFallbackOnly": true,
+        "issueCount": 0,
+        "signalCount": 1,
+        "sourceCount": 1,
+        "sourceKinds": [
+          "signal"
+        ],
+        "validationCount": 0
+      },
+      "categoryAlignments": [
+        {
+          "evidenceCategoryId": "third_party_network_cookie_surface",
+          "relation": "owner"
+        }
+      ],
+      "sourceRefs": [
+        {
+          "kind": "signal",
+          "key": "privacy.california_collection_review",
+          "label": "Non-essential activity under GPC",
+          "source": "runtime_artifact_signal"
+        }
+      ],
+      "evidence": {
+        "counts": {},
+        "entities": {},
+        "fetchQuality": "thin_content",
+        "flags": [
+          "explicit_policy_snippet_retained",
+          "contradiction_runtime_artifact_retained"
+        ],
+        "pageUrls": [],
+        "snippets": [
+          "choice-source:sha256:6e1621df9dcc6d647d8cddafabe28f86d97cee80e612ff0a890591d349b1ba2f",
+          "request:net_62",
+          "request:net_43",
+          "cookie:1177e0448e54d7086105d7740dc38c3aa2e9bd491bed91649d37a82c2a443b46",
+          "cookie:cc6db226a4bb5d0b9ed00aa871fc09baa7a65adaeec6f71e2d21aee9fa7c6315"
+        ],
+        "sourceUrls": []
+      },
+      "details": {
+        "family": "california_collection_review",
+        "assessments": [
+          {
+            "policyVersion": "california.collection-review.v8-verified-event",
+            "path": "gpc",
+            "scanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+            "sourceSha256": "6e1621df9dcc6d647d8cddafabe28f86d97cee80e612ff0a890591d349b1ba2f",
+            "rows": [
+              {
+                "evidenceId": "net_62",
+                "entityId": "ent_7509263a9ab6",
+                "entity": "Google LLC",
+                "msFromAnchor": 2437,
+                "purpose": "analytics",
+                "verifiedCollection": true,
+                "processingSignals": [
+                  "google_npa"
+                ],
+                "treatment": "potential_risk"
+              },
+              {
+                "evidenceId": "net_43",
+                "entityId": "ent_02b1b951db45",
+                "entity": "Microsoft Corporation",
+                "msFromAnchor": 2191,
+                "purpose": "session_replay",
+                "presenceBasis": "service_request",
+                "processingSignals": [],
+                "treatment": "potential_risk"
+              },
+              {
+                "evidenceId": "cookie:1177e0448e54d7086105d7740dc38c3aa2e9bd491bed91649d37a82c2a443b46",
+                "entityId": "ent_7509263a9ab6",
+                "entity": "Google LLC",
+                "msFromAnchor": 2879,
+                "purpose": "analytics",
+                "presenceBasis": "cookie_snapshot",
+                "processingSignals": [],
+                "treatment": "potential_risk"
+              },
+              {
+                "evidenceId": "cookie:cc6db226a4bb5d0b9ed00aa871fc09baa7a65adaeec6f71e2d21aee9fa7c6315",
+                "entityId": "ent_7509263a9ab6",
+                "entity": "Google LLC",
+                "msFromAnchor": 2879,
+                "purpose": "analytics",
+                "presenceBasis": "cookie_snapshot",
+                "processingSignals": [],
+                "treatment": "potential_risk"
+              }
+            ],
+            "responseUnverified": 0,
+            "legalConclusion": "not_established"
+          }
+        ]
+      },
+      "concernContext": {
+        "assertionLevels": [
+          "moderate"
+        ],
+        "evidenceStrengthFlags": [
+          "direct_runtime",
+          "policy_text",
+          "fallback_only"
+        ],
+        "externalSurfacingEligibilities": [
+          "eligible"
+        ],
+        "negativeEvidenceFlags": [],
+        "originTypes": [
+          "runtime_artifact"
+        ],
+        "promotionEligibilities": [
+          "eligible"
+        ]
+      },
+      "scoreEffects": [
+        {
+          "appliesTo": "california_posture",
+          "framework": "california",
+          "deductionPoints": 10,
+          "evidenceRefs": [
+            "choice-source:sha256:6e1621df9dcc6d647d8cddafabe28f86d97cee80e612ff0a890591d349b1ba2f"
+          ],
+          "observedActivity": [
+            "ent_02b1b951db45",
+            "ent_7509263a9ab6"
+          ],
+          "policyKey": "california.collection-review.v8-verified-event",
+          "policyVersion": "california.collection-review.v8-verified-event",
+          "reasonCode": "observed_activity_purpose_unresolved"
+        }
+      ],
+      "linkedValidationFinding": null,
+      "observedValue": "choice-source:sha256:6e1621df9dcc6d647d8cddafabe28f86d97cee80e612ff0a890591d349b1ba2f",
+      "presentationDecision": {
+        "confidenceRationale": "Moderate confidence because direct runtime evidence was captured, policy or disclosure text contributed supporting context, but corroboration is still partial.",
+        "rationale": "Consent and tracking findings are main-narrative candidates, with stronger runtime evidence needed for confirmation.",
+        "status": "surface",
+        "downgradeReasons": [],
+        "verificationLabel": "Runtime evidence",
+        "verificationState": "runtime"
+      },
+      "presentation": {
+        "confidenceScore": "0.45",
+        "findingName": "Non-essential activity under GPC",
+        "suggestedFix": "Review effective vendor settings, processing arrangements, sale/sharing purposes and privacy-choice enforcement.",
+        "whyThisMatters": "Observed activity under privacy-choice conditions warrants investigation when recipient purpose remains unresolved. It does not establish a legal violation."
+      },
+      "surfacingDecision": {
+        "appliedRules": [
+          "family.consent_tracking.default",
+          "evidence.context.keep_review"
+        ],
+        "decisionReasons": [
+          "Consent and tracking findings are main-narrative candidates, with stronger runtime evidence needed for confirmation.",
+          "Verified collection; sale/sharing purpose requires review."
+        ],
+        "decisionState": "review",
+        "family": "consent_tracking",
+        "policyVersion": "v2",
+        "reportLane": "main",
+        "reportable": true,
+        "surfaceTier": "support",
+        "supports": [],
+        "unifiedFindingId": "california_collection_review",
+        "usedFamilyDefault": true,
+        "usedFindingOverride": true
+      },
+      "topFindingEligibility": {
+        "candidateTopFindingIds": [],
+        "demotionReasons": [
+          "Consent and tracking findings are main-narrative candidates, with stronger runtime evidence needed for confirmation.",
+          "Verified collection; sale/sharing purpose requires review."
+        ],
+        "eligibility": "no_top_finding_mapping",
+        "groupedUnder": null,
+        "matchedCriteria": [],
+        "missingCorroborators": [],
+        "suppressionReason": "Consent and tracking findings are main-narrative candidates, with stronger runtime evidence needed for confirmation."
+      }
+    },
+    {
+      "unifiedFindingId": "visual_contrast_accessibility_issue",
+      "title": "Visual contrast accessibility issue",
+      "severity": "high",
+      "summary": "Low-contrast text was detected on 1 tested page (2 element failures). Retained examples measured 2.45:1 (required 4.5:1).",
+      "confidenceBand": "moderate",
+      "primaryPageUrl": "https://ergoveritas.com/",
+      "affectedPageCount": 1,
+      "confidenceInputs": {
+        "evidenceQualityFlags": [
+          "fetch_quality:verified_content",
+          "representative_accessibility_examples_retained",
+          "direct_runtime",
+          "page_attributed",
+          "fallback_only"
+        ],
+        "hasConcretePayloadEvidence": false,
+        "hasCorroboratedPositiveSurfaceEvidence": false,
+        "hasDirectRuntimeEvidence": true,
+        "hasKeyPageDiscoveryEvidence": false,
+        "hasReadableSurfaceSnippetEvidence": true,
+        "hasMultipleHumanFacingUrls": false,
+        "hasPageAttribution": true,
+        "hasPacketBackedEvidence": false,
+        "hasPolicyTextEvidence": true,
+        "hasStructuredValidationEvidence": false,
+        "isFallbackOnly": true,
+        "issueCount": 0,
+        "signalCount": 1,
+        "sourceCount": 1,
+        "sourceKinds": [
+          "signal"
+        ],
+        "validationCount": 0
+      },
+      "categoryAlignments": [
+        {
+          "evidenceCategoryId": "perceivability_barriers",
+          "relation": "owner"
+        },
+        {
+          "evidenceCategoryId": "perceivable_content_barriers",
+          "relation": "overlay"
+        },
+        {
+          "evidenceCategoryId": "conformance_posture_litigation_indicators",
+          "relation": "overlay"
+        }
+      ],
+      "sourceRefs": [
+        {
+          "kind": "signal",
+          "key": "accessibility.audit.visual_contrast_accessibility_issue",
+          "label": "Visual contrast accessibility issue",
+          "source": "runtime_artifact_signal"
+        }
+      ],
+      "evidence": {
+        "counts": {
+          "accessibilityExampleNodeCount": 2,
+          "representativeAxeExampleCount": 1,
+          "representativeAxePageCount": 1,
+          "representativeAxeRuleCount": 1
+        },
+        "entities": {
+          "accessibilityRuleCodes": [
+            "color-contrast"
+          ],
+          "accessibilityRuleGroups": [
+            "wcag2aa, wcag143"
+          ],
+          "accessibilitySelectors": [
+            ".pb-6 > p:nth-child(1)",
+            ".pb-6 > p:nth-child(2)"
+          ],
+          "accessibilityImpacts": [
+            "serious"
+          ],
+          "accessibilitySeverities": [
+            "high"
+          ],
+          "accessibilityAxeEvidence": [
+            "{\"description\":\"Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds\",\"failureSummaries\":[\"Fix any of the following: Element has insufficient color contrast of 2.45 (foreground color: #94a3b8, background color: #f8fafc, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1\",\"Fix any of the following: Element has insufficient color contrast of 2.45 (foreground color: #94a3b8, background color: #f8fafc, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1\"],\"help\":\"Elements must meet minimum color contrast ratio thresholds\",\"helpUrl\":\"https://dequeuniversity.com/rules/axe/4.11/color-contrast?application=axeAPI\",\"impact\":\"serious\",\"nodeCount\":2,\"pageUrl\":\"https://ergoveritas.com/\",\"representativeNodes\":[{\"mainDocumentBound\":true,\"selectors\":[\".pb-6 > p:nth-child(1)\"],\"selectorRetention\":{\"version\":\"sanitized_selectors.v1\",\"precision\":\"unchanged\"},\"htmlSnippet\":\"<p></p>\",\"failureSummary\":\"Fix any of the following: Element has insufficient color contrast of 2.45 (foreground color: #94a3b8, background color: #f8fafc, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1\",\"colorContrast\":{\"foregroundColor\":\"#94a3b8\",\"backgroundColor\":\"#f8fafc\",\"contrastRatio\":2.45,\"requiredContrastRatio\":4.5,\"fontSize\":\"9.0pt (12px)\",\"fontWeight\":\"normal\"}},{\"mainDocumentBound\":true,\"selectors\":[\".pb-6 > p:nth-child(2)\"],\"selectorRetention\":{\"version\":\"sanitized_selectors.v1\",\"precision\":\"unchanged\"},\"htmlSnippet\":\"<p></p>\",\"failureSummary\":\"Fix any of the following: Element has insufficient color contrast of 2.45 (foreground color: #94a3b8, background color: #f8fafc, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1\",\"colorContrast\":{\"foregroundColor\":\"#94a3b8\",\"backgroundColor\":\"#f8fafc\",\"contrastRatio\":2.45,\"requiredContrastRatio\":4.5,\"fontSize\":\"9.0pt (12px)\",\"fontWeight\":\"normal\"}}],\"representativeSelectors\":[\".pb-6 > p:nth-child(1)\",\".pb-6 > p:nth-child(2)\"],\"ruleId\":\"color-contrast\",\"severity\":\"high\"}"
+          ],
+          "cpraOptOutEvidenceUrls": [
+            "https://ergoveritas.com/"
+          ],
+          "maxAxeImpact": [
+            "serious"
+          ]
+        },
+        "fetchQuality": "verified_content",
+        "flags": [
+          "representative_accessibility_examples_retained"
+        ],
+        "pageUrls": [
+          "https://ergoveritas.com/"
+        ],
+        "snippets": [
+          "CanonicalEvidenceBundle.json#accessibilityAudit",
+          "Axe example: color-contrast/wcag2aa, wcag143 on https://ergoveritas.com/; selector .pb-6 > p:nth-child(1); nodes 2; impact serious; severity high; help: Elements must meet minimum color contrast ratio thresholds.",
+          "Representative axe examples: 1 rule across 1 page; max impact: serious."
+        ],
+        "sourceUrls": [
+          "https://ergoveritas.com/"
+        ]
+      },
+      "details": {
+        "family": "accessibility",
+        "kind": "visual_contrast_accessibility_issue",
+        "ruleExamples": [
+          "color-contrast"
+        ]
+      },
+      "concernContext": {
+        "assertionLevels": [
+          "moderate"
+        ],
+        "evidenceStrengthFlags": [
+          "direct_runtime",
+          "page_attributed",
+          "fallback_only"
+        ],
+        "externalSurfacingEligibilities": [
+          "eligible"
+        ],
+        "negativeEvidenceFlags": [],
+        "originTypes": [
+          "runtime_artifact"
+        ],
+        "promotionEligibilities": [
+          "eligible"
+        ]
+      },
+      "scoreEffects": [
+        {
+          "appliesTo": "certscore_overall",
+          "framework": "accessibility",
+          "policyKey": "accessibility.visual_contrast_accessibility_issue",
+          "policyVersion": "certscore.accessibility-score.v1",
+          "reasonCode": "verified_wcag_failure",
+          "deductionPoints": 3,
+          "observedActivity": [
+            "[\"13a0c719-c034-4eae-8ec4-ed6d33f25509\",\"https://ergoveritas.com/\",\"distinct\"]"
+          ],
+          "evidenceRefs": [
+            "sha256:10c0aa3dfac397cd98752c91f3cba4159e6764e88d9b2bc0641ecb2b728269ae",
+            "13a0c719-c034-4eae-8ec4-ed6d33f25509:CanonicalEvidenceBundle.json#accessibilityAudit",
+            "document:174AFC75B02A9053021A2FABB0F7CDC8"
+          ]
+        }
+      ],
+      "linkedValidationFinding": null,
+      "observedValue": "CanonicalEvidenceBundle.json#accessibilityAudit",
+      "presentationDecision": {
+        "confidenceRationale": "Moderate confidence because direct runtime evidence was captured, policy or disclosure text contributed supporting context, but corroboration is still partial.",
+        "rationale": "Accessibility findings belong in the main report, with task-blocking patterns receiving stronger prominence than general summaries.",
+        "status": "surface",
+        "downgradeReasons": [],
+        "verificationLabel": "Runtime evidence",
+        "verificationState": "runtime"
+      },
+      "presentation": {
+        "confidenceScore": "0.6",
+        "findingName": "Visual contrast accessibility issue",
+        "suggestedBestPractice": {
+          "label": "W3C",
+          "title": "WCAG 2.1 Technical Requirements",
+          "url": "https://www.w3.org/WAI/standards-guidelines/wcag/"
+        },
+        "suggestedFix": "Perform a targeted DOM audit to resolve the identified WCAG failures. Prioritize Level A remediation: ensure all images have descriptive alt text, interactive elements (buttons/links) have unique aria-labels, and the tabindex sequence is logically structured to prevent keyboard traps in dynamic page components.",
+        "whyThisMatters": "The automated detector retained automated accessibility rule examples for review, signaling structural issues in the DOM. In technical auditing, even a low example count can indicate barriers, such as missing ARIA landmarks or broken keyboard focus, that may affect core navigation or interactive elements for users relying on assistive technologies."
+      },
+      "referenceLabel": "W3C",
+      "referenceUrl": "https://www.w3.org/WAI/standards-guidelines/wcag/",
+      "sourceLabel": "Source",
+      "sourceUrl": "https://ergoveritas.com/",
+      "surfacingDecision": {
+        "appliedRules": [
+          "family.accessibility.default"
+        ],
+        "decisionReasons": [
+          "Accessibility findings belong in the main report, with task-blocking patterns receiving stronger prominence than general summaries."
+        ],
+        "decisionState": "review",
+        "family": "accessibility",
+        "policyVersion": "v2",
+        "reportLane": "main",
+        "reportable": true,
+        "surfaceTier": "secondary",
+        "supports": [],
+        "unifiedFindingId": "visual_contrast_accessibility_issue",
+        "usedFamilyDefault": true,
+        "usedFindingOverride": true
+      },
+      "topFindingEligibility": {
+        "candidateTopFindingIds": [
+          "visual_contrast_accessibility_issue"
+        ],
+        "demotionReasons": [
+          "Accessibility findings belong in the main report, with task-blocking patterns receiving stronger prominence than general summaries."
+        ],
+        "eligibility": "not_projected",
+        "groupedUnder": null,
+        "matchedCriteria": [],
+        "missingCorroborators": [],
+        "suppressionReason": "Accessibility findings belong in the main report, with task-blocking patterns receiving stronger prominence than general summaries."
+      }
+    }
+  ],
+  "pageInventory": {
+    "contractVersion": "certscore.full-site-inventory.v1",
+    "parentScanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+    "pageJobId": "d7817894-0026-455e-89e9-66cf29215cf0",
+    "attemptId": "df6f9818-acf1-46eb-8d51-db5cf547a41c",
+    "executionProfile": "inventory_only",
+    "condition": "Fresh visit, no consent action.",
+    "configurationHash": "93b69f252c4e50335041660bc7753e9cb672ed63625b6c7a16f0a4034a04ac33",
+    "requestedUrl": "https://ergoveritas.com/test1.html",
+    "finalUrl": "https://ergoveritas.com/test1.html",
+    "startedAt": "2026-11-26T02:11:58.243Z",
+    "completedAt": "2026-11-26T02:12:01.523Z",
+    "status": "completed",
+    "limitations": [],
+    "sourceHash": "6e25d99193f4b26cfbc74d4fd7dab4a9c2be55f99a0db23acb2a4041d1755c7d",
+    "occurrences": [],
+    "links": [],
+    "redirects": [
+      "https://ergoveritas.com/test1.html"
+    ],
+    "httpStatus": 200,
+    "retryAfterSeconds": null,
+    "failureKind": null
+  },
+  "pageEvidence": {
+    "siteIntegrityPageCapture": {
+      "parentScanId": "13a0c719-c034-4eae-8ec4-ed6d33f25509",
+      "pageId": "d7817894-0026-455e-89e9-66cf29215cf0",
+      "attemptId": "df6f9818-acf1-46eb-8d51-db5cf547a41c",
+      "configurationHash": "93b69f252c4e50335041660bc7753e9cb672ed63625b6c7a16f0a4034a04ac33",
+      "startedAt": "2026-11-26T02:11:58.243Z",
+      "completedAt": "2026-11-26T02:12:01.523Z",
+      "finalUrl": "https://ergoveritas.com/test1.html"
+    },
+    "siteIntegrityObservation": {
+      "sourceLane": "runtime_evidence",
+      "documentUrl": "https://ergoveritas.com/test1.html",
+      "documentToken": "A1AF3E57F1309697EE8708FB07CEB9CB",
+      "capturedAt": "2026-11-26T02:12:00.438Z",
+      "inspectedLinks": 6,
+      "truncated": false,
+      "links": [
+        {
+          "evidenceRef": "site_integrity:link:3",
+          "destinationDomain": "promotion.example",
+          "concealment": "offscreen_position",
+          "codeProof": {
+            "contractVersion": "certscore.site-integrity-code-proof.v1",
+            "format": "sanitized_dom_excerpt",
+            "lines": [
+              "<main>",
+              "  <div style=\"position:absolute;left:-9999px;top:-9999px\">",
+              "    <a href=\"https://promotion.example/[redacted]\">[link text omitted]</a>",
+              "  </div>",
+              "</main>"
+            ],
+            "highlightedLine": 1,
+            "sanitized": true,
+            "truncated": false,
+            "computedStyle": {
+              "position": "absolute",
+              "overflow": "visible",
+              "fontSizePx": 16
+            },
+            "concealingRect": {
+              "left": -9999,
+              "top": -9999,
+              "right": -9730.16,
+              "bottom": -9975,
+              "width": 268.84,
+              "height": 24
+            },
+            "linkRect": {
+              "left": -9999,
+              "top": -9996,
+              "right": -9730.16,
+              "bottom": -9978,
+              "width": 268.84,
+              "height": 18
+            }
+          }
+        }
+      ],
+      "contractVersion": "certscore.site-integrity-observation.v2",
+      "scope": "additional_page_main_document"
+    },
+    "moduleRun": {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-11-26T02:11:58.244Z",
+      "completedAt": "2026-11-26T02:12:01.521Z",
+      "durationMs": 3277
+    },
+    "domSnapshots": [
+      {
+        "artifactId": "dom_text_pre_consent",
+        "capturedAtMs": 2218,
+        "path": "/tmp/full-site-b33a475a-07de-4c54-90c9-d9a5f95a31c5/dom-text-pre-consent.txt",
+        "url": "https://ergoveritas.com/test1.html",
+        "pagePhase": "network_idle",
+        "consentStateAtTime": "pre_consent",
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "A1AF3E57F1309697EE8708FB07CEB9CB"
+        }
+      }
+    ]
+  }
+}
