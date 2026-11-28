@@ -15,6 +15,7 @@ import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice"
 import type { SiteMetadataProjection } from "@certscore/contracts";
 import { useTableRowLimit } from "./use-table-row-limit";
 import { TableScrollHint } from "./compact-scroll-hint";
+import { RegulatoryReviewFocus } from "./report-posture-tabs";
 import { FullSiteExecutiveSummary } from "./full-site-executive-summary";
 import type { ExecutiveRuntimeCard } from "../../lib/scans/executive-runtime-cards";
 import { ReportInventorySummary } from "./report-inventory-summary";
@@ -97,6 +98,11 @@ const FullSiteRegionContext = createContext<string | undefined>(undefined);
 export function FullSiteRegion({ children }: { children: ReactNode }) {
   const region = useContext(FullSiteRegionContext);
   return region === "Local" ? <span className="rounded-md border border-zinc-300 bg-white px-2 py-1">Scanned locally</span> : children;
+}
+
+const FullSiteReviewFocusContext = createContext<ReactNode>(null);
+export function FullSiteReviewFocus() {
+  return useContext(FullSiteReviewFocusContext);
 }
 
 const FullSiteTimingContext = createContext<ReactNode>(null);
@@ -599,7 +605,14 @@ export function FullSiteWorkspace({
           </div>
         </div> : null}
         <div className="mt-1 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-x-4 lg:gap-x-6 sm:[&>div:first-child]:contents sm:[&>div:first-child>header]:contents sm:[&>div:first-child>header>div:last-child]:col-span-full">
-          <div>{completed && tab !== "resources" ? identity : identityWithoutSharing ?? identity}</div>
+          <div>
+            <FullSiteReviewFocusContext.Provider value={reviewFocus && <RegulatoryReviewFocus
+              focus={reviewFocus}
+              scores={{ gdpr_eprivacy: reviewScore?.value, ccpa_cpra: californiaScore?.score }}
+            />}>
+              {completed && tab !== "resources" ? identity : identityWithoutSharing ?? identity}
+            </FullSiteReviewFocusContext.Provider>
+          </div>
           {reportActionsAvailable ? <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end">{scanNext}</div> : null}
         </div>
         {state &&

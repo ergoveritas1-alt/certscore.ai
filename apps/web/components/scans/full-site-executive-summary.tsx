@@ -71,7 +71,8 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   const review = reviewFocus && score?.priorityReview ? buildRegulatoryAssessmentHighlights(score.priorityReview, reviewFocus, scope, context, reportIdentity, californiaScore?.reviewCoverage) : null;
   const priorities = review?.topIssues ?? score?.priorityReview;
   const priorityCount = review ? review.topIssues.length - review.reviewItemCount : 0;
-  const scoreLabel = californiaReview ? "California score" : singlePage ? "Score" : "Site score";
+  const scopeLabel = californiaReview ? "Starting-page score" : "Site score";
+  const scoreLabel = singlePage ? (californiaReview ? "California score" : "Score") : scopeLabel;
   const highlights = review?.highlights ?? (priorities && !singlePage ? buildAssessmentHighlightsPresentation(priorities, scope, context) : null);
   return <section id="report-overview" aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-5 py-3">
@@ -89,7 +90,7 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
             </div>
           </div>
           <div className="min-w-0 border-l border-zinc-200 pl-3 lg:pl-4">
-            {!singlePage ? <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Site score</p> : null}
+            {!singlePage ? <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{scopeLabel}</p> : null}
             <p className="mt-2 text-lg font-semibold text-zinc-950">{californiaReview && value === null && (loadingSavedResult || pending) ? loadingSavedResult ? "Loading saved assessment" : "Assessment in progress" : californiaReview && priorities?.length === 0 ? californiaPresentation.emptyLabel : priorities ? review?.reviewItemCount ? `${priorityCount} priority ${priorityCount === 1 ? "finding" : "findings"} · ${review.reviewItemCount} review ${review.reviewItemCount === 1 ? "item" : "items"}` : `${priorities.length} ${reviewFocus ? "top" : "priority"} ${priorities.length === 1 ? "issue" : "issues"}` : loadingSavedResult ? "Loading saved assessment" : pending ? "Assessment in progress" : "Assessment unavailable"}</p>
             {!singlePage ? <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? loadingSavedResult ? "Loading sitewide page totals" : "Waiting for page outcomes" : `${scannedPages} pages scanned`}</p> : null}
           </div>

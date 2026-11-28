@@ -49,7 +49,7 @@ import type { FullSiteScanNoticeData } from "../../dashboard/full-site-scan-noti
 import { afterClickCoverageLabel } from "../after-action-summary";
 import { DisclosureChevron, StatusBadge, FindingRow, EvidenceTools } from "../report-finding-row";
 import { describeSiteTechnology } from "@certscore/contracts";
-import { FullSiteWorkspace, FullSiteTiming, FullSiteRegion, FullSiteScanDuration } from "../full-site-workspace";
+import { FullSiteWorkspace, FullSiteReviewFocus, FullSiteTiming, FullSiteRegion, FullSiteScanDuration } from "../full-site-workspace";
 import type { ReactNode } from "react";
 import { reportEyebrow, reportSectionTitle } from "../report-typography";
 import { InventorySortProvider, InventorySortHeader, InventorySortedBody } from "../inventory-sorting";
@@ -185,12 +185,11 @@ function ReportIdentity({
 }) {
   if (report.fullSite && !workspaceIdentity) return null;
   const visualEvidence = report.scan.visualEvidenceHref ?? null;
-  const reviewFocusControl = report.resultDisposition === "no_go" ? null : <ReportPostureSelector report={report} />;
   if (workspaceIdentity) return <FullSiteIdentity
     scanId={report.scan.id} host={report.scan.host} url={report.scan.url}
     coverageNote={<ReviewFocusCoverageNote report={report} />} createdAt={<ReportCreatedAt scan={report.scan} />} duration={<FullSiteScanDuration />} visualEvidenceHref={visualEvidence}
     region={<span className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-2 py-1"><ScanFromMarker {...getScanFromMarkerInput(report.scan.originCode)} selected />Scanned from {report.scan.origin}</span>}
-    reviewFocusControl={reviewFocusControl}
+    reviewFocusControl={<FullSiteReviewFocus />}
     actions={hideShare ? null : <ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
   />;
   return (
@@ -211,7 +210,7 @@ function ReportIdentity({
             <ScanFromMarker {...getScanFromMarkerInput(report.scan.originCode)} selected />
             Scanned from {report.scan.origin}
           </span></FullSiteRegion>
-          {reviewFocusControl}
+          {report.resultDisposition !== "no_go" && <ReportPostureSelector report={report} />}
           {workspaceIdentity ? <FullSiteTiming /> : null}
         </div>
         {enhancedActions && !workspaceIdentity ? (
