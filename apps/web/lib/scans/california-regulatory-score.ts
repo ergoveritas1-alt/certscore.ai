@@ -402,3 +402,19 @@ export function deriveCaliforniaRegulatoryScore(input: {
     ...(assessment.contractVersion === "certscore.california-privacy-review.v5" || assessment.contractVersion === "certscore.california-privacy-review.v6" || (assessment.contractVersion === "certscore.california-privacy-review.v7" || (assessment.contractVersion === "certscore.california-privacy-review.v8" || (assessment.contractVersion === "certscore.california-privacy-review.v9" || assessment.contractVersion === "certscore.california-privacy-review.v10"))) ? {rightsAssessment:assessment.rightsAssessment,collectionNoticeAssessment:assessment.collectionNoticeAssessment} : {}),
     ...(assessment.contractVersion === "certscore.california-privacy-review.v6" || (assessment.contractVersion === "certscore.california-privacy-review.v7" || (assessment.contractVersion === "certscore.california-privacy-review.v8" || (assessment.contractVersion === "certscore.california-privacy-review.v9" || assessment.contractVersion === "certscore.california-privacy-review.v10")))?{saleSharingAssessment:assessment.saleSharingAssessment}:{}) };
 }
+
+/** Apply the existing California rules to the verified starting-page review and
+ * eligible shared findings from the retained crawl. The underlying review
+ * coverage still describes the starting-page visit. */
+export function deriveCaliforniaFullSiteScore(
+  startingPage: Parameters<typeof deriveCaliforniaRegulatoryScore>[0],
+  additionalFindings: readonly UnifiedFindingDisplayPacket[],
+) {
+  const base = deriveCaliforniaRegulatoryScore(startingPage);
+  if (base.score === null) return null;
+  const result = deriveCaliforniaRegulatoryScore({
+    ...startingPage,
+    unifiedFindings: [...startingPage.unifiedFindings, ...additionalFindings],
+  });
+  return { score: result.score, scope: "full_site" as const, policyVersion: result.policyVersion };
+}

@@ -22,7 +22,7 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   reviewFocus?: ReportReviewFocus;
   reportIdentity?: AssessmentReportIdentity;
   californiaScore?: CaliforniaRegulatoryScore | null;
-  score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages"> & { limitedPages?: number; deductions?: ScoreDeductions }) | null;
+  score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages" | "californiaSiteScore"> & { limitedPages?: number; deductions?: ScoreDeductions }) | null;
   pending: boolean;
   loadingSavedResult?: boolean;
   statusLabel?: string;
@@ -63,17 +63,18 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   // The two policies interpret the same persisted evidence independently.
   const californiaReview = reviewFocus === "ccpa_cpra";
   const californiaPresentation = californiaAssessmentPresentation(californiaScore?.reviewCoverage);
-  const value = californiaReview ? californiaScore?.score ?? null : score?.value ?? null;
+  const californiaSiteScore = score?.californiaSiteScore?.score;
+  const value = californiaReview ? californiaSiteScore ?? californiaScore?.score ?? null : score?.value ?? null;
   const color = getGdprEprivacyPostureTone(value).ringColor;
   const singlePage = scannedPages === 1;
   const scope = singlePage ? { kind: "page" as const } : { kind: "site" as const, scannedPages: scannedPages ?? score?.scoredPages ?? null };
-  const limitedSitePages = californiaReview ? 0 : score?.limitedPages ?? 0;
-  const limitedCoverage = californiaReview ? californiaScore?.coverage === "limited" : limitedSitePages > 0;
+  const limitedSitePages = californiaReview && californiaSiteScore == null ? 0 : score?.limitedPages ?? 0;
+  const limitedCoverage = californiaReview ? californiaScore?.coverage === "limited" || limitedSitePages > 0 : limitedSitePages > 0;
   const context = { score: value, coverage: { state: limitedCoverage ? "limited" as const : "unknown" as const } };
   const review = reviewFocus && score?.priorityReview ? buildRegulatoryAssessmentHighlights(score.priorityReview, reviewFocus, scope, context, reportIdentity, californiaScore?.reviewCoverage) : null;
   const priorities = review?.topIssues ?? score?.priorityReview;
   const priorityCount = review ? review.topIssues.length - review.reviewItemCount : 0;
-  const scopeLabel = californiaReview ? "Starting-page score" : "Site score";
+  const scopeLabel = californiaReview ? californiaSiteScore == null ? "Starting-page score" : "California site score" : "Site score";
   const scoreLabel = singlePage ? (californiaReview ? "California score" : "Score") : scopeLabel;
   const highlights = review?.highlights ?? (priorities && !singlePage ? buildAssessmentHighlightsPresentation(priorities, scope, context) : null);
   return <section id="report-overview" aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
@@ -99,6 +100,7 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
         </div>
         {!score && !californiaReview ? <p className="mt-2 text-xs text-zinc-500">{loadingSavedResult ? "The sitewide score will appear when the saved result loads." : pending ? `${singlePage ? "The page score" : "The site-wide score"} will appear when the assessment is ready.` : `${singlePage ? "Page scoring" : "Site-wide scoring"} is unavailable for this scan.`}</p> : null}
         {californiaReview && value === null && !pending && !loadingSavedResult ? <p className="mt-2 text-xs text-zinc-600">{californiaPresentation.unavailableScore}</p> : null}
+        {californiaReview && californiaSiteScore != null && !singlePage ? <p className="mt-2 text-xs text-zinc-600">Privacy notices and choices were assessed on the starting page.</p> : null}
         {limitedSitePages > 0 ? <p className="mt-1 text-xs text-amber-800">{limitedSitePages} {limitedSitePages === 1 ? "page has" : "pages have"} limited scoring coverage.</p> : null}
         </div>
         <div data-overview-block>{snapshot ?? <p className="py-3 text-sm text-zinc-500">The signal snapshot will appear when the starting-page assessment is ready.</p>}</div>

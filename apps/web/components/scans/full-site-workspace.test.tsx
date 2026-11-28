@@ -45,13 +45,16 @@ test("switching posture previews the score shown in the destination overview", (
     configurationHash: "fixture", startedAt: "2026-11-25T08:00:00Z", completedAt: "2026-11-25T08:03:00Z",
     homepageDurationMs: null, stopReason: null, discoveryExhausted: true, discovered: 29, peakWorkers: 4, pauseMs: null,
   }, []);
-  function SavedPreview({ siteScore }: { siteScore: number | null }) {
+  function SavedPreview({ siteScore, californiaSiteScore }: { siteScore: number | null; californiaSiteScore?: number }) {
     const cache = useFullSiteReportContinuity()!;
     if (siteScore !== null) cache.preview = {
       version: "full-site-report-preview.v1",
       summary: { ...summary, resources: undefined, counts: { ...summary.counts, completed: 28, partial: 1 } },
       score: { value: siteScore, scoredPages: 29, limitedPages: 1, assessedNonEssentialStorage: 6, priorityReview: [],
-        version: "full-site-distinct-findings.v12", scope: "Site" },
+        version: "full-site-distinct-findings.v12", scope: "Site",
+        californiaSiteScore: californiaSiteScore === undefined ? undefined : {
+          score: californiaSiteScore, scope: "full_site", policyVersion: report.californiaScore.policyVersion,
+        } },
       cacheable: true, finalizationStartedAt: null, networkOverview: buildNetworkInventoryOverview([]),
       hiddenLinks: null, hiddenLinkDestinations: [], timing: { crawlStartedAt: null }, homepageUrl: report.scan.url,
       coverage: { discovered: 29, allowed: 29, unknown: 0, blocked: 0, outOfScope: 0 },
@@ -59,10 +62,10 @@ test("switching posture previews the score shown in the destination overview", (
     };
     return null;
   }
-  function render(focus: "ccpa_cpra" | "gdpr_eprivacy", siteScore: number | null) {
+  function render(focus: "ccpa_cpra" | "gdpr_eprivacy", siteScore: number | null, californiaSiteScore?: number) {
     const router = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
     return renderToStaticMarkup(<AppRouterContext.Provider value={router}><FullSiteReportContinuity scanId={report.scan.id} cacheScope="test">
-      <SavedPreview siteScore={siteScore} />
+      <SavedPreview siteScore={siteScore} californiaSiteScore={californiaSiteScore} />
       <ShadowScanReport header={<header />} variant="timeline" report={report} reviewFocus={focus} />
     </FullSiteReportContinuity></AppRouterContext.Provider>);
   }
@@ -79,6 +82,10 @@ test("switching posture previews the score shown in the destination overview", (
     assert.match(ca, new RegExp('title="' + siteScore + '/100" data-posture-preview-score'));
     assert.doesNotMatch(ca, /title="67\/100"/);
   }
+  const california = render("ccpa_cpra", 6, 70);
+  assert.match(california, /aria-label="California site score 70 out of 100"/);
+  assert.match(california, /Privacy notices and choices were assessed on the starting page/);
+  assert.match(render("gdpr_eprivacy", 6, 70), /title="70\/100" data-posture-preview-score/);
   const loading = render("ccpa_cpra", null);
   assert.match(loading, /aria-label="Review focus"/);
   assert.doesNotMatch(loading, /data-posture-preview-score/);

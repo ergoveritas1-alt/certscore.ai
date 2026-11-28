@@ -3,7 +3,7 @@ import test from "node:test";
 import { californiaPrivacyReviewSchema } from "@certscore/contracts";
 import { crawlObservationSchema, type CrawlObservation } from "@website-signal-risk-scanner/shared";
 import { projectAdditionalPageSiteIntegrity } from "../../server/scans/site-integrity-projection";
-import { deriveCaliforniaRegulatoryScore } from "./california-regulatory-score";
+import { deriveCaliforniaFullSiteScore, deriveCaliforniaRegulatoryScore } from "./california-regulatory-score";
 import fixture from "./test-fixtures/ergoveritas-california-scopes.json";
 import { buildUnifiedFindingDisplayPackets, type UnifiedFindingDisplayPacket } from "./unified-findings";
 
@@ -29,7 +29,7 @@ function score(findings: UnifiedFindingDisplayPacket[]) {
   return deriveCaliforniaRegulatoryScore({ assessment, checklistRows: [], unifiedFindings: findings });
 }
 
-test("Ergoveritas California starting-page score is 83 and the separate site simulation is 70", () => {
+test("Ergoveritas California starting-page score is 83 and the separate full-crawl score is 70", () => {
   const startingPage = score(home);
   assert.equal(startingPage.scope, "starting_page");
   assert.equal(startingPage.score, 83);
@@ -39,8 +39,12 @@ test("Ergoveritas California starting-page score is 83 and the separate site sim
   const { observation } = integrity.details.projection;
   assert.equal(observation.documentUrl, "https://ergoveritas.com/test1.html");
   assert.deepEqual(observation.links.map(link => link.destinationDomain), ["promotion.example"]);
+  const input = { assessment, checklistRows: [], unifiedFindings: home };
+  const site = deriveCaliforniaFullSiteScore(input, page);
+  assert.deepEqual(site, { score: 70, scope: "full_site", policyVersion: startingPage.policyVersion });
+  assert.deepEqual(deriveCaliforniaFullSiteScore(input, [...page, ...page]), site);
+  assert.equal(deriveCaliforniaFullSiteScore({ ...input, assessment: null }, page), null);
   const simulated = score([...home, ...page]);
-  assert.equal(simulated.score, 70);
   assert.deepEqual(simulated.deductions.filter(item => item.findingId !== integrity.unifiedFindingId), startingPage.deductions);
   assert.deepEqual(score([...home, ...page, ...page]), simulated);
 });

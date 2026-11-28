@@ -157,12 +157,16 @@ test("full-site Word preserves the stored site score, page scope and shared prio
     inventoryHref: "/app/scans/fixture/resources",
     summary: { state: { requested: { maxPages: 2, concurrency: 1, waitSeconds: 0 }, effective: { concurrency: 1, waitSeconds: 0 }, region: "eu_de", status: "completed", stopReason: "page_limit", startedAt: "2026-10-21T23:18:00Z", completedAt: "2026-10-21T23:19:00Z", homepageDurationMs: 1000 },
       counts: { completed: 2, partial: 0, blockedFailed: 0, pending: 0, excluded: 0 }, totals: { services: 1, cookies: 0, requestEvents: 1, embedInstances: 0, additionalServices: 1 }, timing: { medianPageMs: 1000, slowestPageMs: 1000, sampleCount: 2 } },
-    score: { value: 72, scope: "Observed site pages", priorityReview: [{ ...priority, pages: [{ id: "page-two", url: "https://example.test/second", homepage: false }] }] },
+    score: { value: 72, scope: "Observed site pages", californiaSiteScore: { score: 70, scope: "full_site", policyVersion: report.californiaScore.policyVersion }, priorityReview: [{ ...priority, pages: [{ id: "page-two", url: "https://example.test/second", homepage: false }] }] },
     pages: [{ id: "page-two", url: "https://example.test/second", status: "completed", services: 1, cookies: 0, requestEvents: 1, embedInstances: 0, limitations: [] }],
     resources: [{ occurrence: { kind: "service", label: "Owned service evidence", vendor: "Owned service" }, purposes: ["Analytics"], pageIds: ["page-two"] }],
   } as never;
   const before = structuredClone(report), content = text(parts(await renderCanonicalReportDocx(report)).get("word/document.xml")!);
   assert.match(content, /SCORE/); assert.match(content, /Full-site score/);
+  const california = { ...report, reviewFocus: "ccpa_cpra" as const, reviewFocusLabel: "CCPA/CPRA" as const };
+  const californiaXml = parts(await renderCanonicalReportDocx(california)).get("word/document.xml")!;
+  assert.match(text(californiaXml), /CCPA\/CPRA \| Full-site score/);
+  assert.match(californiaXml, /title="Score 70\/100"/);
   assert.match(content, /https:\/\/example.test\/second/); assert.match(content, /Owned service evidence/);
   assert.ok(!content.includes(pdfPriorityReview(report).highlights.text), "Export omits the highlights paragraph");
   assert.deepEqual(report, before);

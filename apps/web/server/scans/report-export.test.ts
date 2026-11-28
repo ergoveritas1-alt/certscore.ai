@@ -216,6 +216,14 @@ test("full-site JSON and PDF retain scope while homepage projection and score in
   assert.match(pdf.toString("latin1"),/Full-site score/);
   assert.equal(report.fullSite?.score?.value,51);
   assert.deepEqual(report.score, { value: 51, scope: "full_site" });
+  const california = buildCanonicalReportExport(record, {
+    ...fullSite, score: { ...fullSite.score, californiaSiteScore: { score: 70, scope: "full_site", policyVersion: report.californiaScore.policyVersion } },
+  }, "ccpa_cpra")!;
+  assert.equal(california.fullSite?.score?.californiaSiteScore?.score, 70);
+  assert.deepEqual(california.californiaScore, baseline.californiaScore);
+  const californiaPdf = renderCanonicalReportPdf(california).toString("latin1");
+  assert.match(californiaPdf, /CCPA\/CPRA \| Full-site score/);
+  assert.match(californiaPdf, /23 Tf[^\n]*\(70\)/);
   assert.match(pdf.toString("latin1"), /23 Tf[^\n]*\(51\)/);
   assert.match(pdf.toString("latin1"),/robots.txt restricts crawl coverage/);
 });

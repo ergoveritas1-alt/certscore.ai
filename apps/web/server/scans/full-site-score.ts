@@ -1,3 +1,5 @@
+import { deriveCaliforniaFullSiteScore } from "../../lib/scans/california-regulatory-score";
+import { retainedConsentAssessment } from "../../lib/scans/after-action-report-eligibility";
 import { siteIntegrityPolicyForScoreVersion } from "../../lib/scans/site-integrity-score-policy";
 import { EMBED_SCORE_ROW_IDS, mergeEmbedScoringEvidence } from "../../lib/scans/embed-scoring-evidence";
 import { orderedEvidencePrefetch } from "./ordered-evidence-prefetch";
@@ -11,7 +13,7 @@ import { projectScanReportNoGo } from "../../lib/scans/scan-report-disposition";
 import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { siteIntegrityProjectionSchema, cookieEventSchema, networkEventSchema, iframeEventSchema, runtimeEvidenceEventSchema, scanModuleRunSchema, collectionSurfaceObservationSchema } from "@certscore/contracts";
+import { readCaliforniaPrivacyReviewFromConsent, siteIntegrityProjectionSchema, cookieEventSchema, networkEventSchema, iframeEventSchema, runtimeEvidenceEventSchema, scanModuleRunSchema, collectionSurfaceObservationSchema } from "@certscore/contracts";
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { query, readFullSiteArtifact, type FullSiteCrawlRow } from "@website-signal-risk-scanner/db";
 import type { CrawlPage, CrawlObservation } from "@website-signal-risk-scanner/shared";
@@ -47,6 +49,8 @@ const HISTORICAL_VERSIONS = [
   ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"],
   ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"],
 ] as const;
+const californiaSiteScoreSchema = z.object({ score: z.number().int().min(0).max(100).nullable(),
+  scope: z.literal("full_site"), policyVersion: z.string() });
 const persistedScoreSchema = z.object({
   version: z.enum([VERSION, "full-site-distinct-findings.v12", "full-site-distinct-findings.v11", "full-site-distinct-findings.v10", "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
@@ -56,6 +60,7 @@ const persistedScoreSchema = z.object({
     rules: z.array(z.object({ ruleId: z.string(), label: z.string(), policyDeductionPoints: z.number().int().positive(),
       decisionVerification: z.enum(["confirmed", "unconfirmed", "not_applicable", "unknown"]) })),
   })).optional(),
+  californiaSiteScore: californiaSiteScoreSchema.nullable().optional(),
   evidencePages: z.array(sitewideEvidencePageSchema),
   siteIntegrity: siteIntegritySiteReportSchema,
   assessedStorageRecords: z.array(z.record(z.unknown())),
@@ -77,6 +82,7 @@ export type FullSiteScore = {
   scope: string;
   priorityReview: SitePriorityFinding[];
   deductions?: z.infer<typeof persistedScoreSchema>["deductions"];
+  californiaSiteScore?: z.infer<typeof californiaSiteScoreSchema> | null;
   evidencePages?: SitewideEvidencePage[];
   siteIntegrity?: SiteIntegritySiteReport;
   assessedNonEssentialStorage: number | null;
@@ -169,6 +175,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
   if (!home || projectScanReportNoGo(home)) return null;
   const canonical = getPersistedCanonicalReportProjection(home);
   if (!canonical) return null;
+  const assessment = readCaliforniaPrivacyReviewFromConsent(retainedConsentAssessment(home));
   const scoreKey = (version: string, postureVersion: string) => createHash("sha256").update(JSON.stringify([
     version, PRIORITY_VERSION, postureVersion, snapshot.report_projection_payload_sha256,
     crawl.configuration_hash, pages.map(p => [p.id, p.status, p.observation?.sourceHash]),
@@ -178,13 +185,13 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
   // every exact pair rather than overwriting earlier keys in a version-only map.
   const historicalKeys = HISTORICAL_VERSIONS.map(([version, posture]) => ({ version, key: scoreKey(version, posture) }));
   const saved = z.object({ fullSiteScore: z.object({sourceHash: z.string(), score: z.unknown()}) }).safeParse(crawl.policy_json);
+  let retainedSiteScore: FullSiteScore | undefined;
+  let retainedSiteScoreKey = key;
   if (saved.success && [key, ...historicalKeys.map(row => row.key)].includes(saved.data.fullSiteScore.sourceHash)) {
     const parsed = persistedScoreSchema.safeParse(saved.data.fullSiteScore.score);
     const historical = parsed.success && historicalKeys.some(row => row.version === parsed.data.version && row.key === saved.data.fullSiteScore.sourceHash);
     if (parsed.success && parsed.data.deductions && !parsed.data.deductions.some(row => row.family === "gpc" || row.rules.some(rule => rule.ruleId === "gpc_response")) &&
         ((parsed.data.version === VERSION && saved.data.fullSiteScore.sourceHash === key) || historical)) {
-      // Preserve the source-bound historical amount when a scoring weight changes.
-      if (parsed.data.version !== VERSION) return groupStoredReportScorePriorities({ ...parsed.data, priorityReview: parsed.data.priorityReview.filter(row => row.id !== "gpc_response") });
       const homeScore = deriveCanonicalOverallScoreForReport({
         scanRecord: home,
         checklistRows: canonical.checklistRows,
@@ -193,10 +200,16 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
       // Older cached site results may have a null value solely because the
       // report suppressed scores for incomplete consent inspection. Reassess
       // those results from retained page evidence so site-wide effects remain intact.
-      if (parsed.data.value !== null || homeScore === null) return groupStoredReportScorePriorities({ ...parsed.data, priorityReview: parsed.data.priorityReview.filter(row => row.id !== "gpc_response") });
+      // Historical GDPR amounts stay fixed while the California crawl score is materialized.
+      if (parsed.data.version !== VERSION || parsed.data.value !== null || homeScore === null) {
+        retainedSiteScore = groupStoredReportScorePriorities({ ...parsed.data, priorityReview: parsed.data.priorityReview.filter(row => row.id !== "gpc_response") });
+        if (retainedSiteScore.californiaSiteScore !== undefined || assessment?.scanId !== crawl.scan_id || crawl.status !== "completed") return retainedSiteScore;
+        retainedSiteScoreKey = saved.data.fullSiteScore.sourceHash;
+      }
     }
   }
-  const existing = cache.get(key);
+  const cacheKey = retainedSiteScore ? `${retainedSiteScoreKey}:california` : key;
+  const existing = cache.get(cacheKey);
   if (existing && existing.expiresAt > Date.now()) {
     const result = await existing.result;
     if (!existing.complete) options.onIncompleteEvidence?.();
@@ -210,7 +223,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
       url: homePageEvidence?.finalUrl ?? homePageEvidence?.url ?? "",
       sourceHash: String(snapshot.report_projection_payload_sha256), homepage: true,
     }, canonical.checklistRows)];
-    const scoringFindings = [...canonical.globalUnifiedFindings];
+    const additionalFindings: typeof canonical.globalUnifiedFindings = [];
     const homeIntegrity = selectSiteIntegrityFinding(canonical.ownerUnifiedFindings);
     const homeProjection = siteIntegrityProjectionSchema.safeParse(home.runtimeArtifacts?.siteIntegrity);
     const siteIntegrity: SiteIntegritySiteReport = { findings: homeIntegrity ? [homeIntegrity] : [], coverage: pages.filter(page => !["excluded", "cancelled"].includes(page.status)).map(page => ({
@@ -253,7 +266,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
       const evidence = packet.value;
       try {
         const accessibilityProjection = projectAdditionalPageAccessibilityAudit(evidence, observation, crawl.scan_id);
-        if (accessibilityProjection) scoringFindings.push(...buildUnifiedFindingDisplayPackets({
+        if (accessibilityProjection) additionalFindings.push(...buildUnifiedFindingDisplayPackets({
           runtimeArtifacts: { accessibilityAudit: accessibilityProjection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
         }));
         const integrityProjection = projectAdditionalPageSiteIntegrity(evidence, observation, crawl.scan_id);
@@ -264,7 +277,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
           const integrityPackets = buildUnifiedFindingDisplayPackets({
             runtimeArtifacts: { siteIntegrity: integrityProjection, siteIntegrityPolicyVersion: siteIntegrityPolicyForScoreVersion(home.snapshot?.score_version) }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
           });
-          scoringFindings.push(...integrityPackets);
+          additionalFindings.push(...integrityPackets);
           const finding = selectSiteIntegrityFinding(integrityPackets);
           if (finding) siteIntegrity.findings.push(finding);
         }
@@ -288,23 +301,27 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     const priorityReview = buildSitePriorityReview(checklistRows, [
       ...(homePage ? [{ id: homePage.id, url: homePage.finalUrl ?? homePage.url, homepage: true, findingIds: [...homeFindingIds, ...executive.map(finding => finding.id)] }] : []),
       ...sources.map(source => { const page = pages.find(page => page.id === source.pageId)!; return { id: page.id, url: page.finalUrl ?? page.url, homepage: false, findingIds: source.findingIds }; }),
-    ], executive, canonical.ownerUnifiedFindings, siteIntegrity);
+    ], executive, [...canonical.ownerUnifiedFindings, ...additionalFindings], siteIntegrity);
     const assessedNonEssentialStorage = countAssessedNonEssentialStorage(checklistRows);
     const assessedStorageRecords = (checklistRows.find(row => row.id === "pre_consent_cookies_storage")?.criticalEvidence.retainedEvidence.eligiblePreconsentCookieStorageRows ?? []) as Record<string, unknown>[];
-    const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: home, checklistRows, unifiedFindings: scoringFindings });
-    const result = { siteIntegrity, assessedStorageRecords, evidencePages, assessedNonEssentialStorage, version: VERSION, priorityReview, value: explanation?.score ?? null, deductions: explanation?.deductions ?? [], scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface, embed, site-integrity and any already-retained verified accessibility evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
+    const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: home, checklistRows, unifiedFindings: [...canonical.globalUnifiedFindings, ...additionalFindings] });
+    const californiaSiteScore = crawl.status === "completed" && scoredPages > 1 && !evidenceReadFailed && assessment?.scanId === crawl.scan_id
+      ? deriveCaliforniaFullSiteScore({ assessment, checklistRows: canonical.checklistRows, unifiedFindings: canonical.ownerUnifiedFindings }, additionalFindings)
+      : null;
+    const computedSiteScore = { siteIntegrity, assessedStorageRecords, evidencePages, assessedNonEssentialStorage, version: VERSION, priorityReview, value: explanation?.score ?? null, deductions: explanation?.deductions ?? [], scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface, embed, site-integrity and any already-retained verified accessibility evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
     // Persist the versioned, evidence-bound result once; table filtering and downloads reuse it.
     // Failed/partial scan pages are permanent coverage limitations, not failed reads.
     // Persist their honest limited result; retryable/unverifiable evidence reads must not
     // become a durable cache entry that prevents a later verified assessment.
+    const result = { ...(retainedSiteScore ?? computedSiteScore), californiaSiteScore };
     entry.complete = !evidenceReadFailed;
-    if (!evidenceReadFailed) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: key, score: result})]);
+    if (!evidenceReadFailed) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: retainedSiteScoreKey, score: result})]);
     return result;
   })();
   entry.result = pending;
-  cache.set(key, entry);
+  cache.set(cacheKey, entry);
   if (cache.size > 32) cache.delete(cache.keys().next().value!);
-  pending.catch(() => cache.delete(key));
+  pending.catch(() => cache.delete(cacheKey));
   const result = await pending;
   if (!entry.complete) options.onIncompleteEvidence?.();
   return result;

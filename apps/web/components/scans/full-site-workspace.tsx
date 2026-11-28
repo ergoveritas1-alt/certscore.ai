@@ -608,7 +608,7 @@ export function FullSiteWorkspace({
           <div>
             <FullSiteReviewFocusContext.Provider value={reviewFocus && <RegulatoryReviewFocus
               focus={reviewFocus}
-              scores={{ gdpr_eprivacy: reviewScore?.value, ccpa_cpra: californiaScore?.score }}
+              scores={{ gdpr_eprivacy: reviewScore?.value, ccpa_cpra: reviewScore?.californiaSiteScore?.score ?? californiaScore?.score }}
             />}>
               {completed && tab !== "resources" ? identity : identityWithoutSharing ?? identity}
             </FullSiteReviewFocusContext.Provider>

@@ -735,6 +735,7 @@ export async function loadFullSiteReportPreview(scanId: string, retainedCrawl?: 
       // bound evidence. Bulk page/checklist and inventory evidence stays deferred.
       score: score ? { version: score.version, value: score.value, scoredPages: score.scoredPages,
         limitedPages: score.limitedPages, scope: score.scope, priorityReview: score.priorityReview,
+        californiaSiteScore: score.californiaSiteScore,
         assessedNonEssentialStorage: score.assessedNonEssentialStorage } : null,
       finalizationStartedAt: fullSiteFinalizationStartedAt(crawl, records), networkOverview,
       forms: { count: forms.reduce((n, form) => n + (form?.inventory.forms.length ?? 0), 0),

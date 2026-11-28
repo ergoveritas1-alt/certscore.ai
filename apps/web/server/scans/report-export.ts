@@ -382,6 +382,9 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     "CCPA/CPRA review assesses privacy notices, California rights, request methods, collection notices, sale/sharing disclosures and choices.",
     privacyAuditEvidence ? `${privacyAuditEvidence.controls.length} observed privacy-choice/settings surfaces${privacyAuditEvidence.contractVersion === "certscore.privacy-audit-evidence.v2" && privacyAuditEvidence.controlCandidates.length ? ` and ${privacyAuditEvidence.controlCandidates.length} link candidates needing proof` : ""}, plus ${privacyAuditEvidence.notices.length} notice documents, are retained in the bounded workpaper. Presence does not establish a working opt-out or adequate disclosure.`
       : "Verified California privacy-choice and notice evidence is unavailable; absence and disclosure adequacy remain unknown.",
+    ...(fullSite?.score?.californiaSiteScore?.score != null ? [
+      `California site score: ${fullSite.score.californiaSiteScore.score}/100. Privacy notices and choices were assessed on the starting page.`,
+    ] : []),
     californiaScore.score === null ? californiaAssessmentPresentation(californiaScore.reviewCoverage).unavailableScore :
       `California starting-page score: ${californiaScore.score}/100.`,
   ];

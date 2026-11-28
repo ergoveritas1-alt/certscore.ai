@@ -35,7 +35,7 @@ export async function fullSiteReportSourceKey(scanId: string) {
       and not exists(select 1 from full_site_pages p where p.scan_id=c.scan_id and p.status in ('queued','dispatching','active'))`, [scanId]);
   if (!row) return null;
   const revision = getRuntimeVersionInfo(process.env).gitSha ?? "local";
-  return hash(JSON.stringify(["full-site-report-cache.v1", revision, scanId, row.fingerprint]));
+  return hash(JSON.stringify(["full-site-report-cache.v2", revision, scanId, row.fingerprint]));
 }
 
 export async function readFullSiteReportCache(scanId: string, sourceKey: string): Promise<unknown | null> {

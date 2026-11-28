@@ -32,7 +32,8 @@ const object = (value: unknown): Record<string, unknown> => value && typeof valu
 export function reportExecutiveSummary(report: CanonicalReportExport): ExecutiveSummaryContent {
   const review = pdfPriorityReview(report), groups = pdfReviewGroups(report), narratives = pdfNarrativeFindings(report);
   const priorityCount = review.topIssues.length - review.reviewItemCount;
-  const rawScore = report.reviewFocus === "ccpa_cpra" ? report.californiaScore?.score : report.score?.value;
+  const californiaSiteScore = report.fullSite?.score?.californiaSiteScore?.score;
+  const rawScore = report.reviewFocus === "ccpa_cpra" ? californiaSiteScore ?? report.californiaScore?.score : report.score?.value;
   const score = typeof rawScore === "number" && Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 100 ? rawScore : null;
   const otherIds = new Set(pdfOtherReviewGroups(report).flatMap(group => group.observations.map(observation => observation.id)));
   const covered = new Set(review.topIssues.flatMap(pdfPrioritySourceIds));
@@ -77,7 +78,7 @@ export function reportExecutiveSummary(report: CanonicalReportExport): Executive
       if (topic.id === "policy" && report.reviewFocus === "ccpa_cpra") status = families.some(row => ["review", "assessed_gap"].includes(row.status)) ? "Review" : families.some(row => row.status === "unknown") ? "Limited" : families.length ? "Observed" : "Not tested";
       return { title: topic.title, status, target: topic.id };
     });
-  return { score, scoreScope: report.reviewFocus === "ccpa_cpra" || report.score.scope === "starting_page" ? "Starting-page score" : "Full-site score", rating: score === null ? "Unavailable" : report.reviewFocus === "ccpa_cpra" ? "California assessment" : getGdprEprivacyPostureTone(score).ratingLabel,
+  return { score, scoreScope: (report.reviewFocus === "ccpa_cpra" ? californiaSiteScore == null : report.score.scope === "starting_page") ? "Starting-page score" : "Full-site score", rating: score === null ? "Unavailable" : report.reviewFocus === "ccpa_cpra" ? "California assessment" : getGdprEprivacyPostureTone(score).ratingLabel,
     priorityCount, findingCountLabel: review.reviewItemCount
       ? `${priorityCount} priority ${priorityCount === 1 ? "finding" : "findings"} · ${review.reviewItemCount} review ${review.reviewItemCount === 1 ? "item" : "items"}`
       : `${priorityCount} selected ${priorityCount === 1 ? "priority" : "priorities"}; ${findings.length} findings`,
