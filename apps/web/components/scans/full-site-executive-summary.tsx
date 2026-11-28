@@ -67,7 +67,9 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   const color = getGdprEprivacyPostureTone(value).ringColor;
   const singlePage = scannedPages === 1;
   const scope = singlePage ? { kind: "page" as const } : { kind: "site" as const, scannedPages: scannedPages ?? score?.scoredPages ?? null };
-  const context = { score: value, coverage: { state: score?.limitedPages ? "limited" as const : "unknown" as const } };
+  const limitedSitePages = californiaReview ? 0 : score?.limitedPages ?? 0;
+  const limitedCoverage = californiaReview ? californiaScore?.coverage === "limited" : limitedSitePages > 0;
+  const context = { score: value, coverage: { state: limitedCoverage ? "limited" as const : "unknown" as const } };
   const review = reviewFocus && score?.priorityReview ? buildRegulatoryAssessmentHighlights(score.priorityReview, reviewFocus, scope, context, reportIdentity, californiaScore?.reviewCoverage) : null;
   const priorities = review?.topIssues ?? score?.priorityReview;
   const priorityCount = review ? review.topIssues.length - review.reviewItemCount : 0;
@@ -92,12 +94,12 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
           <div className="min-w-0 border-l border-zinc-200 pl-3 lg:pl-4">
             {!singlePage ? <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{scopeLabel}</p> : null}
             <p className="mt-2 text-lg font-semibold text-zinc-950">{californiaReview && value === null && (loadingSavedResult || pending) ? loadingSavedResult ? "Loading saved assessment" : "Assessment in progress" : californiaReview && priorities?.length === 0 ? californiaPresentation.emptyLabel : priorities ? review?.reviewItemCount ? `${priorityCount} priority ${priorityCount === 1 ? "finding" : "findings"} · ${review.reviewItemCount} review ${review.reviewItemCount === 1 ? "item" : "items"}` : `${priorities.length} ${reviewFocus ? "top" : "priority"} ${priorities.length === 1 ? "issue" : "issues"}` : loadingSavedResult ? "Loading saved assessment" : pending ? "Assessment in progress" : "Assessment unavailable"}</p>
-            {!singlePage ? <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? loadingSavedResult ? "Loading sitewide page totals" : "Waiting for page outcomes" : `${scannedPages} pages scanned`}</p> : null}
+            {!singlePage ? <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? loadingSavedResult ? "Loading sitewide page totals" : "Waiting for page outcomes" : `${scannedPages} pages scanned${californiaReview ? " in this crawl" : ""}`}</p> : null}
           </div>
         </div>
         {!score && !californiaReview ? <p className="mt-2 text-xs text-zinc-500">{loadingSavedResult ? "The sitewide score will appear when the saved result loads." : pending ? `${singlePage ? "The page score" : "The site-wide score"} will appear when the assessment is ready.` : `${singlePage ? "Page scoring" : "Site-wide scoring"} is unavailable for this scan.`}</p> : null}
         {californiaReview && value === null && !pending && !loadingSavedResult ? <p className="mt-2 text-xs text-zinc-600">{californiaPresentation.unavailableScore}</p> : null}
-        {score?.limitedPages ? <p className="mt-1 text-xs text-amber-800">{score.limitedPages} {score.limitedPages === 1 ? "page has" : "pages have"} limited scoring coverage.</p> : null}
+        {limitedSitePages > 0 ? <p className="mt-1 text-xs text-amber-800">{limitedSitePages} {limitedSitePages === 1 ? "page has" : "pages have"} limited scoring coverage.</p> : null}
         </div>
         <div data-overview-block>{snapshot ?? <p className="py-3 text-sm text-zinc-500">The signal snapshot will appear when the starting-page assessment is ready.</p>}</div>
       </div>

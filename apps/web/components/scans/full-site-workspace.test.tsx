@@ -72,6 +72,9 @@ test("switching posture previews the score shown in the destination overview", (
     assert.match(eu, new RegExp('aria-label="Site score ' + siteScore + ' out of 100"'));
     assert.match(eu, /title="83\/100" data-posture-preview-score/);
     assert.match(ca, /aria-label="Starting-page score 83 out of 100"/);
+    assert.match(eu, /1 page has limited scoring coverage/);
+    assert.doesNotMatch(ca, /limited scoring coverage/);
+    assert.match(ca, /29 pages scanned in this crawl/);
     assert.match(ca, />Starting-page score<\/p>/);
     assert.match(ca, new RegExp('title="' + siteScore + '/100" data-posture-preview-score'));
     assert.doesNotMatch(ca, /title="67\/100"/);
