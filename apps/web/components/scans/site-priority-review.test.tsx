@@ -34,9 +34,10 @@ test("affected pages show on multi-page reports even when the finding affects on
     sitewideAvailable scannedPages={scannedPages} reviewFocus="ccpa_cpra" />);
 
   const singlePage = render(1);
-  assert.doesNotMatch(singlePage, /Affected pages/);
+  assert.doesNotMatch(singlePage, /Affected pages|1 affected page/);
   assert.match(singlePage, /Regulatory applicability/);
   assert.match(singlePage, /Retained destination status/);
+  assert.match(render(2), /1 affected page/);
   assert.match(render(2), /Affected pages[\s\S]*href="https:\/\/example\.com\/"/);
   assert.deepEqual(finding.pages, [page]);
 });

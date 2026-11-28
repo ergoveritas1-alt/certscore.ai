@@ -212,7 +212,10 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
     <div data-finding-header className="grid grid-cols-[2.25rem_minmax(0,1fr)] items-start gap-3 px-2 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:pl-3 sm:pr-14">
       <span className={`${monoClass} inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600`}>{rank}</span>
       <div className="min-w-0">
-        <h3 className="pr-10 text-base font-semibold text-zinc-950 sm:pr-0">{finding.title}</h3>
+        <div className="flex flex-wrap items-baseline gap-x-2 pr-10 sm:pr-0">
+          <h3 className="text-base font-semibold text-zinc-950">{finding.title}</h3>
+          {pages?.length ? <span className="text-xs text-zinc-600">{pages.length} {pages.length === 1 ? "affected page" : "affected pages"}</span> : null}
+        </div>
         <FindingReferenceLine references={references.slice(0, 2)} scope={applicability?.scopeCheck ?? ""} />
         {!dense ? <p className="mt-0.5 line-clamp-3 text-xs leading-5 text-zinc-600 group-has-[>details[open]]/priority-finding:line-clamp-none">{formatRetainedReportTiming(readerSummary)}</p> : null}
         {why ? <p className={`mt-1 max-w-3xl text-zinc-700 ${combinedOptOut ? "text-xs leading-5" : "text-sm leading-5"}`}><span className="font-semibold text-zinc-900">Why it matters: </span>{why}</p> : null}

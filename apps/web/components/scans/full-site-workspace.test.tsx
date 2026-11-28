@@ -85,7 +85,15 @@ test("switching posture previews the score shown in the destination overview", (
   const california = render("ccpa_cpra", 6, 70);
   assert.match(california, /aria-label="California site score 70 out of 100"/);
   assert.match(california, /Privacy notices and choices were assessed on the starting page/);
-  assert.match(render("gdpr_eprivacy", 6, 70), /title="70\/100" data-posture-preview-score/);
+  for (const focus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
+    const comparison = render(focus, 6, 70);
+    assert.match(comparison, /Scanned from Germany \(EU\)/);
+    assert.match(comparison, /Full crawl · 29 scored pages/);
+    assert.match(comparison, /title="6\/100" data-posture-preview-score/);
+    assert.match(comparison, /title="70\/100" data-posture-preview-score/);
+    assert.doesNotMatch(comparison, /title="(?:67|83)\/100"/);
+  }
+  assert.doesNotMatch(render("ccpa_cpra", 6), /Full crawl · 29 scored pages/);
   const loading = render("ccpa_cpra", null);
   assert.match(loading, /aria-label="Review focus"/);
   assert.doesNotMatch(loading, /data-posture-preview-score/);

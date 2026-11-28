@@ -567,6 +567,8 @@ export function FullSiteWorkspace({
   const cachedPriorities = overview?.score?.priorityReview;
   const priorityFindings = mergeHomepagePriorityFindings(cachedPriorities, homePriorities);
   const reviewScore = overview?.score ? { ...overview.score, priorityReview: priorityFindings } : overview?.score;
+  const comparableScoredPages = reviewScore && reviewScore.scoredPages > 1 &&
+    reviewScore.value != null && reviewScore.californiaSiteScore?.score != null ? reviewScore.scoredPages : undefined;
   return (
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>
     <FullSiteScanDurationContext.Provider value={scanDuration}>
@@ -608,6 +610,7 @@ export function FullSiteWorkspace({
           <div>
             <FullSiteReviewFocusContext.Provider value={reviewFocus && <RegulatoryReviewFocus
               focus={reviewFocus}
+              scoredPages={comparableScoredPages}
               scores={{ gdpr_eprivacy: reviewScore?.value, ccpa_cpra: reviewScore?.californiaSiteScore?.score ?? californiaScore?.score }}
             />}>
               {completed && tab !== "resources" ? identity : identityWithoutSharing ?? identity}
