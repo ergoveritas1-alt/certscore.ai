@@ -2065,14 +2065,15 @@ test("generic consent-surface timing projects preconsent tracking without CMP id
 });
 
 test("complete no-surface inspection projects initial-load tracking without CMP identity", () => {
+  const inspection = {
+    outcome: "no_surface_observed_complete_coverage",
+    coverageStatus: "complete",
+    inspectionCompleted: true,
+    inspectedPreInteraction: true,
+    observedAtMs: 1000
+  };
   const state = buildPreconsentRuntimeState({
-    consent_surface_inspection: {
-      outcome: "no_surface_observed_complete_coverage",
-      coverageStatus: "complete",
-      inspectionCompleted: true,
-      inspectedPreInteraction: true,
-      observedAtMs: 250
-    },
+    consent_surface_inspection: inspection,
     consent_timeline: {
       firstCmpVisibleMs: null,
       firstConsentSurfaceVisibleMs: null,
@@ -2096,8 +2097,35 @@ test("complete no-surface inspection projects initial-load tracking without CMP 
   });
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
 
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.ok(packet);
+  assert.equal(packet.presentationDecision.status, "surface");
+  assert.equal(packet.surfacingDecision.decisionState, "confirmed");
+
+  // The finding's compact evidence must pass the contract on its own.
+  const contractPacket = { ...packet, concernContext: undefined };
+  const entities = packet.evidence?.entities;
+  assert.deepEqual(entities?.consentSurfaceInspection, [JSON.stringify(inspection)]);
+  assert.equal(evaluateFindingEvidenceContractForPacket(contractPacket)?.status, "pass_strong");
+
+  for (const incompleteInspection of [
+    undefined,
+    { ...inspection, coverageStatus: "partial" },
+    { ...inspection, inspectedPreInteraction: false },
+    { ...inspection, observedAtMs: 249 }
+  ]) {
+    const decision = evaluateFindingEvidenceContractForPacket({
+      ...contractPacket,
+      evidence: {
+        ...packet.evidence,
+        entities: {
+          ...entities,
+          consentSurfaceInspection: incompleteInspection ? [JSON.stringify(incompleteInspection)] : []
+        }
+      }
+    });
+    assert.equal(decision?.externalSurfacingEligibility, "audit_only");
+    assert.ok(decision.missingRequirements.includes("consentTimelineSequence"));
+  }
 });
 
 test("partial-scan tracking certainty agrees across concern policy, headline, executive and checklist", () => {

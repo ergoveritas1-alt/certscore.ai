@@ -400,6 +400,7 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("consentSurfaceDecisionStates", ["consent_surface_decision_states"]);
   assignCanonicalField("consentSurfaceDiagnostics", ["consent_surface_diagnostics"]);
   assignCanonicalField("consentControlLifecycleEvidence", ["consent_control_lifecycle_evidence"]);
+  assignCanonicalField("consentSurfaceInspection", ["consent_surface_inspection"]);
   assignCanonicalField("consentTimeline", ["consent_timeline"]);
   assignCanonicalField("requestPurposeClassificationConfidence", ["request_purpose_classification_confidence"]);
   assignCanonicalField("runtimeRequestUrls", ["runtime_request_urls"]);
@@ -2975,6 +2976,27 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   }
   if (typeof normalizedFallbackEvidence.consentActionableChoiceObserved === "boolean") {
     entities.consentActionableChoiceObserved = [String(normalizedFallbackEvidence.consentActionableChoiceObserved)];
+  }
+  if (isPreconsentRuntimeSignal || normalizedFallbackEvidence.unifiedFindingId === "preconsent_tracking") {
+    const [inspection] = getEvidenceObjectRows([normalizedFallbackEvidence.consentSurfaceInspection]);
+    if (
+      inspection?.outcome === "no_surface_observed_complete_coverage" &&
+      inspection.coverageStatus === "complete" &&
+      inspection.inspectionCompleted === true &&
+      inspection.inspectedPreInteraction === true &&
+      typeof inspection.observedAtMs === "number" &&
+      Number.isFinite(inspection.observedAtMs) &&
+      inspection.observedAtMs >= 0
+    ) {
+      // Keep the bounded facts used by the sequence contract when the finding is read back.
+      entities.consentSurfaceInspection = stringifyEvidenceObject({
+        outcome: inspection.outcome,
+        coverageStatus: inspection.coverageStatus,
+        inspectionCompleted: inspection.inspectionCompleted,
+        inspectedPreInteraction: inspection.inspectedPreInteraction,
+        observedAtMs: inspection.observedAtMs,
+      });
+    }
   }
   const consentTimelineRows = stringifyEvidenceObject(normalizedFallbackEvidence.consentTimeline);
   if (consentTimelineRows.length > 0) {

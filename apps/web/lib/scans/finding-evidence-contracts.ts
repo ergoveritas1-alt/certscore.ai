@@ -1740,6 +1740,7 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
         : (entities.consentSurfaceObserved?.[0] ?? entities.consent_surface_observed?.[0]) === "false"
           ? false
           : getBoolean(entities, ["consentSurfaceObserved", "consent_surface_observed"]) ?? undefined,
+	    consentSurfaceInspection: parseFirstObjectValue(entities.consentSurfaceInspection ?? entities.consent_surface_inspection),
 	    consentTimeline: parseFirstObjectValue(entities.consentTimeline ?? entities.consent_timeline),
 	    contradictionEvidence: contradictionDetails
 	      ? {
