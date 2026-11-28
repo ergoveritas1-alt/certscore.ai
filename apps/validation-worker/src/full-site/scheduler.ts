@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { getDomain } from "tldts";
 import { canonicalEvidenceBundleSchema } from "@certscore/contracts";
+import { parseCanonicalEvidenceArtifact } from "@certscore/contracts/dist/canonical-evidence-artifact.js";
 import {
   guardedPublicFetch,
   projectFullSiteInventory,
@@ -26,7 +27,7 @@ import {
 import {
   query,
   withWriteTransaction,
-  readFullSiteArtifact,
+  readFullSiteArtifactBytes,
   reserveFullSiteDispatches,
   fullSiteInternalEnabled,
   type FullSiteCrawlRow,
@@ -250,15 +251,16 @@ async function initializeHomepage(
   const artifact = new URL(pointer),
     key = artifact.pathname.slice(1),
     bucket = artifact.hostname;
+  const bytes = await readFullSiteArtifactBytes({
+    bucket,
+    key,
+    region: c.region,
+    sha256: metadata.sha256,
+    sizeBytes: metadata.sizeBytes,
+    maxBytes: 64 * 1024 * 1024,
+  });
   const bundle = canonicalEvidenceBundleSchema.parse(
-    await readFullSiteArtifact({
-      bucket,
-      key,
-      region: c.region,
-      sha256: metadata.sha256,
-      sizeBytes: metadata.sizeBytes,
-      maxBytes: 64 * 1024 * 1024,
-    }),
+    parseCanonicalEvidenceArtifact(bytes, { schemaValidation: "caller" }),
   );
   if (bundle.scanId !== c.scan_id)
     throw new Error("homepage_identity_mismatch");

@@ -1,14 +1,16 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 import { getS3Client } from "./s3";
-export async function readFullSiteArtifact(input: {
+type FullSiteArtifactPointer = {
   bucket: string;
   key: string;
   region: string;
   sha256: string;
   sizeBytes: number;
   maxBytes?: number;
-}) {
+};
+
+export async function readFullSiteArtifactBytes(input: FullSiteArtifactPointer) {
   if (
     !/^[a-f0-9]{64}$/.test(input.sha256) ||
     !Number.isSafeInteger(input.sizeBytes) ||
@@ -51,5 +53,10 @@ export async function readFullSiteArtifact(input: {
     createHash("sha256").update(body).digest("hex") !== input.sha256
   )
     throw new Error("Artifact checksum mismatch.");
+  return body;
+}
+
+export async function readFullSiteArtifact(input: FullSiteArtifactPointer) {
+  const body = await readFullSiteArtifactBytes(input);
   return JSON.parse(body.toString("utf8")) as unknown;
 }
